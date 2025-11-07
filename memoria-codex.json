@@ -1,0 +1,168 @@
+{
+  "project_name": "Finance App Project",
+  "version": "v5.2",
+  "author": "Danilo Uchoa",
+  "description": "Aplicação completa de controle financeiro pessoal, com front-end React (Vite + Tailwind), backend em Node.js (Express + TypeScript + Prisma), e persistência em MongoDB. O objetivo é migrar o protótipo HTML estático para uma arquitetura fullstack modular e escalável, com persistência e automação.",
+  "architecture": {
+    "frontend": {
+      "framework": "React 18 (Vite)",
+      "style": "TailwindCSS",
+      "state_management": "useState + Custom Hook useFinanceApp()",
+      "data_persistence": "LocalStorage (atual), futura API REST",
+      "structure": [
+        "App.jsx (estrutura principal)",
+        "hooks/useFinanceApp.js (lógica de estado centralizada)",
+        "components/ (Dashboard, Lancamentos, Salario, Cadastros, Exportacao)",
+        "components/ui/ (Tab, Section, Field, KPI, Pie)",
+        "utils/helpers.js (funções auxiliares)"
+      ],
+      "goals": [
+        "Migrar o HTML original (v5.2) para React modular",
+        "Preservar toda a lógica de cálculo e exportação CSV",
+        "Implementar fetch para comunicação com backend",
+        "Adicionar autenticação e persistência real posteriormente"
+      ]
+    },
+    "backend": {
+      "framework": "Express 5 + TypeScript",
+      "database": "MongoDB Atlas (via Prisma ORM)",
+      "language": "Node.js (TypeScript)",
+      "state": "Estrutura funcional criada, rodando em localhost:4000",
+      "structure": [
+        "src/index.ts (API principal, rota /api/status)",
+        "prisma/schema.prisma (modelos iniciais User, Expense, Origin, etc.)",
+        "Dockerfile configurado para Node 20",
+        "tsconfig.json, package.json, .env com DATABASE_URL e PORT"
+      ],
+      "executed_steps": [
+        "Inicialização do projeto com npm init -y",
+        "Instalação de express, ts-node-dev, typescript e @types/express",
+        "Configuração de tsconfig.json com rootDir e outDir",
+        "Criação da rota /api/status para teste de comunicação",
+        "Teste de execução via npm run dev",
+        "Validação de compilação TypeScript sem erros"
+      ],
+      "next_steps": [
+        "Criar models e rotas CRUD (User, Expense, Origin, Debtor, SalaryHistory)",
+        "Integrar Prisma com MongoDB (npx prisma db push)",
+        "Implementar autenticação JWT",
+        "Conectar frontend via API REST"
+      ]
+    },
+    "infrastructure": {
+      "containerization": "Docker + Docker Compose",
+      "docker_compose_plan": {
+        "services": [
+          "frontend: build do Vite + Tailwind (porta 5173)",
+          "backend: build do Node + TS (porta 4000)",
+          "mongo: imagem oficial MongoDB 7 (porta 27017)"
+        ],
+        "environment": {
+          "frontend": "VITE_API_URL=http://backend:4000",
+          "backend": ".env com DATABASE_URL e PORT",
+          "mongo": "volume persistente e dependência declarada"
+        }
+      },
+      "status": "Frontend e backend já testados separadamente; Docker Compose será o próximo passo."
+    },
+    "database": {
+      "type": "MongoDB (Atlas)",
+      "orm": "Prisma",
+      "goal": "Persistir usuários, despesas, salários e contas de forma estruturada",
+      "schema_plan": [
+        "User: id, name, email, password",
+        "Origin: id, name, type, dueDay, limit, userId",
+        "Debtor: id, name, userId",
+        "Expense: id, description, date, category, amount, originId, debtorId, userId",
+        "SalaryHistory: id, month, hours, hourRate, taxRate, cnae, userId"
+      ],
+      "next_step": "Rodar npx prisma db push após conexão e ajustar IDs para Mongo"
+    }
+  },
+  "development_phases": {
+    "phase_0": {
+      "goal": "Criar estrutura de pastas e testar comunicação frontend ↔ backend",
+      "status": "Concluída",
+      "tasks_done": [
+        "Criação das pastas frontend e backend",
+        "Configuração do Vite, Tailwind e Express",
+        "Rota /api/status testada com fetch no frontend"
+      ]
+    },
+    "phase_1": {
+      "goal": "Migrar o HTML v5.2 para React modular (Vite)",
+      "status": "Em andamento",
+      "details": [
+        "Estrutura modular criada (components, hooks, utils)",
+        "HTML original v5.2 sendo convertido para componentes React",
+        "Hook useFinanceApp() definido para centralizar estado"
+      ]
+    },
+    "phase_2": {
+      "goal": "Fundação do backend (API e banco)",
+      "status": "Preparada",
+      "details": [
+        "Schema Prisma criado para MongoDB",
+        "Rota /api/status funcional",
+        "Configuração de .env e Dockerfile backend testadas"
+      ]
+    },
+    "phase_3": {
+      "goal": "Conexão total entre front e back",
+      "status": "A iniciar",
+      "details": [
+        "Substituir localStorage por chamadas à API REST",
+        "Criar contexto de autenticação (login, JWT)",
+        "Importar dados antigos do localStorage (sincronização opcional)"
+      ]
+    },
+    "phase_4": {
+      "goal": "Otimização e recursos avançados",
+      "status": "Planejada",
+      "details": [
+        "Cache Redis (Upstash) nas rotas /api/summary",
+        "Envio de relatórios mensais via Resend",
+        "Cron job para fechamento de mês",
+        "Exportação CSV gerada pelo backend"
+      ]
+    }
+  },
+  "executed_commands": [
+    "npm create vite@latest frontend -- --template react",
+    "npm install -D tailwindcss postcss autoprefixer",
+    "npx tailwindcss init -p",
+    "npm install express typescript ts-node-dev @types/express",
+    "npm run dev (frontend e backend testados com sucesso)",
+    "Verificação de comunicação via fetch('/api/status')"
+  ],
+  "technologies": {
+    "frontend": ["React", "Vite", "TailwindCSS", "Babel"],
+    "backend": ["Node.js", "Express", "TypeScript", "Prisma"],
+    "database": ["MongoDB Atlas"],
+    "devops": ["Docker", "Docker Compose"],
+    "integrations": ["Upstash Redis", "Resend API (emails)"]
+  },
+  "current_status": {
+    "frontend": "Rodando via Vite localmente (localhost:5173)",
+    "backend": "Rodando via ts-node-dev (localhost:4000)",
+    "communication": "Ping /api/status confirmado com sucesso",
+    "database": "Conexão Mongo Atlas pendente de senha",
+    "next_milestone": "Integrar o backend com Prisma e MongoDB"
+  },
+  "next_steps": [
+    "Finalizar a migração completa do HTML para React modular",
+    "Implementar CRUD no backend (User, Expense, Origin, Debtor, Salary)",
+    "Rodar Prisma db push e testar persistência no Mongo",
+    "Criar Docker Compose e validar containers conectados",
+    "Conectar frontend ao backend via API real",
+    "Configurar autenticação JWT e rotas protegidas",
+    "Implementar cache e automações mensais (fase 4)"
+  ],
+  "notes": {
+    "performance": "LocalStorage será substituído por persistência real no backend",
+    "security": "JWT e CORS serão configurados após integração do frontend",
+    "scalability": "Arquitetura preparada para containers independentes e deploy em nuvem",
+    "ui_design": "Tailwind garante consistência e leveza, pronto para integração com shadcn/ui"
+  },
+  "summary": "O projeto evoluiu de um protótipo HTML isolado (v5.2) para uma arquitetura fullstack moderna, com React modularizado, backend em TypeScript, Prisma e MongoDB. As camadas estão isoladas e prontas para integração via API REST. A próxima etapa será consolidar o hook global useFinanceApp e conectar os endpoints reais. Docker Compose será o passo final antes do deploy."
+}
