@@ -5,19 +5,12 @@ import { toBRL, parseNum } from "../utils/helpers";
 import { DEFAULT_SALARY_TEMPLATE } from "../hooks/useFinanceApp";
 
 export default function Dashboard({ state, month }) {
-  // Mapeamentos
   const originById = Object.fromEntries(state.origins.map((o) => [o.id, o]));
   const debtorById = Object.fromEntries(state.debtors.map((d) => [d.id, d.name]));
-
-  // Filtra lançamentos do mês atual
-  const expensesMonth = state.expenses.filter(
-    (e) => (e.date ?? "").slice(0, 7) === month
-  );
-
+  const expensesMonth = state.expenses.filter((e) => (e.date ?? "").slice(0, 7) === month);
   const myExpensesMonth = expensesMonth.filter((e) => !e.debtorId);
   const debtExpensesMonth = expensesMonth.filter((e) => !!e.debtorId);
 
-  // Calcula salário
   const salaryData = state.salaryHistory[month] ?? DEFAULT_SALARY_TEMPLATE;
   const hours = parseNum(salaryData?.hours);
   const hourRate = parseNum(salaryData?.hourRate);
@@ -26,32 +19,26 @@ export default function Dashboard({ state, month }) {
   const tax = gross * taxRate;
   const net = gross - tax;
 
-  // Totais por origem
-  const totalsByOrigin = state.origins.reduce((acc, o) => ({ ...acc, [o.id]: 0 }), { total: 0 });
-  for (const e of expensesMonth) {
-    const amount = parseNum(e.amount);
-    if (totalsByOrigin[e.originId] !== undefined) totalsByOrigin[e.originId] += amount;
+  const totalsByOrigin = state.origins.reduce((acc, origin) => ({ ...acc, [origin.id]: 0 }), { total: 0 });
+  for (const expense of expensesMonth) {
+    const amount = parseNum(expense.amount);
+    if (totalsByOrigin[expense.originId] !== undefined) {
+      totalsByOrigin[expense.originId] += amount;
+    }
     totalsByOrigin.total += amount;
   }
 
-  // Despesas minhas por tipo (Cartão/Conta)
   const totalsMyExpensesByType = { Cartão: 0, Conta: 0, total: 0 };
-  for (const e of myExpensesMonth) {
-    const amount = parseNum(e.amount);
-    const origin = originById[e.originId];
+  for (const expense of myExpensesMonth) {
+    const amount = parseNum(expense.amount);
+    const origin = originById[expense.originId];
     if (origin) {
       totalsMyExpensesByType[origin.type] += amount;
       totalsMyExpensesByType.total += amount;
     }
   }
 
-  // Dívidas (a receber)
-  const totalDebts = debtExpensesMonth.reduce(
-    (acc, e) => acc + parseNum(e.amount),
-    0
-  );
-
-  // Resumo final
+  const totalDebts = debtExpensesMonth.reduce((acc, expense) => acc + parseNum(expense.amount), 0);
   const summary = {
     totalContas: totalsMyExpensesByType["Conta"],
     totalCartoes: totalsMyExpensesByType["Cartão"],
@@ -60,53 +47,50 @@ export default function Dashboard({ state, month }) {
     saldoFinal: net - totalsMyExpensesByType["total"],
   };
 
-  // Gráfico por categoria
   const groupBySum = (arr, keyFn, valFn) => {
-    const m = new Map();
-    for (const x of arr) {
-      const k = keyFn(x) ?? "-";
-      const v = parseNum(valFn(x));
-      m.set(k, (m.get(k) || 0) + v);
+    const map = new Map();
+    for (const item of arr) {
+      const key = keyFn(item) ?? "-";
+      const value = parseNum(valFn(item));
+      map.set(key, (map.get(key) || 0) + value);
     }
-    return Array.from(m.entries()).map(([name, value]) => ({ name, value }));
+    return Array.from(map.entries()).map(([name, value]) => ({ name, value }));
   };
 
   return (
     <>
       <div className="grid md:grid-cols-4 gap-4 mb-6">
-        <KPI label="Salário Líquido" value={toBRL(net)} sub={`Bruto ${toBRL(gross)}`} />
+        <KPI label="Salário Líquido (Mês)" value={toBRL(net)} sub={`Bruto ${toBRL(gross)}`} />
         <KPI label="Total Fatura (Mês)" value={toBRL(totalsByOrigin.total)} sub="Minhas + Dívidas de terceiros" />
         <KPI label="A Receber (Mês)" value={toBRL(totalDebts)} sub="Dívidas de terceiros" />
         <KPI
-          label="Saldo Final Real"
+          label="Saldo Final Real (Mês)"
           value={toBRL(summary.saldoFinal)}
-          sub="Líquido - Despesas Minhas"
+          sub="Líquido - Despesas (Minhas)"
           highlight={summary.saldoFinal >= 0}
         />
       </div>
 
-      <Section title="Despesas por Origem (Fatura Total)">
+      <Section title="Despesas do Mês por Origem (Fatura Total)">
         <div className="grid md:grid-cols-3 gap-4">
           {state.origins.map((origin) => (
             <KPI
               key={origin.id}
               label={origin.name}
               value={toBRL(totalsByOrigin[origin.id] || 0)}
-              sub={
-                origin.type === "Cartão"
-                  ? `Limite: ${toBRL(parseNum(origin.limit))}`
-                  : null
-              }
+              sub={origin.type === "Cartão" ? `Limite: ${toBRL(parseNum(origin.limit))}` : null}
             />
           ))}
           {state.origins.length === 0 && (
-            <p className="text-gray-500">Nenhuma conta/origem cadastrada.</p>
+            <p className="text-gray-500">
+              Nenhuma conta/origem cadastrada. Vá para a aba &quot;Cadastros&quot;.
+            </p>
           )}
         </div>
       </Section>
 
-      <Section title="Distribuição por Categoria (Geral)">
-        <Pie data={groupBySum(expensesMonth, (e) => e.category, (e) => e.amount)} />
+      <Section title="Distribuição por Categoria (Geral - Inclui Dívidas)">
+        <Pie data={groupBySum(expensesMonth, (expense) => expense.category, (expense) => expense.amount)} />
       </Section>
 
       <Section title="Últimos Lançamentos (Mês)">
@@ -122,14 +106,14 @@ export default function Dashboard({ state, month }) {
             </tr>
           </thead>
           <tbody>
-            {expensesMonth.slice(0, 10).map((e) => (
-              <tr key={e.id} className={`border-t ${e.debtorId ? "bg-yellow-50" : ""}`}>
-                <td className="py-2">{e.date}</td>
-                <td>{e.description}</td>
-                <td>{originById[e.originId]?.name ?? "Deletada"}</td>
-                <td>{e.debtorId ? debtorById[e.debtorId] || "Deletado" : "-"}</td>
-                <td>{e.parcela}</td>
-                <td className="text-right">{toBRL(e.amount)}</td>
+            {expensesMonth.slice(0, 10).map((expense) => (
+              <tr key={expense.id} className={`border-t ${expense.debtorId ? "bg-yellow-50" : ""}`}>
+                <td className="py-2">{expense.date}</td>
+                <td>{expense.description}</td>
+                <td>{originById[expense.originId]?.name ?? "Deletada"}</td>
+                <td>{expense.debtorId ? debtorById[expense.debtorId] || "Deletado" : "-"}</td>
+                <td>{expense.parcela}</td>
+                <td className="text-right">{toBRL(expense.amount)}</td>
               </tr>
             ))}
             {expensesMonth.length === 0 && (

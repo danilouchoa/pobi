@@ -118,17 +118,17 @@ export default function Exportacao({ state, month }) {
           Exportar Lançamentos (Geral)
         </button>
         <button onClick={exportSalary} className="px-4 py-2 rounded-xl bg-black text-white">
-          Exportar Salário (Mês)
+          Exportar Salário (do Mês)
         </button>
         <button onClick={exportSummary} className="px-4 py-2 rounded-xl bg-black text-white">
-          Exportar Resumo (Mês)
+          Exportar Resumo (do Mês)
         </button>
         <button onClick={exportAll} className="px-4 py-2 rounded-xl bg-white border">
-          Exportar Tudo (Mês)
+          Exportar tudo (do Mês)
         </button>
       </div>
       <div className="text-sm text-gray-600 mt-4">
-        Os botões exportam os dados do mês: <strong>{month}</strong>.
+        Os botões exportam os dados referentes ao mês selecionado: <strong>{month}</strong>.
       </div>
     </Section>
   );

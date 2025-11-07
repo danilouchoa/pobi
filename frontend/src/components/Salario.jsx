@@ -55,7 +55,8 @@ export default function Salario({ month, salary, saveSalary }) {
   return (
     <Section
       title={`Salário por horas (Mês: ${month})`}
-      subtitle="Os dados agora são persistidos na API."
+      subtitle="Os dados são salvos automaticamente para o mês de referência selecionado."
+      right={feedback ? <span className="text-sm text-gray-500">{feedback}</span> : null}
     >
       <form className="grid md:grid-cols-4 gap-3" onSubmit={handleSubmit}>
         <Field label="Horas no mês" id="sal-hours">
@@ -67,7 +68,6 @@ export default function Salario({ month, salary, saveSalary }) {
             onChange={(e) => handleChange("hours", e.target.value)}
           />
         </Field>
-
         <Field label="Valor/hora (R$)" id="sal-hourRate">
           <input
             id="sal-hourRate"
@@ -77,7 +77,6 @@ export default function Salario({ month, salary, saveSalary }) {
             onChange={(e) => handleChange("hourRate", e.target.value)}
           />
         </Field>
-
         <Field label="Alíquota de imposto" id="sal-taxRate">
           <div className="flex items-center gap-2">
             <input
@@ -90,7 +89,6 @@ export default function Salario({ month, salary, saveSalary }) {
             <span className="text-sm text-gray-500">(ex.: 0.06 = 6%)</span>
           </div>
         </Field>
-
         <Field label="CNAE" id="sal-cnae">
           <input
             id="sal-cnae"
@@ -99,7 +97,6 @@ export default function Salario({ month, salary, saveSalary }) {
             onChange={(e) => handleChange("cnae", e.target.value)}
           />
         </Field>
-
         <div className="md:col-span-4 flex items-center gap-3">
           <button
             type="submit"
@@ -108,16 +105,12 @@ export default function Salario({ month, salary, saveSalary }) {
           >
             {saving ? "Salvando..." : "Salvar salário"}
           </button>
-          {feedback && <span className="text-sm text-gray-600">{feedback}</span>}
+          <span className="text-xs text-gray-500">Sincroniza com a API autenticada.</span>
         </div>
       </form>
-
       <div className="grid md:grid-cols-4 gap-4 mt-6">
         <KPI label="Bruto (Mês)" value={toBRL(gross)} />
-        <KPI
-          label={`Impostos (${(parseNum(form.taxRate) * 100).toFixed(2)}%)`}
-          value={toBRL(tax)}
-        />
+        <KPI label={`Impostos (${(parseNum(form.taxRate) * 100).toFixed(2)}%)`} value={toBRL(tax)} />
         <KPI label="Líquido (Mês)" value={toBRL(net)} highlight />
         <KPI label="Valor hora líquido" value={toBRL(netHourRate)} />
       </div>

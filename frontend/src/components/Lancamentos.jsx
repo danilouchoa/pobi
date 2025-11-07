@@ -237,7 +237,7 @@ export default function Lancamentos({ state, month, createExpense, deleteExpense
       </Section>
 
       <Section title="Lançamentos do Mês">
-        <div className="overflow-auto">
+        <div className="mt-6 overflow-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-gray-500">
