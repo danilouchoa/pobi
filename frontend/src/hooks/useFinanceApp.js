@@ -1,67 +1,214 @@
-import { useEffect, useState, useMemo } from "react";
-import { uid, todayISO, saveLS, readLS, parseNum } from "../utils/helpers";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import api from "../services/api";
+import { readLS, saveLS, parseNum } from "../utils/helpers";
+import { useAuth } from "../context/AuthProvider";
 
-const DEFAULT_SALARY_TEMPLATE = {
+export const DEFAULT_SALARY_TEMPLATE = {
   hours: "178",
   hourRate: "95.24",
   taxRate: "0.06",
   cnae: "Suporte e manutenção de computadores",
+  month: new Date().toISOString().slice(0, 7),
 };
 
+const INITIAL_STATE = {
+  expenses: [],
+  salaryHistory: {},
+  debtors: [],
+  origins: [],
+};
+
+const MONTH_STORAGE_KEY = "pf-month";
+
+const mapSalaryRecords = (records) =>
+  records.reduce((acc, record) => {
+    acc[record.month] = {
+      ...DEFAULT_SALARY_TEMPLATE,
+      ...record,
+      hours: String(record.hours ?? DEFAULT_SALARY_TEMPLATE.hours),
+      hourRate: String(record.hourRate ?? DEFAULT_SALARY_TEMPLATE.hourRate),
+      taxRate: String(record.taxRate ?? DEFAULT_SALARY_TEMPLATE.taxRate),
+      cnae: record.cnae ?? DEFAULT_SALARY_TEMPLATE.cnae,
+    };
+    return acc;
+  }, {});
+
 export function useFinanceApp() {
-  const [state, setState] = useState(() =>
-    readLS("pf-app-v5", {
-      version: 5,
-      expenses: [],
-      salaryHistory: {
-        [new Date().toISOString().slice(0, 7)]: DEFAULT_SALARY_TEMPLATE,
-      },
-      debtors: [
-        { id: uid(), name: "Irmã" },
-        { id: uid(), name: "Esposa" },
-      ],
-      origins: [
-        {
-          id: uid(),
-          name: "Cartão C6",
-          type: "Cartão",
-          dueDay: "20",
-          limit: "10000",
-        },
-        {
-          id: uid(),
-          name: "Cartão Nubank",
-          type: "Cartão",
-          dueDay: "4",
-          limit: "5000",
-        },
-        {
-          id: uid(),
-          name: "Contas Fixas",
-          type: "Conta",
-          dueDay: "N/A",
-          limit: "N/A",
-        },
-      ],
-    })
-  );
-
+  const { token } = useAuth();
+  const [state, setState] = useState(INITIAL_STATE);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [month, setMonth] = useState(() =>
-    readLS("pf-month", new Date().toISOString().slice(0, 7))
+    readLS(MONTH_STORAGE_KEY, new Date().toISOString().slice(0, 7))
   );
 
-  useEffect(() => saveLS("pf-app-v5", state), [state]);
-  useEffect(() => saveLS("pf-month", month), [month]);
+  const saveMonth = useCallback((value) => {
+    setMonth(value);
+    saveLS(MONTH_STORAGE_KEY, value);
+  }, []);
 
-  // Mapeia devedores e origens
-  const debtorById = useMemo(
-    () => Object.fromEntries(state.debtors.map((d) => [d.id, d.name])),
-    [state.debtors]
-  );
-  const originById = useMemo(
-    () => Object.fromEntries(state.origins.map((o) => [o.id, o])),
-    [state.origins]
+  const fetchAll = useCallback(async () => {
+    if (!token) {
+      setState(INITIAL_STATE);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const [expensesRes, originsRes, debtorsRes, salaryRes] = await Promise.all([
+        api.get("/api/expenses"),
+        api.get("/api/origins"),
+        api.get("/api/debtors"),
+        api.get("/api/salaryHistory"),
+      ]);
+      setState({
+        expenses: expensesRes.data ?? [],
+        origins: originsRes.data ?? [],
+        debtors: debtorsRes.data ?? [],
+        salaryHistory: mapSalaryRecords(salaryRes.data ?? []),
+      });
+    } catch (err) {
+      console.error("Erro ao carregar dados financeiros:", err);
+      const message = err.response?.data?.message ?? "Erro ao carregar dados da API.";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (token) {
+      fetchAll();
+    } else {
+      setState(INITIAL_STATE);
+    }
+  }, [token, fetchAll]);
+
+  const createExpense = useCallback(async (payload) => {
+    const body = {
+      ...payload,
+      amount: parseNum(payload.amount),
+      debtorId: payload.debtorId || null,
+    };
+    const { data } = await api.post("/api/expenses", body);
+    setState((current) => ({
+      ...current,
+      expenses: [data, ...current.expenses],
+    }));
+    return data;
+  }, []);
+
+  const deleteExpense = useCallback(async (id) => {
+    await api.delete(`/api/expenses/${id}`);
+    setState((current) => ({
+      ...current,
+      expenses: current.expenses.filter((expense) => expense.id !== id),
+    }));
+  }, []);
+
+  const createOrigin = useCallback(async (payload) => {
+    const parsedLimit = Number(payload.limit);
+    const body = {
+      ...payload,
+      limit: payload.limit === "" || Number.isNaN(parsedLimit) ? null : parsedLimit,
+    };
+    const { data } = await api.post("/api/origins", body);
+    setState((current) => ({
+      ...current,
+      origins: [...current.origins, data],
+    }));
+    return data;
+  }, []);
+
+  const deleteOrigin = useCallback(async (id) => {
+    await api.delete(`/api/origins/${id}`);
+    setState((current) => ({
+      ...current,
+      origins: current.origins.filter((origin) => origin.id !== id),
+    }));
+  }, []);
+
+  const createDebtor = useCallback(async (payload) => {
+    const { data } = await api.post("/api/debtors", payload);
+    setState((current) => ({
+      ...current,
+      debtors: [...current.debtors, data],
+    }));
+    return data;
+  }, []);
+
+  const deleteDebtor = useCallback(async (id) => {
+    await api.delete(`/api/debtors/${id}`);
+    setState((current) => ({
+      ...current,
+      debtors: current.debtors.filter((debtor) => debtor.id !== id),
+    }));
+  }, []);
+
+  const saveSalaryForMonth = useCallback(
+    async (targetMonth, payload) => {
+      const normalized = {
+        month: targetMonth,
+        hours: parseNum(payload.hours),
+        hourRate: parseNum(payload.hourRate),
+        taxRate: parseNum(payload.taxRate),
+        cnae: payload.cnae,
+      };
+
+      if (Number.isNaN(normalized.hours) || Number.isNaN(normalized.hourRate) || Number.isNaN(normalized.taxRate)) {
+        throw new Error("Horas, valor hora e alíquota precisam ser numéricos.");
+      }
+
+      const existing = state.salaryHistory[targetMonth];
+      let response;
+      if (existing?.id) {
+        response = await api.put(`/api/salaryHistory/${existing.id}`, normalized);
+      } else {
+        response = await api.post("/api/salaryHistory", normalized);
+      }
+
+      const updatedRecord = {
+        ...response.data,
+        hours: String(response.data.hours),
+        hourRate: String(response.data.hourRate),
+        taxRate: String(response.data.taxRate),
+        cnae: response.data.cnae ?? "",
+      };
+
+      setState((current) => ({
+        ...current,
+        salaryHistory: {
+          ...current.salaryHistory,
+          [updatedRecord.month]: updatedRecord,
+        },
+      }));
+      return updatedRecord;
+    },
+    [state.salaryHistory]
   );
 
-  return { state, setState, month, setMonth, debtorById, originById };
+  const derived = useMemo(
+    () => ({
+      debtorById: Object.fromEntries(state.debtors.map((d) => [d.id, d.name])),
+      originById: Object.fromEntries(state.origins.map((o) => [o.id, o])),
+    }),
+    [state.debtors, state.origins]
+  );
+
+  return {
+    state,
+    month,
+    setMonth: saveMonth,
+    loading,
+    error,
+    refresh: fetchAll,
+    createExpense,
+    deleteExpense,
+    createOrigin,
+    deleteOrigin,
+    createDebtor,
+    deleteDebtor,
+    saveSalaryForMonth,
+    ...derived,
+  };
 }

@@ -23,6 +23,21 @@ services:
     environment:
       - VITE_API_URL=http://backend:4000
 
+  mongo:
+    image: mongo:7
+    container_name: finance_mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - finance_net
+
+volumes:
+  mongo_data:
+
+
 networks:
   finance_net:
     driver: bridge

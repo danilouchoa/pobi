@@ -1,9 +1,16 @@
 import { useState } from "react";
 import Section from "./ui/Section";
 import Field from "./ui/Field";
-import { uid, parseNum, toBRL } from "../utils/helpers";
+import { parseNum, toBRL } from "../utils/helpers";
 
-export default function Cadastros({ state, setState }) {
+export default function Cadastros({
+  origins,
+  debtors,
+  createOrigin,
+  deleteOrigin,
+  createDebtor,
+  deleteDebtor,
+}) {
   // Forms
   const [originForm, setOriginForm] = useState({
     name: "",
@@ -13,35 +20,62 @@ export default function Cadastros({ state, setState }) {
   });
 
   const [debtorForm, setDebtorForm] = useState({ name: "" });
+  const [originLoading, setOriginLoading] = useState(false);
+  const [debtorLoading, setDebtorLoading] = useState(false);
 
   // === Ações de Contas/Origens ===
-  const addOrigin = () => {
+  const addOrigin = async () => {
     if (!originForm.name.trim() || !originForm.type) return;
-    const newOrigin = {
-      id: uid(),
-      name: originForm.name.trim(),
-      type: originForm.type,
-      dueDay: originForm.dueDay.trim(),
-      limit: originForm.limit.trim(),
-    };
-    setState((s) => ({ ...s, origins: [...s.origins, newOrigin] }));
-    setOriginForm({ name: "", type: "Cartão", dueDay: "", limit: "" });
+    setOriginLoading(true);
+    try {
+      await createOrigin({
+        name: originForm.name.trim(),
+        type: originForm.type,
+        dueDay: originForm.dueDay.trim(),
+        limit: originForm.limit.trim(),
+      });
+      setOriginForm({ name: "", type: "Cartão", dueDay: "", limit: "" });
+    } catch (error) {
+      console.error("Erro ao criar origem:", error);
+      alert("Não foi possível salvar a origem.");
+    } finally {
+      setOriginLoading(false);
+    }
   };
 
-  const delOrigin = (id) => {
-    setState((s) => ({ ...s, origins: s.origins.filter((o) => o.id !== id) }));
+  const delOrigin = async (id) => {
+    if (!confirm("Deseja remover esta origem?")) return;
+    try {
+      await deleteOrigin(id);
+    } catch (error) {
+      console.error("Erro ao remover origem:", error);
+      alert("Não foi possível remover a origem.");
+    }
   };
 
   // === Ações de Devedores ===
-  const addDebtor = () => {
+  const addDebtor = async () => {
     if (!debtorForm.name.trim()) return;
-    const newDebtor = { id: uid(), name: debtorForm.name.trim() };
-    setState((s) => ({ ...s, debtors: [...s.debtors, newDebtor] }));
-    setDebtorForm({ name: "" });
+    setDebtorLoading(true);
+    try {
+      await createDebtor({ name: debtorForm.name.trim() });
+      setDebtorForm({ name: "" });
+    } catch (error) {
+      console.error("Erro ao criar devedor:", error);
+      alert("Não foi possível salvar o devedor.");
+    } finally {
+      setDebtorLoading(false);
+    }
   };
 
-  const delDebtor = (id) => {
-    setState((s) => ({ ...s, debtors: s.debtors.filter((d) => d.id !== id) }));
+  const delDebtor = async (id) => {
+    if (!confirm("Deseja remover este devedor?")) return;
+    try {
+      await deleteDebtor(id);
+    } catch (error) {
+      console.error("Erro ao remover devedor:", error);
+      alert("Não foi possível remover o devedor.");
+    }
   };
 
   return (
@@ -106,15 +140,16 @@ export default function Cadastros({ state, setState }) {
 
         <button
           onClick={addOrigin}
-          className="px-4 py-2 rounded-xl bg-black text-white w-full"
+          className="px-4 py-2 rounded-xl bg-black text-white w-full disabled:opacity-50"
+          disabled={originLoading}
         >
-          Adicionar Conta/Origem
+          {originLoading ? "Salvando..." : "Adicionar Conta/Origem"}
         </button>
 
         <div className="mt-6">
           <h4 className="text-md font-semibold mb-2">Contas Cadastradas</h4>
           <ul className="divide-y divide-gray-100">
-            {state.origins.map((o) => (
+            {origins.map((o) => (
               <li key={o.id} className="py-3 flex justify-between items-center">
                 <div>
                   <div className="font-medium">
@@ -134,7 +169,7 @@ export default function Cadastros({ state, setState }) {
                 </button>
               </li>
             ))}
-            {state.origins.length === 0 && (
+            {origins.length === 0 && (
               <li className="text-gray-400 py-2">Nenhuma conta cadastrada.</li>
             )}
           </ul>
@@ -159,14 +194,15 @@ export default function Cadastros({ state, setState }) {
           </Field>
           <button
             onClick={addDebtor}
-            className="px-4 py-2 rounded-xl bg-black text-white"
+            className="px-4 py-2 rounded-xl bg-black text-white disabled:opacity-50"
+            disabled={debtorLoading}
           >
-            Adicionar Pessoa
+            {debtorLoading ? "Salvando..." : "Adicionar Pessoa"}
           </button>
         </div>
 
         <ul className="mt-4 divide-y divide-gray-100">
-          {state.debtors.map((d) => (
+          {debtors.map((d) => (
             <li key={d.id} className="py-2 flex items-center justify-between">
               <div className="font-medium">{d.name}</div>
               <button
@@ -177,7 +213,7 @@ export default function Cadastros({ state, setState }) {
               </button>
             </li>
           ))}
-          {state.debtors.length === 0 && (
+          {debtors.length === 0 && (
             <li className="text-gray-400 py-2">Nenhuma pessoa cadastrada.</li>
           )}
         </ul>

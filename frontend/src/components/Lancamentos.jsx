@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Section from "./ui/Section";
 import Field from "./ui/Field";
-import { uid, todayISO, parseNum, toBRL } from "../utils/helpers";
+import { todayISO, parseNum, toBRL } from "../utils/helpers";
 
-export default function Lancamentos({ state, setState, month }) {
+export default function Lancamentos({ state, month, createExpense, deleteExpense }) {
   const originById = Object.fromEntries(state.origins.map((o) => [o.id, o]));
   const debtorById = Object.fromEntries(state.debtors.map((d) => [d.id, d.name]));
   const expensesMonth = state.expenses.filter((e) => (e.date ?? "").slice(0, 7) === month);
@@ -31,26 +31,34 @@ export default function Lancamentos({ state, setState, month }) {
     "Outros",
   ];
 
-  const addExpense = () => {
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!expForm.originId && state.origins[0]?.id) {
+      setExpForm((form) => ({ ...form, originId: state.origins[0].id }));
+    }
+  }, [state.origins, expForm.originId]);
+
+  const addExpense = async () => {
     const totalAmount = parseNum(expForm.amount);
     const description = expForm.description.trim();
     if (!description || !expForm.originId || totalAmount <= 0) return;
+    setSubmitting(true);
 
     const isInstallment = expForm.isInstallment;
     const numInstallments = parseInt(expForm.installments, 10);
+    const payloads = [];
 
     if (isInstallment && numInstallments > 1) {
       // Parcelado
       const installmentAmount = totalAmount / numInstallments;
-      const newExpenses = [];
       const startDate = new Date(expForm.date + "T12:00:00Z");
 
       for (let i = 0; i < numInstallments; i++) {
         const installmentDate = new Date(startDate);
         installmentDate.setMonth(startDate.getMonth() + i);
 
-        newExpenses.push({
-          id: uid(),
+        payloads.push({
           date: installmentDate.toISOString().slice(0, 10),
           description: `${description} (${i + 1}/${numInstallments})`,
           originId: expForm.originId,
@@ -61,11 +69,9 @@ export default function Lancamentos({ state, setState, month }) {
         });
       }
 
-      setState((s) => ({ ...s, expenses: [...newExpenses, ...s.expenses] }));
     } else {
       // Único
-      const row = {
-        id: uid(),
+      payloads.push({
         date: expForm.date,
         description,
         originId: expForm.originId,
@@ -73,22 +79,38 @@ export default function Lancamentos({ state, setState, month }) {
         parcela: "Único",
         debtorId: expForm.debtorId || null,
         amount: totalAmount,
-      };
-      setState((s) => ({ ...s, expenses: [row, ...s.expenses] }));
+      });
     }
 
-    setExpForm((f) => ({
-      ...f,
-      description: "",
-      isInstallment: false,
-      installments: "",
-      debtorId: "",
-      amount: "",
-    }));
+    try {
+      for (const payload of payloads) {
+        await createExpense(payload);
+      }
+      setExpForm((f) => ({
+        ...f,
+        description: "",
+        isInstallment: false,
+        installments: "",
+        debtorId: "",
+        amount: "",
+      }));
+    } catch (error) {
+      console.error("Erro ao salvar lançamento:", error);
+      alert("Não foi possível salvar o lançamento. Tente novamente.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const delExpense = (id) =>
-    setState((s) => ({ ...s, expenses: s.expenses.filter((e) => e.id !== id) }));
+  const delExpense = async (id) => {
+    if (!confirm("Deseja excluir este lançamento?")) return;
+    try {
+      await deleteExpense(id);
+    } catch (error) {
+      console.error("Erro ao excluir lançamento:", error);
+      alert("Não foi possível excluir o lançamento.");
+    }
+  };
 
   return (
     <>
@@ -206,9 +228,10 @@ export default function Lancamentos({ state, setState, month }) {
         <div className="mt-3">
           <button
             onClick={addExpense}
-            className="px-4 py-2 rounded-xl bg-black text-white"
+            className="px-4 py-2 rounded-xl bg-black text-white disabled:opacity-50"
+            disabled={submitting || state.origins.length === 0}
           >
-            Adicionar Lançamento
+            {submitting ? "Salvando..." : "Adicionar Lançamento"}
           </button>
         </div>
       </Section>

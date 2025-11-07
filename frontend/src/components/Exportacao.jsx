@@ -1,11 +1,12 @@
 import Section from "./ui/Section";
 import { toBRL, parseNum } from "../utils/helpers";
+import { DEFAULT_SALARY_TEMPLATE } from "../hooks/useFinanceApp";
 
 export default function Exportacao({ state, month }) {
   const originById = Object.fromEntries(state.origins.map((o) => [o.id, o]));
   const debtorById = Object.fromEntries(state.debtors.map((d) => [d.id, d.name]));
   const expensesMonth = state.expenses.filter((e) => (e.date ?? "").slice(0, 7) === month);
-  const salary = state.salaryHistory[month];
+  const salary = state.salaryHistory[month] ?? DEFAULT_SALARY_TEMPLATE;
 
   const toCSV = (rows, header) => {
     const esc = (s) => `"${String(s).replaceAll('"', '""')}"`;

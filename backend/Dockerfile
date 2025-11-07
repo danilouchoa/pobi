@@ -1,39 +1,42 @@
-# Fase 1: Build da Aplicação (se for TypeScript)
-FROM node:20-alpine AS builder
+# ============================
+# Fase 1: Build da Aplicação
+# ============================
+FROM node:20-slim AS builder
 
 WORKDIR /app
 
-# Copia package.json e instala dependências
+# Instala dependências de build do Prisma
+RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+
+# Copia e instala dependências
 COPY package*.json ./
 RUN npm ci
 
-# Copia o schema do Prisma
+# Copia o schema do Prisma e gera o client
 COPY prisma ./prisma/
-
-# Gera o Prisma Client
 RUN npx prisma generate
 
-# Copia o restante do código-fonte e compila
+# Copia o restante do código e compila TypeScript
 COPY . .
 RUN npm run build
 
-# Fase 2: Imagem de Produção
-FROM node:20-alpine
+# ============================
+# Fase 2: Produção
+# ============================
+FROM node:20-slim
 
 WORKDIR /app
 
-# Copia as dependências instaladas
+# Instala runtime necessário para Prisma
+RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+
+# Copia artefatos da build
 COPY --from=builder /app/node_modules ./node_modules
-COPY package*.json ./
-
-# Copia o código compilado (dist)
+COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/dist ./dist
-
-# Copia o schema do Prisma e o client gerado
 COPY --from=builder /app/prisma ./prisma
-COPY --from/builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 
 EXPOSE 4000
 
-# Comando para rodar a aplicação compilada
 CMD ["node", "dist/index.js"]

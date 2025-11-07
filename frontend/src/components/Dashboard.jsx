@@ -2,6 +2,7 @@ import Section from "./ui/Section";
 import KPI from "./ui/KPI";
 import Pie from "./ui/Pie";
 import { toBRL, parseNum } from "../utils/helpers";
+import { DEFAULT_SALARY_TEMPLATE } from "../hooks/useFinanceApp";
 
 export default function Dashboard({ state, month }) {
   // Mapeamentos
@@ -17,7 +18,7 @@ export default function Dashboard({ state, month }) {
   const debtExpensesMonth = expensesMonth.filter((e) => !!e.debtorId);
 
   // Calcula salário
-  const salaryData = state.salaryHistory[month];
+  const salaryData = state.salaryHistory[month] ?? DEFAULT_SALARY_TEMPLATE;
   const hours = parseNum(salaryData?.hours);
   const hourRate = parseNum(salaryData?.hourRate);
   const taxRate = parseNum(salaryData?.taxRate);
