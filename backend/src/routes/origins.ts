@@ -1,5 +1,6 @@
 import { Router, Request } from 'express';
 import { PrismaClient } from '@prisma/client';
+import { parseDecimal, toDecimalString, toDecimalStringOrNull } from '../utils/formatters';
 
 interface AuthenticatedRequest extends Request {
   userId?: string;
@@ -10,7 +11,7 @@ const serializeOrigin = (origin: {
   name: string;
   type: string;
   dueDay: string | null;
-  limit: number | null;
+  limit: any;
   status: string | null;
   active: boolean;
 }) => ({
@@ -18,7 +19,7 @@ const serializeOrigin = (origin: {
   name: origin.name,
   type: origin.type,
   dueDay: origin.dueDay,
-  limit: origin.limit,
+  limit: origin.limit != null ? parseDecimal(origin.limit) : null,
   status: origin.status,
   active: origin.active,
 });
@@ -49,9 +50,8 @@ export default function originsRoutes(prisma: PrismaClient) {
         return res.status(400).json({ message: 'Campos obrigatórios ausentes.' });
       }
 
-      const numericLimit = limit == null ? null : Number(limit);
       const origin = await prisma.origin.create({
-        data: { name, type, dueDay, limit: numericLimit, userId },
+        data: { name, type, dueDay, limit: toDecimalStringOrNull(limit), userId },
       });
 
       res.status(201).json(serializeOrigin(origin));
@@ -73,7 +73,6 @@ export default function originsRoutes(prisma: PrismaClient) {
       }
 
       const { name, type, dueDay, limit, status, active } = req.body;
-      const numericLimit = limit == null ? undefined : Number(limit);
 
       const origin = await prisma.origin.update({
         where: { id },
@@ -81,7 +80,7 @@ export default function originsRoutes(prisma: PrismaClient) {
           name,
           type,
           dueDay,
-          limit: Number.isNaN(numericLimit as number) ? undefined : numericLimit,
+          limit: limit === undefined ? undefined : toDecimalStringOrNull(limit),
           status,
           active,
         },
@@ -113,12 +112,7 @@ export default function originsRoutes(prisma: PrismaClient) {
       if (status !== undefined) data.status = status;
       if (active !== undefined) data.active = Boolean(active);
       if (limit !== undefined) {
-        const numeric = Number(limit);
-        if (!Number.isNaN(numeric)) {
-          data.limit = numeric;
-        } else if (limit === null) {
-          data.limit = null;
-        }
+        data.limit = limit === null ? null : toDecimalString(limit);
       }
 
       const origin = await prisma.origin.update({

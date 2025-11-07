@@ -7,6 +7,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "prisma:generate": "prisma generate",
+    "fingerprints:backfill": "tsx scripts/backfill-fingerprints.ts",
+    "fingerprints:regenerate": "tsx scripts/regenerate-fingerprints.ts",
     "health:db": "ts-node scripts/db-health.ts",
     "seed": "ts-node prisma/seed.ts",
     "lint": "eslint . --ext .ts",
@@ -22,6 +24,7 @@
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "date-fns": "^4.1.0",
+    "decimal.js": "^10.4.3",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2"
@@ -38,6 +41,7 @@
     "prisma": "^6.19.0",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
+    "tsx": "^4.20.6",
     "typescript": "^5.9.3"
   }
 }

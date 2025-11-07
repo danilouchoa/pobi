@@ -1,6 +1,6 @@
 import { Router, Request } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { addMonths, startOfMonth } from 'date-fns';
+import { addMonths, format, startOfMonth } from 'date-fns';
 import {
   addByRecurrence,
   buildCreateData,
@@ -9,7 +9,9 @@ import {
   validateFlags,
   RecurrenceType,
   ExpensePayload,
+  generateFingerprint,
 } from '../utils/expenseHelpers';
+import { parseDecimal, toDecimalString } from '../utils/formatters';
 import { publishRecurringJob } from '../lib/rabbit';
 
 interface AuthenticatedRequest extends Request {
@@ -20,17 +22,18 @@ interface AuthenticatedRequest extends Request {
 const serializeExpense = (expense: any) => ({
   id: expense.id,
   description: expense.description ?? '',
-  amount: expense.amount ?? 0,
+  amount: parseDecimal(expense.amount),
   date: expense.date ? new Date(expense.date).toISOString() : null,
   category: expense.category ?? '',
   originId: expense.originId ?? null,
   debtorId: expense.debtorId ?? null,
+  fingerprint: expense.fingerprint ?? '',
   recurring: expense.recurring ?? false,
   recurrenceType: expense.recurrenceType ?? null,
   fixed: expense.fixed ?? false,
   installments: expense.installments ?? null,
   sharedWith: expense.sharedWith ?? null,
-  sharedAmount: expense.sharedAmount ?? null,
+  sharedAmount: expense.sharedAmount != null ? parseDecimal(expense.sharedAmount) : null,
   createdAt: expense.createdAt ? new Date(expense.createdAt).toISOString() : null,
   updatedAt: expense.updatedAt ? new Date(expense.updatedAt).toISOString() : null,
 });
@@ -203,9 +206,10 @@ export default function expensesRoutes(prisma: PrismaClient) {
       }
 
       const updateData = buildUpdateData(req.body);
-      if (updateData.sharedAmount != null) {
-        const newAmount = updateData.amount ?? existing.amount;
-        if (updateData.sharedAmount > newAmount) {
+      if (updateData.sharedAmount !== undefined && updateData.sharedAmount !== null) {
+        const newAmountSource = (updateData.amount ?? existing.amount) as string | number | null;
+        const sharedSource = updateData.sharedAmount as string | number | null;
+        if (parseDecimal(sharedSource) > parseDecimal(newAmountSource)) {
           return res.status(400).json({ message: 'sharedAmount > amount' });
         }
       }
@@ -275,12 +279,28 @@ export default function expensesRoutes(prisma: PrismaClient) {
         cloneDate = addByRecurrence(existing.date, 'monthly');
       }
 
+      const amountSeed = parseDecimal(existing.amount);
+      const amountValueForCreate = toDecimalString(existing.amount);
+      const sharedSeed = existing.sharedAmount != null ? parseDecimal(existing.sharedAmount) : 0;
+      const sharedValueForCreate =
+        existing.sharedAmount != null ? toDecimalString(existing.sharedAmount) : undefined;
+      const monthKey = format(cloneDate, 'yyyy-MM');
+      const fingerprintSeed = [
+        userId,
+        monthKey,
+        existing.description,
+        amountSeed,
+        existing.originId ?? '-',
+        existing.debtorId ?? '-',
+      ].join('|');
+      const fingerprint = generateFingerprint(fingerprintSeed);
+
       const duplicated = await prisma.expense.create({
         data: buildCreateData(userId, {
           description: existing.description,
           category: existing.category,
           parcela: existing.parcela,
-          amount: existing.amount,
+          amount: amountValueForCreate as number | string,
           date: cloneDate.toISOString(),
           originId: existing.originId ?? undefined,
           debtorId: existing.debtorId ?? undefined,
@@ -289,7 +309,8 @@ export default function expensesRoutes(prisma: PrismaClient) {
           fixed: existing.fixed,
           installments: existing.installments,
           sharedWith: existing.sharedWith,
-          sharedAmount: existing.sharedAmount,
+          sharedAmount: sharedValueForCreate,
+          fingerprint,
         }),
       });
 
@@ -315,9 +336,14 @@ export default function expensesRoutes(prisma: PrismaClient) {
       }
 
       const updateData = buildUpdateData(req.body);
-      if (updateData.amount != null || updateData.sharedAmount != null) {
-        const futureAmount = updateData.amount ?? existing.amount;
-        if (updateData.sharedAmount != null && updateData.sharedAmount > futureAmount) {
+      if (updateData.amount !== undefined || updateData.sharedAmount !== undefined) {
+        const futureAmountSource = (updateData.amount ?? existing.amount) as string | number | null;
+        const sharedSource =
+          updateData.sharedAmount === undefined ? existing.sharedAmount : updateData.sharedAmount;
+        if (
+          sharedSource != null &&
+          parseDecimal(sharedSource as string | number | null) > parseDecimal(futureAmountSource)
+        ) {
           return res.status(400).json({ message: 'Valor compartilhado não pode ser maior que o total.' });
         }
       }
