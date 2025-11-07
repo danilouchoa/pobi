@@ -1,6 +1,21 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import {
+  Grid,
+  TextField,
+  MenuItem,
+  Button,
+  Stack,
+  Typography,
+  List,
+  ListItem,
+  ListItemText,
+  IconButton,
+  Divider,
+  Chip,
+  Box,
+} from "@mui/material";
+import DeleteIcon from "@mui/icons-material/Delete";
 import Section from "./ui/Section";
-import Field from "./ui/Field";
 import { parseNum, toBRL } from "../utils/helpers";
 
 export default function Cadastros({
@@ -21,8 +36,20 @@ export default function Cadastros({
   const [originLoading, setOriginLoading] = useState(false);
   const [debtorLoading, setDebtorLoading] = useState(false);
 
+  useEffect(() => {
+    console.log("Cadastros updated:", { originsCount: origins?.length ?? 0, debtorsCount: debtors?.length ?? 0 });
+  }, [origins, debtors]);
+
+  const handleOriginChange = (field) => (event) => {
+    setOriginForm((prev) => ({ ...prev, [field]: event.target.value }));
+  };
+
+  const handleDebtorChange = (event) => {
+    setDebtorForm({ name: event.target.value });
+  };
+
   const addOrigin = async () => {
-    if (!originForm.name.trim() || !originForm.type) return;
+    if (!originForm.name.trim()) return;
     setOriginLoading(true);
     try {
       await createOrigin({
@@ -41,7 +68,7 @@ export default function Cadastros({
   };
 
   const delOrigin = async (id) => {
-    if (!confirm("Deseja remover esta origem?")) return;
+    if (!window.confirm("Deseja remover esta origem?")) return;
     try {
       await deleteOrigin(id);
     } catch (error) {
@@ -65,7 +92,7 @@ export default function Cadastros({
   };
 
   const delDebtor = async (id) => {
-    if (!confirm("Deseja remover este devedor?")) return;
+    if (!window.confirm("Deseja remover este devedor?")) return;
     try {
       await deleteDebtor(id);
     } catch (error) {
@@ -75,112 +102,133 @@ export default function Cadastros({
   };
 
   return (
-    <div className="grid md:grid-cols-2 gap-6">
-      <Section title="Minhas Contas/Origens" subtitle="Cadastre seus cartões e contas fixas.">
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          <Field label="Nome" id="origin-name">
-            <input
-              id="origin-name"
-              className="border rounded-lg px-3 py-2 w-full"
-              placeholder="Ex.: Cartão Nubank"
-              value={originForm.name}
-              onChange={(e) => setOriginForm((form) => ({ ...form, name: e.target.value }))}
-            />
-          </Field>
-          <Field label="Tipo" id="origin-type">
-            <select
-              id="origin-type"
-              className="border rounded-lg px-3 py-2 w-full"
-              value={originForm.type}
-              onChange={(e) => setOriginForm((form) => ({ ...form, type: e.target.value }))}
-            >
-              <option value="Cartão">Cartão</option>
-              <option value="Conta">Conta</option>
-            </select>
-          </Field>
-          <Field label="Dia Vencimento" id="origin-due" hint="Ex.: 4 (somente o dia)">
-            <input
-              id="origin-due"
-              className="border rounded-lg px-3 py-2 w-full"
-              placeholder="Ex.: 4"
-              value={originForm.dueDay}
-              onChange={(e) => setOriginForm((form) => ({ ...form, dueDay: e.target.value }))}
-            />
-          </Field>
-          <Field label="Limite (R$)" id="origin-limit">
-            <input
-              id="origin-limit"
-              className="border rounded-lg px-3 py-2 w-full"
-              inputMode="decimal"
-              placeholder="Ex.: 5000"
-              value={originForm.limit}
-              onChange={(e) => setOriginForm((form) => ({ ...form, limit: e.target.value }))}
-            />
-          </Field>
-        </div>
-        <button
-          onClick={addOrigin}
-          className="px-4 py-2 rounded-xl bg-black text-white w-full disabled:opacity-50"
-          disabled={originLoading}
-        >
-          {originLoading ? "Salvando..." : "Adicionar Conta/Origem"}
-        </button>
-        <div className="mt-6">
-          <h4 className="text-md font-semibold mb-2">Contas Cadastradas</h4>
-          <ul className="divide-y divide-gray-100">
-            {origins.map((origin) => (
-              <li key={origin.id} className="py-3 flex justify-between items-center">
-                <div>
-                  <div className="font-medium">
-                    {origin.name} <span className="text-sm text-gray-500">({origin.type})</span>
-                  </div>
-                  <div className="text-sm text-gray-600">
-                    Venc: dia {origin.dueDay || "N/A"} | Limite:{" "}
-                    {origin.limit ? toBRL(parseNum(origin.limit)) : "N/A"}
-                  </div>
-                </div>
-                <button onClick={() => delOrigin(origin.id)} className="text-red-600 text-sm hover:underline">
-                  remover
-                </button>
-              </li>
-            ))}
-            {origins.length === 0 && <li className="text-gray-400 py-2">Nenhuma conta cadastrada.</li>}
-          </ul>
-        </div>
-      </Section>
+    <Grid container spacing={3}>
+      <Grid item xs={12} md={6}>
+        <Section title="Minhas Contas/Origens" subtitle="Cadastre seus cartões e contas fixas.">
+          <Stack spacing={3}>
+            <Grid container spacing={2}>
+              <Grid item xs={12}>
+                <TextField
+                  label="Nome"
+                  placeholder="Ex.: Cartão Nubank"
+                  fullWidth
+                  value={originForm.name}
+                  onChange={handleOriginChange("name")}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField select label="Tipo" fullWidth value={originForm.type} onChange={handleOriginChange("type")}>
+                  <MenuItem value="Cartão">Cartão</MenuItem>
+                  <MenuItem value="Conta">Conta</MenuItem>
+                </TextField>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Dia vencimento"
+                  placeholder="Ex.: 4"
+                  fullWidth
+                  value={originForm.dueDay}
+                  onChange={handleOriginChange("dueDay")}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  label="Limite (R$)"
+                  placeholder="Ex.: 5000"
+                  fullWidth
+                  value={originForm.limit}
+                  onChange={handleOriginChange("limit")}
+                />
+              </Grid>
+            </Grid>
+            <Button onClick={addOrigin} disabled={originLoading} variant="contained">
+              {originLoading ? "Salvando..." : "Adicionar Conta/Origem"}
+            </Button>
+            <Divider />
+            <Typography variant="subtitle2" color="text.secondary">
+              Contas cadastradas
+            </Typography>
+            <List>
+              {origins.map((origin) => (
+                <ListItem
+                  key={origin.id}
+                  secondaryAction={
+                    <IconButton edge="end" color="error" onClick={() => delOrigin(origin.id)}>
+                      <DeleteIcon />
+                    </IconButton>
+                  }
+                >
+                  <ListItemText
+                    primary={
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        <Typography fontWeight={600}>{origin.name}</Typography>
+                        <Chip label={origin.type} size="small" variant="outlined" color="secondary" />
+                      </Stack>
+                    }
+                    secondary={`Venc: dia ${origin.dueDay || "N/A"} • Limite: ${
+                      origin.limit ? toBRL(parseNum(origin.limit)) : "N/A"
+                    }`}
+                  />
+                </ListItem>
+              ))}
+              {origins.length === 0 && (
+                <ListItem>
+                  <ListItemText
+                    primary={<Typography color="text.secondary">Nenhuma conta cadastrada ainda.</Typography>}
+                  />
+                </ListItem>
+              )}
+            </List>
+          </Stack>
+        </Section>
+      </Grid>
 
-      <Section title="Devedores" subtitle="Cadastre as pessoas que podem dever dinheiro para você.">
-        <div className="flex gap-2 items-end flex-wrap">
-          <Field label="Nome da Pessoa" id="debtor-name">
-            <input
-              id="debtor-name"
-              className="border rounded-lg px-3 py-2 w-64"
-              placeholder="Ex.: Irmã, Esposa"
-              value={debtorForm.name}
-              onChange={(e) => setDebtorForm({ name: e.target.value })}
-              onKeyPress={(e) => e.key === "Enter" && addDebtor()}
-            />
-          </Field>
-          <button
-            onClick={addDebtor}
-            className="px-4 py-2 rounded-xl bg-black text-white disabled:opacity-50"
-            disabled={debtorLoading}
-          >
-            {debtorLoading ? "Salvando..." : "Adicionar Pessoa"}
-          </button>
-        </div>
-        <ul className="mt-4 divide-y divide-gray-100">
-          {debtors.map((debtor) => (
-            <li key={debtor.id} className="py-2 flex items-center justify-between">
-              <div className="font-medium">{debtor.name}</div>
-              <button onClick={() => delDebtor(debtor.id)} className="text-red-600 text-sm hover:underline">
-                remover
-              </button>
-            </li>
-          ))}
-          {debtors.length === 0 && <li className="text-gray-400 py-2">Nenhuma pessoa cadastrada.</li>}
-        </ul>
-      </Section>
-    </div>
+      <Grid item xs={12} md={6}>
+        <Section title="Devedores" subtitle="Cadastre as pessoas que podem dever dinheiro para você.">
+          <Stack spacing={3}>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+              <TextField
+                label="Nome da pessoa"
+                placeholder="Ex.: Irmã, Esposa"
+                fullWidth
+                value={debtorForm.name}
+                onChange={handleDebtorChange}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    addDebtor();
+                  }
+                }}
+              />
+              <Button variant="contained" onClick={addDebtor} disabled={debtorLoading} sx={{ minWidth: 180 }}>
+                {debtorLoading ? "Salvando..." : "Adicionar"}
+              </Button>
+            </Stack>
+            <Divider />
+            <List>
+              {debtors.map((debtor) => (
+                <ListItem
+                  key={debtor.id}
+                  secondaryAction={
+                    <IconButton edge="end" color="error" onClick={() => delDebtor(debtor.id)}>
+                      <DeleteIcon />
+                    </IconButton>
+                  }
+                >
+                  <ListItemText primary={debtor.name} />
+                </ListItem>
+              ))}
+              {debtors.length === 0 && (
+                <ListItem>
+                  <ListItemText
+                    primary={<Typography color="text.secondary">Nenhuma pessoa cadastrada ainda.</Typography>}
+                  />
+                </ListItem>
+              )}
+            </List>
+          </Stack>
+        </Section>
+      </Grid>
+    </Grid>
   );
 }

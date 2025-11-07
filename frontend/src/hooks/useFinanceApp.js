@@ -55,21 +55,32 @@ export function useFinanceApp() {
     setLoading(true);
     setError(null);
     try {
-      const [expensesRes, originsRes, debtorsRes, salaryRes] = await Promise.all([
-        api.get("/api/expenses"),
-        api.get("/api/origins"),
-        api.get("/api/debtors"),
-        api.get("/api/salaryHistory"),
-      ]);
-      setState({
-        expenses: expensesRes.data ?? [],
-        origins: originsRes.data ?? [],
-        debtors: debtorsRes.data ?? [],
-        salaryHistory: mapSalaryRecords(salaryRes.data ?? []),
-      });
+      const requestConfig = { headers: { "Cache-Control": "no-cache" } };
+      const [expensesRes, originsRes, debtorsRes, salaryRes] =
+        await Promise.all([
+          api.get("/api/expenses", requestConfig),
+          api.get("/api/origins", requestConfig),
+          api.get("/api/debtors", requestConfig),
+          api.get("/api/salaryHistory", requestConfig),
+        ]);
+      setState((prev) => ({
+        expenses: Array.isArray(expensesRes.data)
+          ? expensesRes.data
+          : prev.expenses,
+        origins: Array.isArray(originsRes.data)
+          ? originsRes.data
+          : prev.origins,
+        debtors: Array.isArray(debtorsRes.data)
+          ? debtorsRes.data
+          : prev.debtors,
+        salaryHistory: Array.isArray(salaryRes.data)
+          ? mapSalaryRecords(salaryRes.data)
+          : prev.salaryHistory,
+      }));
     } catch (err) {
       console.error("Erro ao carregar dados financeiros:", err);
-      const message = err.response?.data?.message ?? "Erro ao carregar dados da API.";
+      const message =
+        err.response?.data?.message ?? "Erro ao carregar dados da API.";
       setError(message);
     } finally {
       setLoading(false);
@@ -77,12 +88,15 @@ export function useFinanceApp() {
   }, [token]);
 
   useEffect(() => {
-    if (token) {
-      fetchAll();
-    } else {
+    if (!token) {
+      console.log("[useFinanceApp] Sem token, limpando estado");
       setState(INITIAL_STATE);
+      return;
     }
-  }, [token, fetchAll]);
+
+    console.log("[useFinanceApp] Recarregando dados para o mês:", month);
+    fetchAll();
+  }, [token, month, fetchAll]);
 
   const createExpense = useCallback(async (payload) => {
     const body = {
@@ -110,7 +124,8 @@ export function useFinanceApp() {
     const parsedLimit = Number(payload.limit);
     const body = {
       ...payload,
-      limit: payload.limit === "" || Number.isNaN(parsedLimit) ? null : parsedLimit,
+      limit:
+        payload.limit === "" || Number.isNaN(parsedLimit) ? null : parsedLimit,
     };
     const { data } = await api.post("/api/origins", body);
     setState((current) => ({
@@ -155,14 +170,21 @@ export function useFinanceApp() {
         cnae: payload.cnae,
       };
 
-      if (Number.isNaN(normalized.hours) || Number.isNaN(normalized.hourRate) || Number.isNaN(normalized.taxRate)) {
+      if (
+        Number.isNaN(normalized.hours) ||
+        Number.isNaN(normalized.hourRate) ||
+        Number.isNaN(normalized.taxRate)
+      ) {
         throw new Error("Horas, valor hora e alíquota precisam ser numéricos.");
       }
 
       const existing = state.salaryHistory[targetMonth];
       let response;
       if (existing?.id) {
-        response = await api.put(`/api/salaryHistory/${existing.id}`, normalized);
+        response = await api.put(
+          `/api/salaryHistory/${existing.id}`,
+          normalized
+        );
       } else {
         response = await api.post("/api/salaryHistory", normalized);
       }

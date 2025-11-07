@@ -1,9 +1,25 @@
+import { Box, Typography } from "@mui/material";
+
 export default function Field({ label, id, children, hint }) {
   return (
-    <label htmlFor={id} className="block mb-3">
-      <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">{label}</div>
+    <Box sx={{ width: "100%" }}>
+      {label && (
+        <Typography
+          component="label"
+          htmlFor={id}
+          variant="caption"
+          color="text.secondary"
+          sx={{ display: "block", textTransform: "uppercase", letterSpacing: 0.8, mb: 0.5 }}
+        >
+          {label}
+        </Typography>
+      )}
       {children}
-      {hint && <div className="text-xs text-gray-400 mt-1">{hint}</div>}
-    </label>
+      {hint && (
+        <Typography variant="caption" color="text.disabled" sx={{ mt: 0.5, display: "block" }}>
+          {hint}
+        </Typography>
+      )}
+    </Box>
   );
 }

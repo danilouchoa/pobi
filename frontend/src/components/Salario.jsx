@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
+import {
+  Grid,
+  TextField,
+  Button,
+  Stack,
+  Typography,
+  Alert,
+} from "@mui/material";
 import Section from "./ui/Section";
-import Field from "./ui/Field";
 import KPI from "./ui/KPI";
 import { parseNum, toBRL } from "../utils/helpers";
 import { DEFAULT_SALARY_TEMPLATE } from "../hooks/useFinanceApp";
@@ -24,8 +31,12 @@ export default function Salario({ month, salary, saveSalary }) {
     });
   }, [salary, month]);
 
-  const handleChange = (field, value) => {
-    setForm((prev) => ({ ...prev, [field]: value }));
+  useEffect(() => {
+    console.log("Salario updated:", { month, salary });
+  }, [month, salary]);
+
+  const handleChange = (field) => (event) => {
+    setForm((prev) => ({ ...prev, [field]: event.target.value }));
   };
 
   const handleSubmit = async (event) => {
@@ -53,67 +64,72 @@ export default function Salario({ month, salary, saveSalary }) {
   const netHourRate = net / Math.max(1, hoursNum);
 
   return (
-    <Section
-      title={`Salário por horas (Mês: ${month})`}
-      subtitle="Os dados são salvos automaticamente para o mês de referência selecionado."
-      right={feedback ? <span className="text-sm text-gray-500">{feedback}</span> : null}
-    >
-      <form className="grid md:grid-cols-4 gap-3" onSubmit={handleSubmit}>
-        <Field label="Horas no mês" id="sal-hours">
-          <input
-            id="sal-hours"
-            className="border rounded-lg px-3 py-2 w-full"
-            inputMode="numeric"
-            value={form.hours}
-            onChange={(e) => handleChange("hours", e.target.value)}
-          />
-        </Field>
-        <Field label="Valor/hora (R$)" id="sal-hourRate">
-          <input
-            id="sal-hourRate"
-            className="border rounded-lg px-3 py-2 w-full"
-            inputMode="decimal"
-            value={form.hourRate}
-            onChange={(e) => handleChange("hourRate", e.target.value)}
-          />
-        </Field>
-        <Field label="Alíquota de imposto" id="sal-taxRate">
-          <div className="flex items-center gap-2">
-            <input
-              id="sal-taxRate"
-              className="border rounded-lg px-3 py-2 w-full"
-              inputMode="decimal"
-              value={form.taxRate}
-              onChange={(e) => handleChange("taxRate", e.target.value)}
-            />
-            <span className="text-sm text-gray-500">(ex.: 0.06 = 6%)</span>
-          </div>
-        </Field>
-        <Field label="CNAE" id="sal-cnae">
-          <input
-            id="sal-cnae"
-            className="border rounded-lg px-3 py-2 w-full"
-            value={form.cnae}
-            onChange={(e) => handleChange("cnae", e.target.value)}
-          />
-        </Field>
-        <div className="md:col-span-4 flex items-center gap-3">
-          <button
-            type="submit"
-            className="px-4 py-2 rounded-xl bg-black text-white disabled:opacity-50"
-            disabled={saving}
-          >
-            {saving ? "Salvando..." : "Salvar salário"}
-          </button>
-          <span className="text-xs text-gray-500">Sincroniza com a API autenticada.</span>
-        </div>
-      </form>
-      <div className="grid md:grid-cols-4 gap-4 mt-6">
-        <KPI label="Bruto (Mês)" value={toBRL(gross)} />
-        <KPI label={`Impostos (${(parseNum(form.taxRate) * 100).toFixed(2)}%)`} value={toBRL(tax)} />
-        <KPI label="Líquido (Mês)" value={toBRL(net)} highlight />
-        <KPI label="Valor hora líquido" value={toBRL(netHourRate)} />
-      </div>
-    </Section>
+    <Stack spacing={3}>
+      <Section
+        title={`Salário por horas (Mês: ${month})`}
+        subtitle="Atualize as informações de horas, valor hora e impostos para cada mês."
+      >
+        <Stack component="form" spacing={3} onSubmit={handleSubmit}>
+          <Grid container spacing={2}>
+            <Grid item xs={12} md={3}>
+              <TextField
+                label="Horas no mês"
+                fullWidth
+                value={form.hours}
+                onChange={handleChange("hours")}
+                inputProps={{ inputMode: "numeric" }}
+              />
+            </Grid>
+            <Grid item xs={12} md={3}>
+              <TextField
+                label="Valor/hora (R$)"
+                fullWidth
+                value={form.hourRate}
+                onChange={handleChange("hourRate")}
+                inputProps={{ inputMode: "decimal" }}
+              />
+            </Grid>
+            <Grid item xs={12} md={3}>
+              <TextField
+                label="Alíquota de imposto"
+                fullWidth
+                value={form.taxRate}
+                onChange={handleChange("taxRate")}
+                helperText="Ex.: 0.06 = 6%"
+              />
+            </Grid>
+            <Grid item xs={12} md={3}>
+              <TextField label="CNAE" fullWidth value={form.cnae} onChange={handleChange("cnae")} />
+            </Grid>
+          </Grid>
+          <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems="center">
+            <Button type="submit" variant="contained" disabled={saving}>
+              {saving ? "Salvando..." : "Salvar salário"}
+            </Button>
+            <Typography variant="body2" color="text.secondary">
+              Os dados são sincronizados com a API autenticada.
+            </Typography>
+            {feedback && (
+              <Alert severity={feedback.includes("sucesso") ? "success" : "error"}>{feedback}</Alert>
+            )}
+          </Stack>
+        </Stack>
+      </Section>
+
+      <Grid container spacing={2}>
+        <Grid item xs={12} md={3}>
+          <KPI label="Bruto (Mês)" value={toBRL(gross)} />
+        </Grid>
+        <Grid item xs={12} md={3}>
+          <KPI label={`Impostos (${(parseNum(form.taxRate) * 100).toFixed(2)}%)`} value={toBRL(tax)} />
+        </Grid>
+        <Grid item xs={12} md={3}>
+          <KPI label="Líquido (Mês)" value={toBRL(net)} highlight />
+        </Grid>
+        <Grid item xs={12} md={3}>
+          <KPI label="Valor hora líquido" value={toBRL(netHourRate)} />
+        </Grid>
+      </Grid>
+    </Stack>
   );
 }

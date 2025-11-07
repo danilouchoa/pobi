@@ -1,14 +1,45 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect, useMemo } from "react";
+import {
+  Grid,
+  TextField,
+  MenuItem,
+  FormControlLabel,
+  Checkbox,
+  Button,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  TableContainer,
+  IconButton,
+  Stack,
+  Typography,
+  Chip,
+  Paper,
+} from "@mui/material";
+import DeleteIcon from "@mui/icons-material/Delete";
 import Section from "./ui/Section";
-import Field from "./ui/Field";
 import { todayISO, parseNum, toBRL } from "../utils/helpers";
 
-export default function Lancamentos({ state, month, createExpense, deleteExpense }) {
-  const originById = Object.fromEntries(state.origins.map((o) => [o.id, o]));
-  const debtorById = Object.fromEntries(state.debtors.map((d) => [d.id, d.name]));
-  const expensesMonth = state.expenses.filter((e) => (e.date ?? "").slice(0, 7) === month);
+const CATEGORIES = [
+  "Impostos e encargos",
+  "Moradia",
+  "Comunicação e Internet",
+  "Compras / E-commerce",
+  "Lazer / Viagem",
+  "Finanças pessoais",
+  "Serviços / Assinaturas",
+  "Educação / Cursos",
+  "Outros",
+];
 
-  const [expForm, setExpForm] = useState({
+export default function Lancamentos({ state, month, createExpense, deleteExpense }) {
+  const originById = useMemo(() => Object.fromEntries(state.origins.map((origin) => [origin.id, origin])), [state.origins]);
+  const debtorById = useMemo(() => Object.fromEntries(state.debtors.map((debtor) => [debtor.id, debtor.name])), [state.debtors]);
+  const expensesMonth = state.expenses.filter((expense) => (expense.date ?? "").slice(0, 7) === month);
+
+  const [form, setForm] = useState({
     date: todayISO(),
     description: "",
     originId: state.origins[0]?.id || "",
@@ -18,76 +49,73 @@ export default function Lancamentos({ state, month, createExpense, deleteExpense
     debtorId: "",
     amount: "",
   });
-
-  const CATEGORIAS = [
-    "Impostos e encargos",
-    "Moradia",
-    "Comunicação e Internet",
-    "Compras / E-commerce",
-    "Lazer / Viagem",
-    "Finanças pessoais",
-    "Serviços / Assinaturas",
-    "Educação / Cursos",
-    "Outros",
-  ];
-
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!expForm.originId && state.origins[0]?.id) {
-      setExpForm((form) => ({ ...form, originId: state.origins[0].id }));
+    if (!form.originId && state.origins.length > 0) {
+      setForm((current) => ({ ...current, originId: state.origins[0].id }));
     }
-  }, [state.origins, expForm.originId]);
+  }, [state.origins, form.originId]);
 
-  const addExpense = async () => {
-    const totalAmount = parseNum(expForm.amount);
-    const description = expForm.description.trim();
-    if (!description || !expForm.originId || totalAmount <= 0) return;
-    setSubmitting(true);
+  useEffect(() => {
+    console.log("Lancamentos updated", {
+      month,
+      expensesMonth: expensesMonth.length,
+      totalExpenses: state.expenses.length,
+    });
+  }, [month, expensesMonth.length, state.expenses]);
 
-    const isInstallment = expForm.isInstallment;
-    const numInstallments = parseInt(expForm.installments, 10);
+  const handleChange = (field) => (event) => {
+    const value = event.target.type === "checkbox" ? event.target.checked : event.target.value;
+    setForm((current) => ({
+      ...current,
+      [field]: value,
+      ...(field === "isInstallment" && !value ? { installments: "" } : null),
+    }));
+  };
+
+  const handleAddExpense = async () => {
+    const totalAmount = parseNum(form.amount);
+    const description = form.description.trim();
+    if (!description || !form.originId || totalAmount <= 0) return;
+
     const payloads = [];
-
-    if (isInstallment && numInstallments > 1) {
-      // Parcelado
-      const installmentAmount = totalAmount / numInstallments;
-      const startDate = new Date(expForm.date + "T12:00:00Z");
-
-      for (let i = 0; i < numInstallments; i++) {
+    if (form.isInstallment && Number(form.installments) > 1) {
+      const installments = Number(form.installments);
+      const installmentAmount = totalAmount / installments;
+      const startDate = new Date(`${form.date}T12:00:00Z`);
+      for (let i = 0; i < installments; i += 1) {
         const installmentDate = new Date(startDate);
         installmentDate.setMonth(startDate.getMonth() + i);
-
         payloads.push({
           date: installmentDate.toISOString().slice(0, 10),
-          description: `${description} (${i + 1}/${numInstallments})`,
-          originId: expForm.originId,
-          category: expForm.category,
-          parcela: `${i + 1}/${numInstallments}`,
-          debtorId: expForm.debtorId || null,
+          description: `${description} (${i + 1}/${installments})`,
+          originId: form.originId,
+          category: form.category,
+          parcela: `${i + 1}/${installments}`,
+          debtorId: form.debtorId || null,
           amount: installmentAmount,
         });
       }
-
     } else {
-      // Único
       payloads.push({
-        date: expForm.date,
+        date: form.date,
         description,
-        originId: expForm.originId,
-        category: expForm.category,
+        originId: form.originId,
+        category: form.category,
         parcela: "Único",
-        debtorId: expForm.debtorId || null,
+        debtorId: form.debtorId || null,
         amount: totalAmount,
       });
     }
 
     try {
+      setSubmitting(true);
       for (const payload of payloads) {
         await createExpense(payload);
       }
-      setExpForm((f) => ({
-        ...f,
+      setForm((current) => ({
+        ...current,
         description: "",
         isInstallment: false,
         installments: "",
@@ -102,8 +130,8 @@ export default function Lancamentos({ state, month, createExpense, deleteExpense
     }
   };
 
-  const delExpense = async (id) => {
-    if (!confirm("Deseja excluir este lançamento?")) return;
+  const handleDeleteExpense = async (id) => {
+    if (!window.confirm("Deseja excluir este lançamento?")) return;
     try {
       await deleteExpense(id);
     } catch (error) {
@@ -113,175 +141,153 @@ export default function Lancamentos({ state, month, createExpense, deleteExpense
   };
 
   return (
-    <>
-      <Section title="Adicionar Lançamento">
-        <div className="grid md:grid-cols-4 gap-3">
-          <Field label="Data" id="exp-date">
-            <input
-              id="exp-date"
+    <Stack spacing={3}>
+      <Section
+        title="Adicionar Lançamento"
+        subtitle="Cadastre novos lançamentos financeiros com opção de parcelamento."
+        right={
+          <Button variant="contained" color="secondary" onClick={handleAddExpense} disabled={submitting || state.origins.length === 0}>
+            {submitting ? "Salvando..." : "Adicionar lançamento"}
+          </Button>
+        }
+      >
+        <Grid container spacing={2}>
+          <Grid item xs={12} md={3}>
+            <TextField
+              label="Data"
               type="date"
-              className="border rounded-lg px-3 py-2 w-full"
-              value={expForm.date}
-              onChange={(e) => setExpForm((f) => ({ ...f, date: e.target.value }))}
+              fullWidth
+              value={form.date}
+              onChange={handleChange("date")}
+              InputLabelProps={{ shrink: true }}
             />
-          </Field>
-
-          <Field label="Descrição" id="exp-desc">
-            <input
-              id="exp-desc"
-              className="border rounded-lg px-3 py-2 w-full"
-              placeholder="Ex.: Aluguel, DARF, Mercado Livre"
-              value={expForm.description}
-              onChange={(e) => setExpForm((f) => ({ ...f, description: e.target.value }))}
+          </Grid>
+          <Grid item xs={12} md={5}>
+            <TextField label="Descrição" fullWidth value={form.description} onChange={handleChange("description")} />
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <TextField
+              select
+              label="Origem"
+              fullWidth
+              value={form.originId}
+              onChange={handleChange("originId")}
+              disabled={state.origins.length === 0}
+            >
+              {state.origins.map((origin) => (
+                <MenuItem key={origin.id} value={origin.id}>
+                  {origin.name}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <TextField select label="Categoria" fullWidth value={form.category} onChange={handleChange("category")}>
+              {CATEGORIES.map((category) => (
+                <MenuItem key={category} value={category}>
+                  {category}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <TextField
+              select
+              label="Devedor (opcional)"
+              fullWidth
+              value={form.debtorId}
+              onChange={handleChange("debtorId")}
+            >
+              <MenuItem value="">Minha despesa</MenuItem>
+              {state.debtors.map((debtor) => (
+                <MenuItem key={debtor.id} value={debtor.id}>
+                  {debtor.name}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <TextField
+              label="Valor (R$)"
+              fullWidth
+              value={form.amount}
+              onChange={handleChange("amount")}
+              InputProps={{ inputMode: "decimal" }}
             />
-          </Field>
-
-          <Field label="Origem" id="exp-origin">
-            <select
-              id="exp-origin"
-              className="border rounded-lg px-3 py-2 w-full"
-              value={expForm.originId}
-              onChange={(e) => setExpForm((f) => ({ ...f, originId: e.target.value }))}
-            >
-              <option value="" disabled>Selecione uma Origem</option>
-              {state.origins.map((o) => (
-                <option key={o.id} value={o.id}>{o.name}</option>
-              ))}
-            </select>
-          </Field>
-
-          <Field label="Categoria" id="exp-cat">
-            <select
-              id="exp-cat"
-              className="border rounded-lg px-3 py-2 w-full"
-              value={expForm.category}
-              onChange={(e) => setExpForm((f) => ({ ...f, category: e.target.value }))}
-            >
-              {CATEGORIAS.map((cat) => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
-            </select>
-          </Field>
-
-          {/* Parcelamento */}
-          <div className="flex items-end pb-3">
-            <div className="flex items-center h-full">
-              <input
-                id="exp-is-installment"
-                type="checkbox"
-                className="h-4 w-4 rounded border-gray-300 text-black focus:ring-black"
-                checked={expForm.isInstallment}
-                onChange={(e) => {
-                  const checked = e.target.checked;
-                  setExpForm((f) => ({
-                    ...f,
-                    isInstallment: checked,
-                    installments: checked ? f.installments : "",
-                  }));
-                }}
-              />
-              <label htmlFor="exp-is-installment" className="ml-2 text-sm font-medium text-gray-700">
-                É parcelado?
-              </label>
-            </div>
-          </div>
-
-          {expForm.isInstallment && (
-            <Field label="Nº de Parcelas" id="exp-installments">
-              <input
-                id="exp-installments"
+          </Grid>
+          <Grid item xs={12}>
+            <FormControlLabel
+              control={<Checkbox checked={form.isInstallment} onChange={handleChange("isInstallment")} />}
+              label="Lançamento parcelado?"
+            />
+          </Grid>
+          {form.isInstallment && (
+            <Grid item xs={12} md={4}>
+              <TextField
+                label="Número de parcelas"
                 type="number"
-                className="border rounded-lg px-3 py-2 w-full"
-                placeholder="Ex: 12"
-                value={expForm.installments}
-                onChange={(e) => setExpForm((f) => ({ ...f, installments: e.target.value }))}
+                fullWidth
+                value={form.installments}
+                onChange={handleChange("installments")}
+                placeholder="Ex.: 12"
+                InputProps={{ inputProps: { min: 2 } }}
               />
-            </Field>
+            </Grid>
           )}
-
-          <Field label="Devedor (Opcional)" id="exp-debtor">
-            <select
-              id="exp-debtor"
-              className="border rounded-lg px-3 py-2 w-full"
-              value={expForm.debtorId}
-              onChange={(e) => setExpForm((f) => ({ ...f, debtorId: e.target.value }))}
-            >
-              <option value="">Minha despesa</option>
-              {state.debtors.map((d) => (
-                <option key={d.id} value={d.id}>{d.name}</option>
-              ))}
-            </select>
-          </Field>
-
-          <Field label="Valor (R$)" id="exp-amount">
-            <input
-              id="exp-amount"
-              className="border rounded-lg px-3 py-2 w-full"
-              inputMode="decimal"
-              placeholder="0,00"
-              value={expForm.amount}
-              onChange={(e) => setExpForm((f) => ({ ...f, amount: e.target.value }))}
-            />
-          </Field>
-        </div>
-
-        <div className="mt-3">
-          <button
-            onClick={addExpense}
-            className="px-4 py-2 rounded-xl bg-black text-white disabled:opacity-50"
-            disabled={submitting || state.origins.length === 0}
-          >
-            {submitting ? "Salvando..." : "Adicionar Lançamento"}
-          </button>
-        </div>
+        </Grid>
       </Section>
 
-      <Section title="Lançamentos do Mês">
-        <div className="mt-6 overflow-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-gray-500">
-                <th className="py-2">Data</th>
-                <th>Descrição</th>
-                <th>Origem</th>
-                <th>Categoria</th>
-                <th>Devedor</th>
-                <th>Parcela</th>
-                <th className="text-right">Valor</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {expensesMonth.map((e) => (
-                <tr key={e.id} className={`border-t ${e.debtorId ? "bg-yellow-50" : ""}`}>
-                  <td className="py-2">{e.date}</td>
-                  <td>{e.description}</td>
-                  <td>{originById[e.originId]?.name ?? "Deletada"}</td>
-                  <td>{e.category}</td>
-                  <td>{e.debtorId ? debtorById[e.debtorId] || "Deletado" : "-"}</td>
-                  <td>{e.parcela}</td>
-                  <td className="text-right">{toBRL(e.amount)}</td>
-                  <td className="text-right">
-                    <button
-                      onClick={() => delExpense(e.id)}
-                      className="text-red-600 hover:underline"
-                    >
-                      excluir
-                    </button>
-                  </td>
-                </tr>
+      <Section title="Lançamentos do Mês" subtitle="Lista completa dos lançamentos no mês selecionado.">
+        <TableContainer component={Paper} variant="outlined">
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Data</TableCell>
+                <TableCell>Descrição</TableCell>
+                <TableCell>Origem</TableCell>
+                <TableCell>Categoria</TableCell>
+                <TableCell>Devedor</TableCell>
+                <TableCell>Parcela</TableCell>
+                <TableCell align="right">Valor</TableCell>
+                <TableCell align="right">Ações</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {expensesMonth.map((expense) => (
+                <TableRow key={expense.id} hover sx={{ bgcolor: expense.debtorId ? "secondary.50" : undefined }}>
+                  <TableCell>{expense.date}</TableCell>
+                  <TableCell>{expense.description}</TableCell>
+                  <TableCell>{originById[expense.originId]?.name ?? "Deletada"}</TableCell>
+                  <TableCell>{expense.category}</TableCell>
+                  <TableCell>
+                    {expense.debtorId ? (
+                      <Chip label={debtorById[expense.debtorId] || "Deletado"} size="small" color="secondary" variant="outlined" />
+                    ) : (
+                      "-"
+                    )}
+                  </TableCell>
+                  <TableCell>{expense.parcela}</TableCell>
+                  <TableCell align="right">{toBRL(expense.amount)}</TableCell>
+                  <TableCell align="right">
+                    <IconButton color="error" onClick={() => handleDeleteExpense(expense.id)}>
+                      <DeleteIcon />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
               ))}
               {expensesMonth.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="text-center text-gray-400 py-4">
-                    Sem lançamentos no mês.
-                  </td>
-                </tr>
+                <TableRow>
+                  <TableCell colSpan={8}>
+                    <Typography align="center" color="text.secondary">
+                      Sem lançamentos registrados para este mês.
+                    </Typography>
+                  </TableCell>
+                </TableRow>
               )}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </TableContainer>
       </Section>
-    </>
+    </Stack>
   );
 }

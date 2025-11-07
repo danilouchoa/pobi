@@ -11,6 +11,8 @@ interface AuthenticatedRequest extends Request {
     date?: string;
     originId?: string;
     debtorId?: string | null;
+    incrementMonth?: boolean;
+    customDate?: string;
   };
 }
 
@@ -159,6 +161,87 @@ export default function expensesRoutes(prisma: PrismaClient) {
     } catch (error) {
       console.error('Erro ao excluir despesa:', error);
       res.status(500).json({ message: 'Erro interno ao excluir despesa.' });
+    }
+  });
+
+  router.post('/:id/duplicate', async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.userId;
+      if (!userId) {
+        return res.status(401).json({ message: 'Não autorizado.' });
+      }
+
+      const { id } = req.params;
+      const { incrementMonth = false, customDate } = req.body;
+
+      const existing = await prisma.expense.findUnique({ where: { id } });
+      if (!existing || existing.userId !== userId) {
+        return res.status(404).json({ message: 'Despesa não encontrada.' });
+      }
+
+      let cloneDate = customDate ? new Date(customDate) : new Date(existing.date);
+      if (!customDate && incrementMonth) {
+        cloneDate = new Date(cloneDate);
+        cloneDate.setMonth(cloneDate.getMonth() + 1);
+      }
+
+      const duplicated = await prisma.expense.create({
+        data: {
+          description: existing.description,
+          category: existing.category,
+          parcela: existing.parcela,
+          amount: existing.amount,
+          date: cloneDate,
+          originId: existing.originId,
+          debtorId: existing.debtorId,
+          userId,
+        },
+      });
+
+      res.status(201).json(serializeExpense(duplicated));
+    } catch (error) {
+      console.error('Erro ao duplicar despesa:', error);
+      res.status(500).json({ message: 'Erro interno ao duplicar despesa.' });
+    }
+  });
+
+  router.patch('/:id/adjust', async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.userId;
+      if (!userId) {
+        return res.status(401).json({ message: 'Não autorizado.' });
+      }
+
+      const { id } = req.params;
+      const existing = await prisma.expense.findUnique({ where: { id } });
+
+      if (!existing || existing.userId !== userId) {
+        return res.status(404).json({ message: 'Despesa não encontrada.' });
+      }
+
+      const { description, category, parcela, amount, date, originId, debtorId } = req.body;
+      const numericAmount = amount == null ? undefined : Number(amount);
+
+      const data: Record<string, unknown> = {};
+      if (description !== undefined) data.description = description;
+      if (category !== undefined) data.category = category;
+      if (parcela !== undefined) data.parcela = parcela;
+      if (originId !== undefined) data.originId = originId;
+      if (debtorId !== undefined) data.debtorId = debtorId;
+      if (date) data.date = new Date(date);
+      if (numericAmount !== undefined && !Number.isNaN(numericAmount)) {
+        data.amount = numericAmount;
+      }
+
+      const updated = await prisma.expense.update({
+        where: { id },
+        data,
+      });
+
+      res.json(serializeExpense(updated));
+    } catch (error) {
+      console.error('Erro ao ajustar despesa:', error);
+      res.status(500).json({ message: 'Erro interno ao ajustar despesa.' });
     }
   });
 

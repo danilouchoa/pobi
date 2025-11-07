@@ -1,48 +1,22 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-/* =======================
-   🌤 Tema global (v5.2)
-   ======================= */
 :root {
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-
-  /* ⚠️ Mantém apenas modo claro */
   color-scheme: light;
-  background-color: #f3f4f6; /* Tailwind bg-gray-100 */
-  color: #111827; /* Tailwind text-gray-900 */
 }
 
-body, html, #root {
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
   height: 100%;
   margin: 0;
-  background-color: #f3f4f6;
-  color: #111827;
-}
-
-/* Links neutros e discretos */
-a {
-  color: #2563eb; /* Tailwind blue-600 */
-  text-decoration: none;
-}
-a:hover {
-  text-decoration: underline;
-}
-
-/* Botões genéricos */
-button {
-  font-family: inherit;
-}
-
-/* Remove estilos default do Vite */
-h1, h2, h3, h4, h5, h6, p {
-  margin: 0;
   padding: 0;
+  background-color: #f3f4f6;
 }

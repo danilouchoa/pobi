@@ -11,12 +11,16 @@ const serializeOrigin = (origin: {
   type: string;
   dueDay: string | null;
   limit: number | null;
+  status: string | null;
+  active: boolean;
 }) => ({
   id: origin.id,
   name: origin.name,
   type: origin.type,
   dueDay: origin.dueDay,
   limit: origin.limit,
+  status: origin.status,
+  active: origin.active,
 });
 
 export default function originsRoutes(prisma: PrismaClient) {
@@ -68,7 +72,7 @@ export default function originsRoutes(prisma: PrismaClient) {
         return res.status(404).json({ message: 'Origem não encontrada.' });
       }
 
-      const { name, type, dueDay, limit } = req.body;
+      const { name, type, dueDay, limit, status, active } = req.body;
       const numericLimit = limit == null ? undefined : Number(limit);
 
       const origin = await prisma.origin.update({
@@ -78,12 +82,53 @@ export default function originsRoutes(prisma: PrismaClient) {
           type,
           dueDay,
           limit: Number.isNaN(numericLimit as number) ? undefined : numericLimit,
+          status,
+          active,
         },
       });
 
       res.json(serializeOrigin(origin));
     } catch (error) {
       console.error('Erro ao atualizar origem:', error);
+      res.status(500).json({ message: 'Erro interno ao atualizar origem.' });
+    }
+  });
+
+  router.patch('/:id', async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.userId;
+      if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
+
+      const { id } = req.params;
+      const existing = await prisma.origin.findUnique({ where: { id } });
+      if (!existing || existing.userId !== userId) {
+        return res.status(404).json({ message: 'Origem não encontrada.' });
+      }
+
+      const { name, type, dueDay, limit, status, active } = req.body;
+      const data: Record<string, unknown> = {};
+      if (name !== undefined) data.name = name;
+      if (type !== undefined) data.type = type;
+      if (dueDay !== undefined) data.dueDay = dueDay;
+      if (status !== undefined) data.status = status;
+      if (active !== undefined) data.active = Boolean(active);
+      if (limit !== undefined) {
+        const numeric = Number(limit);
+        if (!Number.isNaN(numeric)) {
+          data.limit = numeric;
+        } else if (limit === null) {
+          data.limit = null;
+        }
+      }
+
+      const origin = await prisma.origin.update({
+        where: { id },
+        data,
+      });
+
+      res.json(serializeOrigin(origin));
+    } catch (error) {
+      console.error('Erro ao atualizar parcialmente a origem:', error);
       res.status(500).json({ message: 'Erro interno ao atualizar origem.' });
     }
   });

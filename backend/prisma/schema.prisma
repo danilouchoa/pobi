@@ -31,6 +31,8 @@ model Origin {
   type    String   // "Cartão" ou "Conta"
   dueDay  String?  // Armazenado como string para flexibilidade (ex: "N/A")
   limit   Float?   // Limite do cartão
+  status  String?
+  active  Boolean  @default(true)
   
   // Relação com User
   userId  String   @db.ObjectId
@@ -46,6 +48,8 @@ model Origin {
 model Debtor {
   id    String @id @default(auto()) @map("_id") @db.ObjectId
   name  String
+  status String?
+  active Boolean @default(true)
   
   // Relação com User
   userId String @db.ObjectId

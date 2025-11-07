@@ -1,4 +1,14 @@
 import { useState } from "react";
+import {
+  Box,
+  Container,
+  Paper,
+  TextField,
+  Typography,
+  Stack,
+  Button,
+  Alert,
+} from "@mui/material";
 import { useAuth } from "../context/AuthProvider";
 
 export default function Login() {
@@ -20,54 +30,53 @@ export default function Login() {
     }
   };
 
+  const handleChange = (field) => (event) => {
+    setForm((prev) => ({ ...prev, [field]: event.target.value }));
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-sm bg-white rounded-2xl shadow p-8">
-        <h1 className="text-2xl font-semibold mb-6 text-center">Finance App</h1>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="email" className="text-sm text-gray-600 block mb-1">
-              E-mail
-            </label>
-            <input
-              id="email"
+    <Box
+      sx={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        bgcolor: "background.default",
+      }}
+    >
+      <Container maxWidth="xs">
+        <Paper elevation={6} sx={{ p: 4, borderRadius: 4 }}>
+          <Typography variant="h5" fontWeight={700} align="center" gutterBottom>
+            Finance App
+          </Typography>
+          <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 3 }}>
+            Acesse sua conta para continuar
+          </Typography>
+          <Stack component="form" spacing={2} onSubmit={handleSubmit}>
+            <TextField
+              label="E-mail"
               type="email"
-              className="w-full border rounded-lg px-3 py-2"
+              fullWidth
               value={form.email}
-              onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
+              onChange={handleChange("email")}
               required
             />
-          </div>
-
-          <div>
-            <label htmlFor="password" className="text-sm text-gray-600 block mb-1">
-              Senha
-            </label>
-            <input
-              id="password"
+            <TextField
+              label="Senha"
               type="password"
-              className="w-full border rounded-lg px-3 py-2"
+              fullWidth
               value={form.password}
-              onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
+              onChange={handleChange("password")}
               required
             />
-          </div>
-
-          {(feedback || authError) && (
-            <p className="text-sm text-red-600">
-              {feedback ?? authError}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            className="w-full bg-black text-white rounded-lg py-2"
-            disabled={loading}
-          >
-            {loading ? "Entrando..." : "Entrar"}
-          </button>
-        </form>
-      </div>
-    </div>
+            {(feedback || authError) && (
+              <Alert severity="error">{feedback ?? authError}</Alert>
+            )}
+            <Button type="submit" variant="contained" size="large" disabled={loading}>
+              {loading ? "Entrando..." : "Entrar"}
+            </Button>
+          </Stack>
+        </Paper>
+      </Container>
+    </Box>
   );
 }

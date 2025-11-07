@@ -5,9 +5,11 @@ interface AuthenticatedRequest extends Request {
   userId?: string;
 }
 
-const serializeDebtor = (debtor: { id: string; name: string }) => ({
+const serializeDebtor = (debtor: { id: string; name: string; status: string | null; active: boolean }) => ({
   id: debtor.id,
   name: debtor.name,
+  status: debtor.status,
+  active: debtor.active,
 });
 
 export default function debtorsRoutes(prisma: PrismaClient) {
@@ -53,11 +55,39 @@ export default function debtorsRoutes(prisma: PrismaClient) {
         return res.status(404).json({ message: 'Devedor não encontrado.' });
       }
 
-      const { name } = req.body;
-      const debtor = await prisma.debtor.update({ where: { id }, data: { name } });
+      const { name, status, active } = req.body;
+      const debtor = await prisma.debtor.update({
+        where: { id },
+        data: { name, status, active },
+      });
       res.json(serializeDebtor(debtor));
     } catch (error) {
       console.error('Erro ao atualizar devedor:', error);
+      res.status(500).json({ message: 'Erro interno ao atualizar devedor.' });
+    }
+  });
+
+  router.patch('/:id', async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.userId;
+      if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
+
+      const { id } = req.params;
+      const existing = await prisma.debtor.findUnique({ where: { id } });
+      if (!existing || existing.userId !== userId) {
+        return res.status(404).json({ message: 'Devedor não encontrado.' });
+      }
+
+      const { name, status, active } = req.body;
+      const data: Record<string, unknown> = {};
+      if (name !== undefined) data.name = name;
+      if (status !== undefined) data.status = status;
+      if (active !== undefined) data.active = Boolean(active);
+
+      const debtor = await prisma.debtor.update({ where: { id }, data });
+      res.json(serializeDebtor(debtor));
+    } catch (error) {
+      console.error('Erro ao atualizar devedor (PATCH):', error);
       res.status(500).json({ message: 'Erro interno ao atualizar devedor.' });
     }
   });

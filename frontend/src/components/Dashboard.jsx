@@ -1,3 +1,17 @@
+import { useEffect } from "react";
+import {
+  Grid,
+  Typography,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  TableContainer,
+  Chip,
+  Box,
+  Stack,
+} from "@mui/material";
 import Section from "./ui/Section";
 import KPI from "./ui/KPI";
 import Pie from "./ui/Pie";
@@ -5,11 +19,20 @@ import { toBRL, parseNum } from "../utils/helpers";
 import { DEFAULT_SALARY_TEMPLATE } from "../hooks/useFinanceApp";
 
 export default function Dashboard({ state, month }) {
-  const originById = Object.fromEntries(state.origins.map((o) => [o.id, o]));
-  const debtorById = Object.fromEntries(state.debtors.map((d) => [d.id, d.name]));
-  const expensesMonth = state.expenses.filter((e) => (e.date ?? "").slice(0, 7) === month);
-  const myExpensesMonth = expensesMonth.filter((e) => !e.debtorId);
-  const debtExpensesMonth = expensesMonth.filter((e) => !!e.debtorId);
+  const originById = Object.fromEntries(state.origins.map((origin) => [origin.id, origin]));
+  const debtorById = Object.fromEntries(state.debtors.map((debtor) => [debtor.id, debtor.name]));
+  useEffect(() => {
+    console.log("Dashboard updated", {
+      month,
+      expenses: state.expenses.length,
+      origins: state.origins.length,
+      debtors: state.debtors.length,
+    });
+  }, [state.expenses, state.origins, state.debtors, month]);
+
+  const expensesMonth = state.expenses.filter((expense) => (expense.date ?? "").slice(0, 7) === month);
+  const myExpensesMonth = expensesMonth.filter((expense) => !expense.debtorId);
+  const debtExpensesMonth = expensesMonth.filter((expense) => !!expense.debtorId);
 
   const salaryData = state.salaryHistory[month] ?? DEFAULT_SALARY_TEMPLATE;
   const hours = parseNum(salaryData?.hours);
@@ -58,35 +81,46 @@ export default function Dashboard({ state, month }) {
   };
 
   return (
-    <>
-      <div className="grid md:grid-cols-4 gap-4 mb-6">
-        <KPI label="Salário Líquido (Mês)" value={toBRL(net)} sub={`Bruto ${toBRL(gross)}`} />
-        <KPI label="Total Fatura (Mês)" value={toBRL(totalsByOrigin.total)} sub="Minhas + Dívidas de terceiros" />
-        <KPI label="A Receber (Mês)" value={toBRL(totalDebts)} sub="Dívidas de terceiros" />
-        <KPI
-          label="Saldo Final Real (Mês)"
-          value={toBRL(summary.saldoFinal)}
-          sub="Líquido - Despesas (Minhas)"
-          highlight={summary.saldoFinal >= 0}
-        />
-      </div>
+    <Stack spacing={3}>
+      <Grid container spacing={2}>
+        <Grid item xs={12} md={3}>
+          <KPI label="Salário Líquido (Mês)" value={toBRL(net)} sub={`Bruto ${toBRL(gross)}`} />
+        </Grid>
+        <Grid item xs={12} md={3}>
+          <KPI label="Total Fatura (Mês)" value={toBRL(totalsByOrigin.total)} sub="Minhas + Dívidas de terceiros" />
+        </Grid>
+        <Grid item xs={12} md={3}>
+          <KPI label="A Receber (Mês)" value={toBRL(totalDebts)} sub="Dívidas de terceiros" />
+        </Grid>
+        <Grid item xs={12} md={3}>
+          <KPI
+            label="Saldo Final Real (Mês)"
+            value={toBRL(summary.saldoFinal)}
+            sub="Líquido - Despesas (Minhas)"
+            highlight={summary.saldoFinal >= 0}
+          />
+        </Grid>
+      </Grid>
 
       <Section title="Despesas do Mês por Origem (Fatura Total)">
-        <div className="grid md:grid-cols-3 gap-4">
+        <Grid container spacing={2}>
           {state.origins.map((origin) => (
-            <KPI
-              key={origin.id}
-              label={origin.name}
-              value={toBRL(totalsByOrigin[origin.id] || 0)}
-              sub={origin.type === "Cartão" ? `Limite: ${toBRL(parseNum(origin.limit))}` : null}
-            />
+            <Grid key={origin.id} item xs={12} md={4}>
+              <KPI
+                label={origin.name}
+                value={toBRL(totalsByOrigin[origin.id] || 0)}
+                sub={origin.type === "Cartão" ? `Limite: ${toBRL(parseNum(origin.limit))}` : undefined}
+              />
+            </Grid>
           ))}
           {state.origins.length === 0 && (
-            <p className="text-gray-500">
-              Nenhuma conta/origem cadastrada. Vá para a aba &quot;Cadastros&quot;.
-            </p>
+            <Grid item xs={12}>
+              <Typography color="text.secondary">
+                Nenhuma conta/origem cadastrada. Vá para a aba &quot;Cadastros&quot;.
+              </Typography>
+            </Grid>
           )}
-        </div>
+        </Grid>
       </Section>
 
       <Section title="Distribuição por Categoria (Geral - Inclui Dívidas)">
@@ -94,38 +128,53 @@ export default function Dashboard({ state, month }) {
       </Section>
 
       <Section title="Últimos Lançamentos (Mês)">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-gray-500">
-              <th className="py-2">Data</th>
-              <th>Descrição</th>
-              <th>Origem</th>
-              <th>Devedor</th>
-              <th>Parcela</th>
-              <th className="text-right">Valor</th>
-            </tr>
-          </thead>
-          <tbody>
-            {expensesMonth.slice(0, 10).map((expense) => (
-              <tr key={expense.id} className={`border-t ${expense.debtorId ? "bg-yellow-50" : ""}`}>
-                <td className="py-2">{expense.date}</td>
-                <td>{expense.description}</td>
-                <td>{originById[expense.originId]?.name ?? "Deletada"}</td>
-                <td>{expense.debtorId ? debtorById[expense.debtorId] || "Deletado" : "-"}</td>
-                <td>{expense.parcela}</td>
-                <td className="text-right">{toBRL(expense.amount)}</td>
-              </tr>
-            ))}
-            {expensesMonth.length === 0 && (
-              <tr>
-                <td colSpan={6} className="text-center text-gray-400 py-4">
-                  Sem lançamentos para o mês selecionado.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+        <TableContainer>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Data</TableCell>
+                <TableCell>Descrição</TableCell>
+                <TableCell>Origem</TableCell>
+                <TableCell>Devedor</TableCell>
+                <TableCell>Parcela</TableCell>
+                <TableCell align="right">Valor</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {expensesMonth.slice(0, 10).map((expense) => (
+                <TableRow key={expense.id} hover>
+                  <TableCell>{expense.date}</TableCell>
+                  <TableCell>{expense.description}</TableCell>
+                  <TableCell>{originById[expense.originId]?.name ?? "Deletada"}</TableCell>
+                  <TableCell>
+                    {expense.debtorId ? (
+                      <Chip
+                        size="small"
+                        label={debtorById[expense.debtorId] || "Deletado"}
+                        color="secondary"
+                        variant="outlined"
+                      />
+                    ) : (
+                      "-"
+                    )}
+                  </TableCell>
+                  <TableCell>{expense.parcela}</TableCell>
+                  <TableCell align="right">{toBRL(expense.amount)}</TableCell>
+                </TableRow>
+              ))}
+              {expensesMonth.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} align="center">
+                    <Typography variant="body2" color="text.secondary">
+                      Sem lançamentos para o mês selecionado.
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
       </Section>
-    </>
+    </Stack>
   );
 }

@@ -1,6 +1,23 @@
-import { useState } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
+import debounce from "lodash.debounce";
+import {
+  AppBar,
+  Toolbar,
+  Typography,
+  Container,
+  Box,
+  Tabs,
+  Tab,
+  Stack,
+  Paper,
+  Avatar,
+  Button,
+  Alert,
+  Skeleton,
+  Divider,
+  TextField,
+} from "@mui/material";
 import { useFinanceApp } from "./hooks/useFinanceApp";
-import Tab from "./components/ui/Tab";
 import Dashboard from "./components/Dashboard";
 import Lancamentos from "./components/Lancamentos";
 import Salario from "./components/Salario";
@@ -9,21 +26,22 @@ import Exportacao from "./components/Exportacao";
 import Login from "./components/Login";
 import { useAuth } from "./context/AuthProvider";
 
-function Avatar({ name = "" }) {
-  const initials = name
-    ? name
-        .split(" ")
-        .slice(0, 2)
-        .map((part) => part[0]?.toUpperCase())
-        .join("")
-    : "U";
+const TABS = [
+  { id: "dashboard", label: "Resumo Mensal" },
+  { id: "lancamentos", label: "Lançamentos" },
+  { id: "salary", label: "Salário (Horas)" },
+  { id: "cadastros", label: "Cadastros" },
+  { id: "export", label: "Exportar CSV" },
+];
 
-  return (
-    <div className="size-8 grid place-items-center rounded-full bg-gray-900 text-white text-xs font-semibold shadow">
-      {initials}
-    </div>
-  );
-}
+const getInitials = (value = "") => {
+  if (!value) return "U";
+  const parts = value.split(" ").filter(Boolean);
+  return parts
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+};
 
 function App() {
   const [tab, setTab] = useState("dashboard");
@@ -44,81 +62,149 @@ function App() {
     saveSalaryForMonth,
   } = useFinanceApp();
 
-  if (!isAuthenticated) return <Login />;
+  const debouncedRefresh = useMemo(() => debounce(refresh, 500), [refresh]);
+
+  useEffect(() => {
+    return () => debouncedRefresh.cancel();
+  }, [debouncedRefresh]);
+
+  const handleTabChange = useCallback(
+    (_, value) => {
+      if (value === tab) return;
+      setTab(value);
+      debouncedRefresh();
+    },
+    [tab, debouncedRefresh]
+  );
+
+  if (!isAuthenticated) {
+    return <Login />;
+  }
 
   return (
-    <div className="min-h-screen bg-gray-100 text-gray-900 antialiased">
-      <div className="mx-auto max-w-6xl px-4 py-6 md:px-6">
-        <header className="mb-6">
-          <div className="flex flex-wrap items-start gap-4">
-            <div>
-              <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">
-                Controle Financeiro v5.2 <span className="opacity-70">(Contas Dinâmicas)</span>
-              </h1>
-              <p className="mt-1 text-sm text-gray-600">
-                Agora com cadastro dinâmico de contas, cartões e origens de despesa.
-              </p>
-            </div>
-
-            <div className="ml-auto flex items-center gap-3 rounded-2xl border bg-white px-4 py-3 shadow-sm">
-              <Avatar name={user?.name || user?.email} />
-              <div className="min-w-0">
-                <p className="text-[10px] uppercase tracking-wider text-gray-500">Logado como</p>
-                <p className="truncate font-semibold text-sm max-w-[180px]">
-                  {user?.name ?? user?.email}
-                </p>
-              </div>
-              <button
-                onClick={logout}
-                className="inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium transition hover:bg-gray-50"
+    <Box sx={{ minHeight: "100vh", bgcolor: "background.default" }}>
+      <AppBar
+        position="static"
+        color="transparent"
+        elevation={0}
+        sx={{ borderBottom: 1, borderColor: "divider" }}
+      >
+        <Toolbar
+          sx={{ justifyContent: "space-between", gap: 2, flexWrap: "wrap" }}
+        >
+          <Box>
+            <Typography variant="h6" color="primary.main" fontWeight={800}>
+              Finance App Project
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Controle financeiro pessoal com dados dinâmicos
+            </Typography>
+          </Box>
+          <Stack direction="row" spacing={2} alignItems="center">
+            <Avatar sx={{ bgcolor: "primary.main" }}>
+              {getInitials(user?.name ?? user?.email)}
+            </Avatar>
+            <Box>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ textTransform: "uppercase", letterSpacing: 1 }}
               >
-                Sair
-              </button>
-            </div>
-          </div>
+                Logado como
+              </Typography>
+              <Typography variant="subtitle2" noWrap maxWidth={180}>
+                {user?.name ?? user?.email}
+              </Typography>
+            </Box>
+            <Button variant="outlined" color="primary" onClick={logout}>
+              Sair
+            </Button>
+          </Stack>
+        </Toolbar>
+      </AppBar>
+
+      <Container maxWidth="lg" sx={{ py: 5 }}>
+        <Paper sx={{ p: { xs: 3, md: 4 }, mb: 4 }}>
+          <Stack spacing={2} divider={<Divider flexItem />}>
+            <Box>
+              <Typography variant="h4" fontWeight={800} gutterBottom>
+                Controle Financeiro v5.2
+              </Typography>
+              <Typography variant="body1" color="text.secondary">
+                Agora com cadastro dinâmico de contas, cartões e origens de
+                despesa.
+              </Typography>
+            </Box>
+            <Box
+              sx={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 2,
+                alignItems: "center",
+              }}
+            >
+              <Tabs
+                value={tab}
+                onChange={handleTabChange}
+                variant="scrollable"
+                scrollButtons="auto"
+                textColor="primary"
+                indicatorColor="secondary"
+                sx={{ flexGrow: 1 }}
+              >
+                {TABS.map(({ id, label }) => (
+                  <Tab
+                    key={id}
+                    value={id}
+                    label={label}
+                    disableRipple
+                    wrapped
+                    sx={{
+                      textTransform: "none",
+                      fontWeight: 600,
+                      borderRadius: 2,
+                      minHeight: 48,
+                      "&.Mui-selected": {
+                        color: "secondary.main",
+                      },
+                    }}
+                  />
+                ))}
+              </Tabs>
+              <Stack direction="row" spacing={2} alignItems="center">
+                <Typography variant="body2" color="text.secondary">
+                  Mês de referência
+                </Typography>
+                <TextField
+                  type="month"
+                  size="small"
+                  value={month}
+                  onChange={(e) => setMonth(e.target.value)}
+                  sx={{ minWidth: 150 }}
+                />
+              </Stack>
+            </Box>
+          </Stack>
 
           {error && (
-            <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <Alert
+              severity="error"
+              sx={{ mt: 3 }}
+              action={<Button onClick={refresh}>Recarregar</Button>}
+            >
               {error}
-              <button className="ml-3 underline" onClick={refresh}>
-                Tentar novamente
-              </button>
-            </div>
+            </Alert>
           )}
-        </header>
-
-        <div className="mb-5 flex flex-wrap items-center gap-2">
-          <Tab id="dashboard" name="Resumo Mensal" activeTab={tab} setTab={setTab} />
-          <Tab id="lancamentos" name="Lançamentos" activeTab={tab} setTab={setTab} />
-          <Tab id="salary" name="Salário (Horas)" activeTab={tab} setTab={setTab} />
-          <Tab id="cadastros" name="Cadastros" activeTab={tab} setTab={setTab} />
-          <Tab id="export" name="Exportar CSV" activeTab={tab} setTab={setTab} />
-
-          <div className="ml-auto flex items-center gap-2 rounded-xl bg-white px-3 py-2 border shadow-sm">
-            <span className="text-sm text-gray-600">Mês de referência</span>
-            <input
-              type="month"
-              value={month}
-              onChange={(e) => setMonth(e.target.value)}
-              className="rounded-lg border px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900/10"
-            />
-          </div>
-        </div>
+        </Paper>
 
         {loading ? (
-          <div className="rounded-2xl border bg-white p-6 shadow-sm">
-            <div className="h-4 w-40 rounded bg-gray-200" />
-            <div className="mt-4 grid gap-4 md:grid-cols-4">
-              <div className="h-24 rounded-2xl bg-gray-200" />
-              <div className="h-24 rounded-2xl bg-gray-200" />
-              <div className="h-24 rounded-2xl bg-gray-200" />
-              <div className="h-24 rounded-2xl bg-gray-200" />
-            </div>
-          </div>
+          <Paper sx={{ p: 4 }}>
+            <Skeleton variant="text" width={160} height={32} />
+            <GridSkeleton />
+          </Paper>
         ) : (
-          <main className="space-y-6">
+          <Stack spacing={4}>
             {tab === "dashboard" && <Dashboard state={state} month={month} />}
-
             {tab === "lancamentos" && (
               <Lancamentos
                 state={state}
@@ -127,7 +213,6 @@ function App() {
                 deleteExpense={deleteExpense}
               />
             )}
-
             {tab === "salary" && (
               <Salario
                 month={month}
@@ -135,7 +220,6 @@ function App() {
                 saveSalary={saveSalaryForMonth}
               />
             )}
-
             {tab === "cadastros" && (
               <Cadastros
                 origins={state.origins}
@@ -146,16 +230,28 @@ function App() {
                 deleteDebtor={deleteDebtor}
               />
             )}
-
             {tab === "export" && <Exportacao state={state} month={month} />}
-          </main>
+          </Stack>
         )}
+      </Container>
+    </Box>
+  );
+}
 
-        <footer className="mt-10 text-xs text-gray-500">
-          Versão 5.2 (Dynamic Accounts).
-        </footer>
-      </div>
-    </div>
+function GridSkeleton() {
+  return (
+    <Box
+      sx={{
+        mt: 3,
+        display: "grid",
+        gap: 2,
+        gridTemplateColumns: { xs: "1fr", md: "repeat(4, 1fr)" },
+      }}
+    >
+      {[...Array(4)].map((_, index) => (
+        <Skeleton key={index} variant="rounded" height={96} />
+      ))}
+    </Box>
   );
 }
 
