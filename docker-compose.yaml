@@ -1,0 +1,28 @@
+services:
+  backend:
+    build: ./backend
+    container_name: finance_backend
+    ports:
+      - "4000:4000"
+    env_file:
+      - ./backend/.env  # <--- AQUI ESTÁ A CORREÇÃO
+    environment:
+      - NODE_ENV=production
+    networks:
+      - finance_net
+
+  frontend:
+    build: ./frontend
+    container_name: finance_frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    networks:
+      - finance_net
+    environment:
+      - VITE_API_URL=http://backend:4000
+
+networks:
+  finance_net:
+    driver: bridge
