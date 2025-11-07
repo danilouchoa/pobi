@@ -55,11 +55,18 @@ function App() {
     refresh,
     createExpense,
     deleteExpense,
+    duplicateExpense,
+    adjustExpense,
     createOrigin,
     deleteOrigin,
+    updateOrigin,
     createDebtor,
     deleteDebtor,
+    updateDebtor,
     saveSalaryForMonth,
+    createRecurringExpense,
+    fetchRecurringExpenses,
+    fetchSharedExpenses,
   } = useFinanceApp();
 
   const debouncedRefresh = useMemo(() => debounce(refresh, 500), [refresh]);
@@ -211,6 +218,11 @@ function App() {
                 month={month}
                 createExpense={createExpense}
                 deleteExpense={deleteExpense}
+                duplicateExpense={duplicateExpense}
+                adjustExpense={adjustExpense}
+                createRecurringExpense={createRecurringExpense}
+                fetchRecurringExpenses={fetchRecurringExpenses}
+                fetchSharedExpenses={fetchSharedExpenses}
               />
             )}
             {tab === "salary" && (
@@ -226,8 +238,10 @@ function App() {
                 debtors={state.debtors}
                 createOrigin={createOrigin}
                 deleteOrigin={deleteOrigin}
+                updateOrigin={updateOrigin}
                 createDebtor={createDebtor}
                 deleteDebtor={deleteDebtor}
+                updateDebtor={updateDebtor}
               />
             )}
             {tab === "export" && <Exportacao state={state} month={month} />}

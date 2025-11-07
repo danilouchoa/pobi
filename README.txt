@@ -12,5 +12,9 @@
 - Exportação CSV com `;` e BOM para Power BI.
 - Alíquota default 6% (editável).
 
+## Backend (Docker)
+- Configure `backend/.env` com `DATABASE_URL` usando o formato SRV do MongoDB Atlas (com TLS).
+- Após qualquer alteração rode `docker compose build --no-cache backend worker && docker compose up -d`.
+- Para validar a conexão execute `docker compose exec backend npm run health:db`.
 
 

@@ -1,139 +1,82 @@
 {
   "project_name": "Finance App Project",
-  "version": "v5.2.2",
+  "version": "v5.5",
   "author": "Danilo Uchoa",
-  "description": "Aplicação completa de controle financeiro pessoal, com front-end React (Vite + Tailwind + MUI), backend em Node.js (Express + TypeScript + Prisma), e persistência em MongoDB. Nesta versão, a integração front↔back foi estabilizada e a reatividade entre abas e hooks garantida sem recarregamento.",
+  "description": "Aplicação completa de controle financeiro pessoal (frontend React + Tailwind, backend Node.js + TypeScript + Prisma + MongoDB), com autenticação JWT, rotas RESTful e suporte a despesas fixas, recorrentes e compartilhadas. A versão v5.5 introduz processamento assíncrono com RabbitMQ e worker dedicado para replicação de despesas recorrentes.",
   "architecture": {
     "frontend": {
       "framework": "React 18 (Vite)",
-      "style": "TailwindCSS + MUI (Tabs, Components)",
-      "state_management": "useState + useCallback + useMemo + Custom Hook useFinanceApp()",
-      "data_persistence": "Comunicação REST com backend Express (porta 4000)",
-      "structure": [
-        "App.jsx (estrutura principal e controle de abas — corrigido com values explícitos)",
-        "hooks/useFinanceApp.js (lógica de estado e fetch de dados, com logs [useFinanceApp])",
-        "components/ (Dashboard, Lancamentos, Salario, Cadastros, Exportacao, Login)",
-        "components/ui/ (Tab, KPI, Field, Section, PieChart, Skeleton)",
-        "context/AuthProvider.jsx (autenticação e persistência JWT)",
-        "utils/helpers.js (funções auxiliares e formatadores)"
-      ],
-      "fixes_applied": [
-        "Cada <Tab> agora possui um value explícito ('dashboard', 'expenses', 'salary', 'origins', 'export').",
-        "handleTabChange(event, newValue) sincroniza corretamente o estado ativo.",
-        "useState('dashboard') mantido como valor inicial padrão.",
-        "Renderização condicional alinha com os mesmos valores de aba.",
-        "Eliminados warnings do MUI ('None of the Tabs’ children match').",
-        "Reatividade confirmada com useFinanceApp — refresh automático entre abas."
-      ],
-      "status": "Frontend 100% funcional — todas as abas renderizam corretamente, reatividade validada e integração com backend ativa."
+      "style": "TailwindCSS",
+      "state_management": "useState + Custom Hook useFinanceApp()",
+      "api_integration": "REST via Axios (autenticação JWT)",
+      "components": [
+        "Dashboard",
+        "Lançamentos",
+        "Salário",
+        "Cadastros",
+        "Exportação",
+        "UI Components (Tabs, Section, Field)"
+      ]
     },
     "backend": {
-      "framework": "Express 5 + TypeScript",
+      "framework": "Express + TypeScript",
       "database": "MongoDB (via Prisma ORM)",
-      "language": "Node.js (TypeScript)",
-      "state": "Backend completo, estável e validado via Docker Compose (porta 4000)",
-      "structure": [
-        "src/index.ts (API principal, rota /api/status)",
-        "routes/auth.ts, routes/expenses.ts, routes/origins.ts, routes/debtors.ts, routes/salaryHistory.ts",
-        "middlewares/logger.ts e errorHandler.ts",
-        "prisma/schema.prisma (modelos User, Expense, Origin, Debtor, SalaryHistory)",
-        "Dockerfile multi-stage com build Node 20-alpine"
+      "authentication": "JWT (jsonwebtoken ^9.0.2)",
+      "services": {
+        "RabbitMQ": "CloudAMQP (amqplib ^0.10.9, @types/amqplib)",
+        "Prisma": "v6.19.0",
+        "Async Jobs": "Worker Node.js conectado ao RabbitMQ via recurring-jobs queue",
+        "Recurring Service": "processRecurringExpenses() duplica despesas fixas/recorrentes mensalmente"
+      },
+      "routes": [
+        "/api/status",
+        "/api/auth",
+        "/api/expenses",
+        "/api/origins",
+        "/api/debtors",
+        "/api/salaryHistory"
       ],
-      "executed_steps": [
-        "Autenticação JWT implementada e validada.",
-        "CRUDs completos (Expenses, Origins, Debtors, SalaryHistory).",
-        "Middlewares de logs e tratamento de erros configurados.",
-        "Testes via curl e frontend confirmaram conexão e respostas HTTP 200.",
-        "Headers 'Cache-Control: no-cache' aplicados para evitar 304."
-      ],
-      "next_steps": [
-        "Implementar /api/summary para o dashboard consolidado.",
-        "Adicionar cache Redis (Upstash).",
-        "Integração de relatórios (Resend API)."
-      ]
-    },
-    "infrastructure": {
-      "containerization": "Docker + Docker Compose",
-      "status": "Ambiente funcional e sincronizado",
-      "docker_compose": {
-        "services": {
-          "backend": {
-            "image": "finance_backend",
-            "ports": ["4000:4000"],
-            "env_file": "./backend/.env",
-            "networks": ["finance_net"]
-          },
-          "frontend": {
-            "image": "finance_frontend",
-            "ports": ["5173:5173"],
-            "depends_on": ["backend"],
-            "environment": {
-              "VITE_API_URL": "http://backend:4000"
-            }
-          },
-          "mongo": {
-            "image": "mongo:7",
-            "ports": ["27017:27017"],
-            "volumes": ["mongo_data:/data/db"]
-          }
-        },
-        "networks": {
-          "finance_net": "bridge"
-        }
-      }
-    },
-    "database": {
-      "type": "MongoDB",
-      "orm": "Prisma",
-      "goal": "Persistir usuários, despesas, salários e contas de forma estruturada",
-      "schema_status": "Prisma sincronizado com o banco via npx prisma db push",
-      "collections": ["User", "Expense", "Origin", "Debtor", "SalaryHistory"],
-      "indexes": [
-        "User_email_key",
-        "Expense_userId_date_idx",
-        "SalaryHistory_userId_month_key"
-      ],
-      "seed": "Usuário padrão: danilo.uchoa@finance.app / finance123"
-    }
-  },
-  "development_phases": {
-    "phase_0": { "goal": "Base front+back e API REST", "status": "Concluída" },
-    "phase_1": {
-      "goal": "Migrar HTML v5.2 para React modular",
-      "status": "Concluída"
-    },
-    "phase_2": { "goal": "Estabilizar backend e banco", "status": "Concluída" },
-    "phase_3": {
-      "goal": "Integração total front ↔ back",
-      "status": "Concluída",
-      "details": [
-        "Correção definitiva de Tabs e reatividade confirmada.",
-        "Frontend consome API real via Axios sem reload.",
-        "Renderização dinâmica e logs de atualização funcionando."
-      ]
-    },
-    "phase_4": {
-      "goal": "Otimização e automação",
-      "status": "Planejada",
-      "details": [
-        "Implementar cache Redis (Upstash).",
-        "Relatórios automáticos via Resend.",
-        "Camada /api/summary para dashboards agregados."
+      "docker_services": [
+        "backend (porta 4000)",
+        "frontend (porta 5173)",
+        "mongodb (porta 27017)",
+        "worker (processa fila recurring-jobs no RabbitMQ)"
       ]
     }
   },
-  "current_status": {
-    "backend": "100% funcional via Docker Compose",
-    "frontend": "100% funcional com Tabs reativas e sem warnings",
-    "database": "Online e sincronizado via Prisma",
-    "containers": ["finance_backend", "finance_frontend", "finance_mongo"],
-    "validation": "Aplicação fullstack validada via UI + DevTools + logs [useFinanceApp]",
-    "next_milestone": "Implementar API /summary e cache Redis"
+  "key_updates": {
+    "RabbitMQ_integration": [
+      "Adicionado amqplib + @types/amqplib",
+      "Criado src/lib/rabbit.ts com connectRabbit() e publishRecurringJob()",
+      "Adicionado worker src/workers/recurringWorker.ts que consome fila recurring-jobs",
+      "Nova rota POST /api/expenses/recurring/queue para acionar job assíncrono",
+      "Atualizado docker-compose.yaml para incluir serviço worker"
+    ],
+    "Recurring_expenses": [
+      "Implementado src/services/recurringService.ts com lógica de duplicação automática",
+      "Campos originId e debtorId tornados opcionais (String?) no schema.prisma",
+      "Helpers centralizados em src/utils/expenseHelpers.ts com buildCreateData e validateFlags",
+      "Correção de tipagem TS2322 (originId null-safe via ?? undefined)"
+    ],
+    "Schema_and_serialization": [
+      "createdAt e updatedAt tornam-se opcionais e com default automático",
+      "Serialização de despesas adaptada para campos nulos/antigos",
+      "Prisma sincronizado com MongoDB via npx prisma db push"
+    ]
   },
-  "summary": "O Finance App Project v5.2.2 atingiu estabilidade total da integração entre frontend e backend. Todas as abas agora renderizam sem recarregamento e o hook useFinanceApp mantém reatividade e sincronização de dados. O backend Express + Prisma permanece sólido, e a base Docker Compose mantém conectividade plena entre os containers. Próxima etapa: camada de resumo consolidado e automações.",
-  "_meta": {
-    "exported_at_iso": "2025-11-07T09:32:00.000-03:00",
-    "exporter": "GPT-5",
-    "file_version": 4
-  }
+  "local_run_instructions": [
+    "cd backend",
+    "npm install  # instala amqplib + @types/amqplib",
+    "npx prisma generate",
+    "npx prisma db push  # garante compatibilidade com campos opcionais",
+    "npm run build  # deve compilar sem erros TS",
+    "docker compose up -d --build  # inicia API + worker + MongoDB + frontend",
+    "curl -X POST http://localhost:4000/api/expenses/recurring/queue  # testa fila assíncrona"
+  ],
+  "expected_behavior": {
+    "worker_logs": "{ created, skipped } para cada job processado",
+    "api_behavior": "Respostas rápidas mesmo com despesas recorrentes pesadas",
+    "queue_handling": "Jobs persistentes, reprocessamento automático em caso de erro (RabbitMQ nack)"
+  },
+  "release_notes": "v5.5 conclui a transição para arquitetura assíncrona com RabbitMQ, corrigindo tipagens e sincronizando schema Prisma para campos opcionais."
 }

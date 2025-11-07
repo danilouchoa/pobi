@@ -63,24 +63,33 @@ model Debtor {
 
 // v5.2 state.expenses
 model Expense {
-  id          String   @id @default(auto()) @map("_id") @db.ObjectId
-  date        DateTime // Data do lançamento
-  description String
-  category    String
-  parcela     String   // "Único", "1/12", "Mensal"
-  amount      Float    // Valor
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  date              DateTime // Data do lançamento
+  description       String
+  category          String
+  parcela           String   // "Único", "1/12", "Mensal"
+  amount            Float    // Valor
+  recurring         Boolean  @default(false)
+  recurrenceType    String?
+  fixed             Boolean  @default(false)
+  installments      Int?
+  sharedWith        String?
+  sharedAmount      Float?
+  lastReplicatedAt  DateTime?
+  createdAt         DateTime? @default(now())
+  updatedAt         DateTime? @updatedAt
   
   // Relação com User
-  userId      String   @db.ObjectId
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId            String   @db.ObjectId
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   // Relação com Origin (Conta/Cartão)
-  originId    String   @db.ObjectId
-  origin      Origin   @relation(fields: [originId], references: [id])
+  originId          String?  @db.ObjectId
+  origin            Origin?  @relation(fields: [originId], references: [id])
   
   // Relação com Debtor (Opcional)
-  debtorId    String?  @db.ObjectId
-  debtor      Debtor?  @relation(fields: [debtorId], references: [id])
+  debtorId          String?  @db.ObjectId
+  debtor            Debtor?  @relation(fields: [debtorId], references: [id])
   
   @@index([userId, date])
   @@index([originId])

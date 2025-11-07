@@ -14,9 +14,9 @@ import {
 } from "@mui/material";
 import Section from "./ui/Section";
 import KPI from "./ui/KPI";
-import Pie from "./ui/Pie";
 import { toBRL, parseNum } from "../utils/helpers";
 import { DEFAULT_SALARY_TEMPLATE } from "../hooks/useFinanceApp";
+import { formatCurrency, formatDate } from "../utils/formatters";
 
 export default function Dashboard({ state, month }) {
   const originById = Object.fromEntries(state.origins.map((origin) => [origin.id, origin]));
@@ -30,7 +30,7 @@ export default function Dashboard({ state, month }) {
     });
   }, [state.expenses, state.origins, state.debtors, month]);
 
-  const expensesMonth = state.expenses.filter((expense) => (expense.date ?? "").slice(0, 7) === month);
+  const expensesMonth = state.expenses;
   const myExpensesMonth = expensesMonth.filter((expense) => !expense.debtorId);
   const debtExpensesMonth = expensesMonth.filter((expense) => !!expense.debtorId);
 
@@ -62,6 +62,9 @@ export default function Dashboard({ state, month }) {
   }
 
   const totalDebts = debtExpensesMonth.reduce((acc, expense) => acc + parseNum(expense.amount), 0);
+  const recurringTotal = expensesMonth.reduce((acc, expense) => (expense.recurring ? acc + parseNum(expense.amount) : acc), 0);
+  const fixedTotal = expensesMonth.reduce((acc, expense) => (expense.fixed ? acc + parseNum(expense.amount) : acc), 0);
+  const sharedTotal = expensesMonth.reduce((acc, expense) => acc + parseNum(expense.sharedAmount ?? 0), 0);
   const summary = {
     totalContas: totalsMyExpensesByType["Conta"],
     totalCartoes: totalsMyExpensesByType["Cartão"],
@@ -79,6 +82,14 @@ export default function Dashboard({ state, month }) {
     }
     return Array.from(map.entries()).map(([name, value]) => ({ name, value }));
   };
+
+  const categoriesData = groupBySum(
+    expensesMonth,
+    (expense) => expense.category,
+    (expense) => expense.amount
+  );
+  const categoriesTotal = categoriesData.reduce((acc, item) => acc + item.value, 0);
+  const palette = ["#6366f1", "#3b82f6", "#10b981", "#f97316", "#ec4899", "#0ea5e9"];
 
   return (
     <Stack spacing={3}>
@@ -99,6 +110,15 @@ export default function Dashboard({ state, month }) {
             sub="Líquido - Despesas (Minhas)"
             highlight={summary.saldoFinal >= 0}
           />
+        </Grid>
+        <Grid item xs={12} md={3}>
+          <KPI label="Despesas Recorrentes" value={toBRL(recurringTotal)} sub="Somatório de recorrentes" />
+        </Grid>
+        <Grid item xs={12} md={3}>
+          <KPI label="Despesas Fixas" value={toBRL(fixedTotal)} sub="Contas fixas cadastradas" />
+        </Grid>
+        <Grid item xs={12} md={3}>
+          <KPI label="Compartilhadas" value={toBRL(sharedTotal)} sub="Divisões com terceiros" />
         </Grid>
       </Grid>
 
@@ -124,29 +144,117 @@ export default function Dashboard({ state, month }) {
       </Section>
 
       <Section title="Distribuição por Categoria (Geral - Inclui Dívidas)">
-        <Pie data={groupBySum(expensesMonth, (expense) => expense.category, (expense) => expense.amount)} />
+        {categoriesData.length > 0 ? (
+          <Stack spacing={2}>
+            {categoriesData.map((category, index) => {
+              const percent = categoriesTotal
+                ? Math.round((category.value / categoriesTotal) * 100)
+                : 0;
+              return (
+                <Box key={category.name} sx={{ width: "100%" }}>
+                  <Stack
+                    direction="row"
+                    justifyContent="space-between"
+                    alignItems="center"
+                    sx={{ mb: 0.5 }}
+                  >
+                    <Typography fontWeight={600}>{category.name}</Typography>
+                    <Typography color="text.secondary">{percent}%</Typography>
+                  </Stack>
+                  <Box
+                    sx={{
+                      width: "100%",
+                      bgcolor: "grey.200",
+                      borderRadius: 999,
+                      height: 12,
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        width: `${percent}%`,
+                        bgcolor: palette[index % palette.length],
+                        borderRadius: 999,
+                        height: "100%",
+                        transition: "width 0.3s ease",
+                      }}
+                    />
+                  </Box>
+                </Box>
+              );
+            })}
+          </Stack>
+        ) : (
+          <Typography color="text.secondary">
+            Nenhum lançamento encontrado para este mês.
+          </Typography>
+        )}
       </Section>
 
       <Section title="Últimos Lançamentos (Mês)">
-        <TableContainer>
+        <TableContainer
+          sx={{
+            borderRadius: 3,
+            boxShadow: "0 10px 25px rgba(15,23,42,.08)",
+            border: "1px solid",
+            borderColor: "grey.100",
+          }}
+        >
           <Table size="small">
-            <TableHead>
+            <TableHead sx={{ bgcolor: "grey.100" }}>
               <TableRow>
-                <TableCell>Data</TableCell>
-                <TableCell>Descrição</TableCell>
-                <TableCell>Origem</TableCell>
-                <TableCell>Devedor</TableCell>
-                <TableCell>Parcela</TableCell>
-                <TableCell align="right">Valor</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 600, px: 2, py: 1.5 }}>
+                  Data
+                </TableCell>
+                <TableCell
+                  align="left"
+                  sx={{ fontWeight: 600, px: 2, py: 1.5, maxWidth: 220 }}
+                >
+                  Descrição
+                </TableCell>
+                <TableCell align="center" sx={{ fontWeight: 600, px: 2, py: 1.5 }}>
+                  Origem
+                </TableCell>
+                <TableCell align="center" sx={{ fontWeight: 600, px: 2, py: 1.5 }}>
+                  Devedor
+                </TableCell>
+                <TableCell align="center" sx={{ fontWeight: 600, px: 2, py: 1.5 }}>
+                  Parcela
+                </TableCell>
+                <TableCell align="right" sx={{ fontWeight: 600, px: 2, py: 1.5 }}>
+                  Valor
+                </TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {expensesMonth.slice(0, 10).map((expense) => (
-                <TableRow key={expense.id} hover>
-                  <TableCell>{expense.date}</TableCell>
-                  <TableCell>{expense.description}</TableCell>
-                  <TableCell>{originById[expense.originId]?.name ?? "Deletada"}</TableCell>
-                  <TableCell>
+              {expensesMonth.slice(0, 10).map((expense, idx) => (
+                <TableRow
+                  key={expense.id}
+                  hover
+                  sx={{
+                    "&:nth-of-type(odd)": { bgcolor: "grey.50" },
+                  }}
+                >
+                  <TableCell align="center" sx={{ px: 2, py: 1.25 }}>
+                    {formatDate(expense.date)}
+                  </TableCell>
+                  <TableCell
+                    align="left"
+                    sx={{
+                      px: 2,
+                      py: 1.25,
+                      maxWidth: { xs: 140, md: 260 },
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                    title={expense.description}
+                  >
+                    {expense.description}
+                  </TableCell>
+                  <TableCell align="center" sx={{ px: 2, py: 1.25 }}>
+                    {originById[expense.originId]?.name ?? "Deletada"}
+                  </TableCell>
+                  <TableCell align="center" sx={{ px: 2, py: 1.25 }}>
                     {expense.debtorId ? (
                       <Chip
                         size="small"
@@ -158,15 +266,19 @@ export default function Dashboard({ state, month }) {
                       "-"
                     )}
                   </TableCell>
-                  <TableCell>{expense.parcela}</TableCell>
-                  <TableCell align="right">{toBRL(expense.amount)}</TableCell>
+                  <TableCell align="center" sx={{ px: 2, py: 1.25 }}>
+                    {expense.parcela}
+                  </TableCell>
+                  <TableCell align="right" sx={{ px: 2, py: 1.25 }}>
+                    {formatCurrency(expense.amount)}
+                  </TableCell>
                 </TableRow>
               ))}
               {expensesMonth.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} align="center">
+                  <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
                     <Typography variant="body2" color="text.secondary">
-                      Sem lançamentos para o mês selecionado.
+                      Nenhum lançamento encontrado para este mês.
                     </Typography>
                   </TableCell>
                 </TableRow>

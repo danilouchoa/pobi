@@ -17,10 +17,23 @@ import {
   Typography,
   Chip,
   Paper,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Snackbar,
+  Alert,
+  CircularProgress,
+  Tooltip,
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import EditIcon from "@mui/icons-material/Edit";
 import Section from "./ui/Section";
 import { todayISO, parseNum, toBRL } from "../utils/helpers";
+import LoopIcon from "@mui/icons-material/Loop";
+import EventIcon from "@mui/icons-material/Event";
+import HandshakeIcon from "@mui/icons-material/Handshake";
 
 const CATEGORIES = [
   "Impostos e encargos",
@@ -34,9 +47,25 @@ const CATEGORIES = [
   "Outros",
 ];
 
-export default function Lancamentos({ state, month, createExpense, deleteExpense }) {
-  const originById = useMemo(() => Object.fromEntries(state.origins.map((origin) => [origin.id, origin])), [state.origins]);
-  const debtorById = useMemo(() => Object.fromEntries(state.debtors.map((debtor) => [debtor.id, debtor.name])), [state.debtors]);
+export default function Lancamentos({
+  state,
+  month,
+  createExpense,
+  deleteExpense,
+  duplicateExpense,
+  adjustExpense,
+  createRecurringExpense,
+  fetchRecurringExpenses,
+  fetchSharedExpenses,
+}) {
+  const originById = useMemo(
+    () => Object.fromEntries(state.origins.map((origin) => [origin.id, origin])),
+    [state.origins]
+  );
+  const debtorById = useMemo(
+    () => Object.fromEntries(state.debtors.map((debtor) => [debtor.id, debtor.name])),
+    [state.debtors]
+  );
   const expensesMonth = state.expenses.filter((expense) => (expense.date ?? "").slice(0, 7) === month);
 
   const [form, setForm] = useState({
@@ -48,8 +77,25 @@ export default function Lancamentos({ state, month, createExpense, deleteExpense
     installments: "",
     debtorId: "",
     amount: "",
+    expenseType: "normal",
+    recurrenceType: "monthly",
+    sharedEnabled: false,
+    sharedWith: "",
+    sharedAmount: "",
   });
   const [submitting, setSubmitting] = useState(false);
+  const [actionId, setActionId] = useState(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogLoading, setDialogLoading] = useState(false);
+  const [editingExpense, setEditingExpense] = useState(null);
+  const [dialogValues, setDialogValues] = useState({
+    description: "",
+    amount: "",
+    date: todayISO(),
+    category: "Outros",
+  });
+  const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
+  const [filterType, setFilterType] = useState("all");
 
   useEffect(() => {
     if (!form.originId && state.origins.length > 0) {
@@ -63,7 +109,7 @@ export default function Lancamentos({ state, month, createExpense, deleteExpense
       expensesMonth: expensesMonth.length,
       totalExpenses: state.expenses.length,
     });
-  }, [month, expensesMonth.length, state.expenses]);
+  }, [month, expensesMonth.length, state.expenses.length]);
 
   const handleChange = (field) => (event) => {
     const value = event.target.type === "checkbox" ? event.target.checked : event.target.value;
@@ -71,6 +117,8 @@ export default function Lancamentos({ state, month, createExpense, deleteExpense
       ...current,
       [field]: value,
       ...(field === "isInstallment" && !value ? { installments: "" } : null),
+      ...(field === "expenseType" && value !== "recurring" ? { recurrenceType: "monthly" } : null),
+      ...(field === "sharedEnabled" && !value ? { sharedWith: "", sharedAmount: "" } : null),
     }));
   };
 
@@ -80,6 +128,14 @@ export default function Lancamentos({ state, month, createExpense, deleteExpense
     if (!description || !form.originId || totalAmount <= 0) return;
 
     const payloads = [];
+    if (form.sharedEnabled) {
+      const sharedValue = parseNum(form.sharedAmount);
+      if (!form.sharedWith.trim() || sharedValue <= 0 || sharedValue > totalAmount) {
+        alert("Dados de divisão compartilhada inválidos.");
+        return;
+      }
+    }
+
     if (form.isInstallment && Number(form.installments) > 1) {
       const installments = Number(form.installments);
       const installmentAmount = totalAmount / installments;
@@ -98,7 +154,7 @@ export default function Lancamentos({ state, month, createExpense, deleteExpense
         });
       }
     } else {
-      payloads.push({
+      const basePayload = {
         date: form.date,
         description,
         originId: form.originId,
@@ -106,13 +162,23 @@ export default function Lancamentos({ state, month, createExpense, deleteExpense
         parcela: "Único",
         debtorId: form.debtorId || null,
         amount: totalAmount,
-      });
+        recurring: form.expenseType === "recurring",
+        recurrenceType: form.expenseType === "recurring" ? form.recurrenceType : undefined,
+        fixed: form.expenseType === "fixed",
+        sharedWith: form.sharedEnabled ? form.sharedWith : undefined,
+        sharedAmount: form.sharedEnabled ? parseNum(form.sharedAmount) : undefined,
+      };
+      payloads.push(basePayload);
     }
 
     try {
       setSubmitting(true);
       for (const payload of payloads) {
-        await createExpense(payload);
+        if (payload.recurring || payload.fixed) {
+          await createRecurringExpense(payload);
+        } else {
+          await createExpense(payload);
+        }
       }
       setForm((current) => ({
         ...current,
@@ -121,6 +187,11 @@ export default function Lancamentos({ state, month, createExpense, deleteExpense
         installments: "",
         debtorId: "",
         amount: "",
+        expenseType: "normal",
+        recurrenceType: "monthly",
+        sharedEnabled: false,
+        sharedWith: "",
+        sharedAmount: "",
       }));
     } catch (error) {
       console.error("Erro ao salvar lançamento:", error);
@@ -140,6 +211,80 @@ export default function Lancamentos({ state, month, createExpense, deleteExpense
     }
   };
 
+  const handleDuplicate = async (expense) => {
+    try {
+      setActionId(expense.id);
+      await duplicateExpense(expense.id, { incrementMonth: true });
+      setSnackbar({ open: true, message: "Lançamento duplicado!", severity: "success" });
+      if (expense.recurring) {
+        setSnackbar({ open: true, message: "Despesa recorrente duplicada para o próximo período!", severity: "success" });
+      }
+    } catch (error) {
+      console.error("Erro ao duplicar lançamento:", error);
+      setSnackbar({ open: true, message: "Erro ao duplicar lançamento.", severity: "error" });
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const openEditDialog = (expense) => {
+    setEditingExpense(expense);
+    setDialogValues({
+      description: expense.description,
+      amount: String(expense.amount),
+      date: expense.date,
+      category: expense.category,
+    });
+    setDialogOpen(true);
+  };
+
+  const handleDialogChange = (field) => (event) => {
+    setDialogValues((current) => ({ ...current, [field]: event.target.value }));
+  };
+
+  const handleAdjust = async () => {
+    if (!editingExpense) return;
+    try {
+      setDialogLoading(true);
+      await adjustExpense(editingExpense.id, {
+        description: dialogValues.description,
+        amount: Number(dialogValues.amount),
+        date: dialogValues.date,
+        category: dialogValues.category,
+      });
+      setSnackbar({ open: true, message: "Lançamento atualizado!", severity: "success" });
+      setDialogOpen(false);
+      setEditingExpense(null);
+    } catch (error) {
+      console.error("Erro ao ajustar lançamento:", error);
+      setSnackbar({ open: true, message: "Erro ao salvar alterações.", severity: "error" });
+    } finally {
+      setDialogLoading(false);
+    }
+  };
+
+  const closeDialog = () => {
+    setDialogOpen(false);
+    setEditingExpense(null);
+  };
+
+  const closeSnackbar = () => setSnackbar((prev) => ({ ...prev, open: false }));
+
+  const filteredExpenses = expensesMonth.filter((expense) => {
+    if (filterType === "recurring") return expense.recurring;
+    if (filterType === "fixed") return expense.fixed;
+    if (filterType === "shared") return Boolean(expense.sharedWith);
+    return true;
+  });
+
+  useEffect(() => {
+    if (filterType === "recurring") {
+      fetchRecurringExpenses();
+    } else if (filterType === "shared") {
+      fetchSharedExpenses();
+    }
+  }, [filterType, fetchRecurringExpenses, fetchSharedExpenses]);
+
   return (
     <Stack spacing={3}>
       <Section
@@ -153,27 +298,13 @@ export default function Lancamentos({ state, month, createExpense, deleteExpense
       >
         <Grid container spacing={2}>
           <Grid item xs={12} md={3}>
-            <TextField
-              label="Data"
-              type="date"
-              fullWidth
-              value={form.date}
-              onChange={handleChange("date")}
-              InputLabelProps={{ shrink: true }}
-            />
+            <TextField label="Data" type="date" fullWidth value={form.date} onChange={handleChange("date")} InputLabelProps={{ shrink: true }} />
           </Grid>
           <Grid item xs={12} md={5}>
             <TextField label="Descrição" fullWidth value={form.description} onChange={handleChange("description")} />
           </Grid>
           <Grid item xs={12} md={4}>
-            <TextField
-              select
-              label="Origem"
-              fullWidth
-              value={form.originId}
-              onChange={handleChange("originId")}
-              disabled={state.origins.length === 0}
-            >
+            <TextField select label="Origem" fullWidth value={form.originId} onChange={handleChange("originId")} disabled={state.origins.length === 0}>
               {state.origins.map((origin) => (
                 <MenuItem key={origin.id} value={origin.id}>
                   {origin.name}
@@ -191,13 +322,7 @@ export default function Lancamentos({ state, month, createExpense, deleteExpense
             </TextField>
           </Grid>
           <Grid item xs={12} md={4}>
-            <TextField
-              select
-              label="Devedor (opcional)"
-              fullWidth
-              value={form.debtorId}
-              onChange={handleChange("debtorId")}
-            >
+            <TextField select label="Devedor (opcional)" fullWidth value={form.debtorId} onChange={handleChange("debtorId")}>
               <MenuItem value="">Minha despesa</MenuItem>
               {state.debtors.map((debtor) => (
                 <MenuItem key={debtor.id} value={debtor.id}>
@@ -207,20 +332,43 @@ export default function Lancamentos({ state, month, createExpense, deleteExpense
             </TextField>
           </Grid>
           <Grid item xs={12} md={4}>
-            <TextField
-              label="Valor (R$)"
-              fullWidth
-              value={form.amount}
-              onChange={handleChange("amount")}
-              InputProps={{ inputMode: "decimal" }}
-            />
+            <TextField label="Valor (R$)" fullWidth value={form.amount} onChange={handleChange("amount")} InputProps={{ inputMode: "decimal" }} />
           </Grid>
           <Grid item xs={12}>
+            <FormControlLabel control={<Checkbox checked={form.isInstallment} onChange={handleChange("isInstallment")} />} label="Lançamento parcelado?" />
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <TextField select label="Tipo de despesa" fullWidth value={form.expenseType} onChange={handleChange("expenseType")}>
+              <MenuItem value="normal">Normal</MenuItem>
+              <MenuItem value="recurring">Recorrente</MenuItem>
+              <MenuItem value="fixed">Fixa</MenuItem>
+            </TextField>
+          </Grid>
+          {form.expenseType === "recurring" && (
+            <Grid item xs={12} md={4}>
+              <TextField select label="Recorrência" fullWidth value={form.recurrenceType} onChange={handleChange("recurrenceType")}>
+                <MenuItem value="monthly">Mensal</MenuItem>
+                <MenuItem value="weekly">Semanal</MenuItem>
+                <MenuItem value="yearly">Anual</MenuItem>
+              </TextField>
+            </Grid>
+          )}
+          <Grid item xs={12}>
             <FormControlLabel
-              control={<Checkbox checked={form.isInstallment} onChange={handleChange("isInstallment")} />}
-              label="Lançamento parcelado?"
+              control={<Checkbox checked={form.sharedEnabled} onChange={handleChange("sharedEnabled")} />}
+              label="Dividir pagamento com outra pessoa?"
             />
           </Grid>
+          {form.sharedEnabled && (
+            <>
+              <Grid item xs={12} md={4}>
+                <TextField label="Nome da pessoa" fullWidth value={form.sharedWith} onChange={handleChange("sharedWith")} />
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <TextField label="Valor compartilhado" fullWidth value={form.sharedAmount} onChange={handleChange("sharedAmount")} InputProps={{ inputMode: "decimal" }} />
+              </Grid>
+            </>
+          )}
           {form.isInstallment && (
             <Grid item xs={12} md={4}>
               <TextField
@@ -237,7 +385,25 @@ export default function Lancamentos({ state, month, createExpense, deleteExpense
         </Grid>
       </Section>
 
-      <Section title="Lançamentos do Mês" subtitle="Lista completa dos lançamentos no mês selecionado.">
+      <Section
+        title="Lançamentos do Mês"
+        subtitle="Lista completa dos lançamentos no mês selecionado."
+        right={
+          <TextField
+            select
+            size="small"
+            label="Filtro"
+            value={filterType}
+            onChange={(event) => setFilterType(event.target.value)}
+            sx={{ minWidth: 200 }}
+          >
+            <MenuItem value="all">Todos</MenuItem>
+            <MenuItem value="recurring">Recorrentes</MenuItem>
+            <MenuItem value="fixed">Fixas</MenuItem>
+            <MenuItem value="shared">Compartilhadas</MenuItem>
+          </TextField>
+        }
+      >
         <TableContainer component={Paper} variant="outlined">
           <Table size="small">
             <TableHead>
@@ -249,11 +415,12 @@ export default function Lancamentos({ state, month, createExpense, deleteExpense
                 <TableCell>Devedor</TableCell>
                 <TableCell>Parcela</TableCell>
                 <TableCell align="right">Valor</TableCell>
+                <TableCell align="center">Indicadores</TableCell>
                 <TableCell align="right">Ações</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {expensesMonth.map((expense) => (
+              {filteredExpenses.map((expense) => (
                 <TableRow key={expense.id} hover sx={{ bgcolor: expense.debtorId ? "secondary.50" : undefined }}>
                   <TableCell>{expense.date}</TableCell>
                   <TableCell>{expense.description}</TableCell>
@@ -268,16 +435,43 @@ export default function Lancamentos({ state, month, createExpense, deleteExpense
                   </TableCell>
                   <TableCell>{expense.parcela}</TableCell>
                   <TableCell align="right">{toBRL(expense.amount)}</TableCell>
+                  <TableCell align="center">
+                    <Stack direction="row" spacing={1} justifyContent="center">
+                      {expense.recurring && (
+                        <Tooltip title="Despesa recorrente">
+                          <LoopIcon fontSize="small" color="secondary" />
+                        </Tooltip>
+                      )}
+                      {expense.fixed && (
+                        <Tooltip title="Despesa fixa">
+                          <EventIcon fontSize="small" color="info" />
+                        </Tooltip>
+                      )}
+                      {expense.sharedWith && (
+                        <Tooltip title={`Compartilhada com ${expense.sharedWith} (${toBRL(expense.sharedAmount)})`}>
+                          <HandshakeIcon fontSize="small" color="success" />
+                        </Tooltip>
+                      )}
+                    </Stack>
+                  </TableCell>
                   <TableCell align="right">
-                    <IconButton color="error" onClick={() => handleDeleteExpense(expense.id)}>
-                      <DeleteIcon />
-                    </IconButton>
+                    <Stack direction="row" spacing={1} justifyContent="flex-end">
+                      <IconButton size="small" onClick={() => handleDuplicate(expense)} disabled={actionId === expense.id}>
+                        {actionId === expense.id ? <CircularProgress size={16} /> : <ContentCopyIcon fontSize="small" />}
+                      </IconButton>
+                      <IconButton size="small" onClick={() => openEditDialog(expense)}>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton color="error" size="small" onClick={() => handleDeleteExpense(expense.id)}>
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Stack>
                   </TableCell>
                 </TableRow>
               ))}
-              {expensesMonth.length === 0 && (
+              {filteredExpenses.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8}>
+                  <TableCell colSpan={9}>
                     <Typography align="center" color="text.secondary">
                       Sem lançamentos registrados para este mês.
                     </Typography>
@@ -288,6 +482,36 @@ export default function Lancamentos({ state, month, createExpense, deleteExpense
           </Table>
         </TableContainer>
       </Section>
+
+      <Dialog open={dialogOpen} onClose={closeDialog} fullWidth maxWidth="sm">
+        <DialogTitle>Editar lançamento</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField label="Descrição" value={dialogValues.description} onChange={handleDialogChange("description")} fullWidth />
+            <TextField label="Valor (R$)" value={dialogValues.amount} onChange={handleDialogChange("amount")} fullWidth inputProps={{ inputMode: "decimal" }} />
+            <TextField label="Data" type="date" value={dialogValues.date} onChange={handleDialogChange("date")} InputLabelProps={{ shrink: true }} fullWidth />
+            <TextField select label="Categoria" value={dialogValues.category} onChange={handleDialogChange("category")} fullWidth>
+              {CATEGORIES.map((category) => (
+                <MenuItem key={category} value={category}>
+                  {category}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeDialog}>Cancelar</Button>
+          <Button variant="contained" onClick={handleAdjust} disabled={dialogLoading} startIcon={dialogLoading ? <CircularProgress size={16} color="inherit" /> : null}>
+            {dialogLoading ? "Salvando..." : "Salvar alterações"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={closeSnackbar} anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
+        <Alert severity={snackbar.severity} variant="filled" onClose={closeSnackbar}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Stack>
   );
 }

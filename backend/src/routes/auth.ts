@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { publishRecurringJob } from '../lib/rabbit';
 
 const SALT_ROUNDS = 10;
 
@@ -80,6 +81,12 @@ export default function authRoutes(prisma: PrismaClient) {
       }
 
       const token = generateToken(user.id);
+
+      try {
+        await publishRecurringJob(user.id);
+      } catch (rabbitError) {
+        console.error('[Auth] Failed to queue recurring job on login:', rabbitError);
+      }
 
       res.json({
         user: sanitizeUser(user),

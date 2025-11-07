@@ -16,6 +16,8 @@ const INITIAL_STATE = {
   salaryHistory: {},
   debtors: [],
   origins: [],
+  recurringExpenses: [],
+  sharedExpenses: [],
 };
 
 const MONTH_STORAGE_KEY = "pf-month";
@@ -55,13 +57,27 @@ export function useFinanceApp() {
     setLoading(true);
     setError(null);
     try {
-      const requestConfig = { headers: { "Cache-Control": "no-cache" } };
-      const [expensesRes, originsRes, debtorsRes, salaryRes] =
+      const headers = { "Cache-Control": "no-cache" };
+      const [yearPart, monthPart] = (month ?? "").split("-");
+      const now = new Date();
+      const selectedYear = !Number.isNaN(Number(yearPart))
+        ? yearPart
+        : String(now.getFullYear());
+      const selectedMonth = !Number.isNaN(Number(monthPart))
+        ? monthPart
+        : String(now.getMonth() + 1).padStart(2, "0");
+
+      const [expensesRes, originsRes, debtorsRes, salaryRes, recurringRes, sharedRes] =
         await Promise.all([
-          api.get("/api/expenses", requestConfig),
-          api.get("/api/origins", requestConfig),
-          api.get("/api/debtors", requestConfig),
-          api.get("/api/salaryHistory", requestConfig),
+          api.get("/api/expenses", {
+            headers,
+            params: { year: selectedYear, month: selectedMonth },
+          }),
+          api.get("/api/origins", { headers }),
+          api.get("/api/debtors", { headers }),
+          api.get("/api/salaryHistory", { headers }),
+          api.get("/api/expenses/recurring", { headers }),
+          api.get("/api/expenses/shared", { headers }),
         ]);
       setState((prev) => ({
         expenses: Array.isArray(expensesRes.data)
@@ -76,6 +92,12 @@ export function useFinanceApp() {
         salaryHistory: Array.isArray(salaryRes.data)
           ? mapSalaryRecords(salaryRes.data)
           : prev.salaryHistory,
+        recurringExpenses: Array.isArray(recurringRes.data)
+          ? recurringRes.data
+          : prev.recurringExpenses,
+        sharedExpenses: Array.isArray(sharedRes.data)
+          ? sharedRes.data
+          : prev.sharedExpenses,
       }));
     } catch (err) {
       console.error("Erro ao carregar dados financeiros:", err);
@@ -85,7 +107,7 @@ export function useFinanceApp() {
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, month]);
 
   useEffect(() => {
     if (!token) {
@@ -160,6 +182,109 @@ export function useFinanceApp() {
     }));
   }, []);
 
+  const duplicateExpense = useCallback(
+    async (id, options = { incrementMonth: true }) => {
+      try {
+        setLoading(true);
+        await api.post(`/api/expenses/${id}/duplicate`, options);
+        console.log("✅ Lançamento duplicado com sucesso");
+        await fetchAll();
+      } catch (error) {
+        console.error("❌ Falha ao duplicar lançamento:", error);
+        throw error;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [fetchAll]
+  );
+
+  const adjustExpense = useCallback(
+    async (id, data) => {
+      try {
+        setLoading(true);
+        await api.patch(`/api/expenses/${id}/adjust`, data);
+        console.log("✅ Lançamento ajustado com sucesso");
+        await fetchAll();
+      } catch (error) {
+        console.error("❌ Falha ao ajustar lançamento:", error);
+        throw error;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [fetchAll]
+  );
+
+  const updateOrigin = useCallback(
+    async (id, data) => {
+      try {
+        setLoading(true);
+        await api.patch(`/api/origins/${id}`, data);
+        console.log("✅ Origem atualizada com sucesso");
+        await fetchAll();
+      } catch (error) {
+        console.error("❌ Falha ao atualizar origem:", error);
+        throw error;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [fetchAll]
+  );
+
+  const updateDebtor = useCallback(
+    async (id, data) => {
+      try {
+        setLoading(true);
+        await api.patch(`/api/debtors/${id}`, data);
+        console.log("✅ Devedor atualizado com sucesso");
+        await fetchAll();
+      } catch (error) {
+        console.error("❌ Falha ao atualizar devedor:", error);
+        throw error;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [fetchAll]
+  );
+
+  const fetchRecurringExpenses = useCallback(async () => {
+    const { data } = await api.get("/api/expenses/recurring");
+    setState((current) => ({
+      ...current,
+      recurringExpenses: Array.isArray(data) ? data : current.recurringExpenses,
+    }));
+    return data;
+  }, []);
+
+  const fetchSharedExpenses = useCallback(async () => {
+    const { data } = await api.get("/api/expenses/shared");
+    setState((current) => ({
+      ...current,
+      sharedExpenses: Array.isArray(data) ? data : current.sharedExpenses,
+    }));
+    return data;
+  }, []);
+
+  const createRecurringExpense = useCallback(
+    async (payload) => {
+      try {
+        setLoading(true);
+        await api.post("/api/expenses/recurring", payload);
+        console.log("✅ Despesa recorrente/fixa criada");
+        await fetchAll();
+      } catch (error) {
+        console.error("❌ Falha ao criar despesa recorrente:", error);
+        throw error;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [fetchAll]
+  );
+
   const saveSalaryForMonth = useCallback(
     async (targetMonth, payload) => {
       const normalized = {
@@ -226,10 +351,17 @@ export function useFinanceApp() {
     refresh: fetchAll,
     createExpense,
     deleteExpense,
+    duplicateExpense,
+    adjustExpense,
     createOrigin,
     deleteOrigin,
+    updateOrigin,
     createDebtor,
     deleteDebtor,
+    updateDebtor,
+    createRecurringExpense,
+    fetchRecurringExpenses,
+    fetchSharedExpenses,
     saveSalaryForMonth,
     ...derived,
   };
