@@ -43,19 +43,25 @@
       {
         "id": 6,
         "tag": "[FE] MUI Only Theme",
-        "status": "🟡 Planejado",
+        "status": "🟢 Implementado",
         "notes": "Removendo classes Tailwind remanescentes, consolidando ThemeProvider centralizado (palette + typography)."
       },
       {
         "id": 7,
         "tag": "[FE] Hooks Tipados + Query Cache",
-        "status": "🟡 Planejado",
-        "summary": "Dividir 'useFinanceApp' e adotar TanStack Query, implementando uma camada de serviço de API.",
+        "status": "🟢 Concluído",
+        "summary": "Refatoração do hook global 'useFinanceApp' em hooks modulares com TanStack Query e camada de API dedicada.",
         "notes": [
-          "Refatorar 'useFinanceApp' em hooks menores (useExpenses, useCatalogs, useSalary).",
-          "Adotar TanStack Query para cache, 'refetch' e 'invalidation'.",
-          "Implementar Camada de API Dedicada (Sugestão 3.1): Criar 'frontend/src/services/api.ts' (com 'axios.create' e 'withCredentials') e 'frontend/src/services/expenseService.ts'.",
-          "Implementar Gerenciamento de Query Keys (Sugestão 3.2): Criar 'frontend/src/lib/queryKeys.ts' para centralizar e evitar 'magic strings' nas chaves do TanStack Query."
+          "Criada camada de serviço REST com Axios (`src/services/api.ts`) incluindo interceptors, baseURL dinâmica e suporte a credenciais.",
+          "Implementados serviços específicos: `expenseService.ts`, `catalogService.ts`, `salaryService.ts`, com funções CRUD e tipagem forte (ExpensePayload, SalaryPayload etc.).",
+          "Adotado TanStack Query v5 para cache, refetch e invalidação, integrando com `useQuery`, `useMutation` e `useQueryClient`.",
+          "Centralizadas Query Keys em `src/lib/queryKeys.ts`, com namespaces (`expensesKeys`, `catalogKeys`, `salaryKeys`) para evitar magic strings e facilitar invalidations.",
+          "Divisão do antigo hook em três especializados: `useExpenses`, `useCatalogs`, `useSalary`, com mutações e queries isoladas.",
+          "Integrado `QueryClientProvider` no `main.jsx` envolvendo o `App`, fornecendo cache global e controle de reatividade.",
+          "Atualizados componentes para consumir os novos hooks (`App.jsx` e seções de Dashboard, Lançamentos, Salário etc.), substituindo a lógica antiga de LocalStorage.",
+          "Estrutura final: `frontend/src/{lib,services,hooks}` modularizada, pronta para migração completa do estado local para REST API.",
+          "Resultados: cache por mês, revalidação automática, isolamento de responsabilidades e tipagem TypeScript forte entre frontend e backend.",
+          "Próximos passos: substituir chamadas remanescentes de LocalStorage, conectar AuthProvider ao Axios (token JWT), e descontinuar o estado global antigo."
         ]
       },
       {
@@ -143,6 +149,20 @@
         "tag": "[DX] Storybook",
         "status": "🟡 Planejado (NOVO)",
         "notes": "Adicionar Storybook ao frontend para desenvolver e documentar componentes de UI (MUI) em isolamento (Sugestão 4.2)."
+      },
+      {
+        "id": 18,
+        "tag": "[Security] Autenticação Avançada (MFA + Google Login)",
+        "status": "🟡 Planejado (NOVO)",
+        "summary": "Implementar autenticação JWT com refresh automático, MFA via Resend e login social Google OAuth 2.0.",
+        "notes": [
+          "Backend: novas rotas /auth/login, /auth/register, /auth/refresh, /auth/logout, /auth/resend e /auth/google.",
+          "Integração com Resend API para envio de código MFA (OTP) por e-mail ou SMS.",
+          "Suporte a Google Sign-In via OAuth2 (backend e frontend).",
+          "Cookies httpOnly e SameSite=Lax para Refresh Token; Access Token em memória.",
+          "Frontend: AuthProvider, interceptors Axios, MFAForm e botão de login Google.",
+          "Fluxo de refresh automático, logout seguro e fallback VITE_USE_REST mantido."
+        ]
       }
     ],
     "last_action": "Análise de segurança e resiliência (finance_app_review.md) concluída e mesclada ao plano de projeto.",
