@@ -1,4 +1,3 @@
-import crypto from 'crypto';
 import { Router, Request } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { addMonths, startOfMonth, format } from 'date-fns';
@@ -23,7 +22,7 @@ import {
   buildInvalidationEntries,
   invalidateExpenseCache,
 } from '../utils/expenseCache';
-import { bulkUpdateSchema } from '../schemas/bulkUpdate.schema';
+import { bulkJobSchema } from '../schemas/bulkUpdate.schema';
 import { ZodError } from 'zod';
 
 interface AuthenticatedRequest extends Request {
@@ -200,20 +199,52 @@ export default function expensesRoutes(prisma: PrismaClient) {
     }
   });
 
-  router.post('/bulkUpdate', async (req: AuthenticatedRequest, res) => {
+  router.post('/bulk', async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.userId;
       if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
 
-      const parsed = bulkUpdateSchema.parse(req.body);
-      const jobId = crypto.randomUUID();
-      await publishBulkUpdateJob({
-        jobId,
-        userId,
-        expenseIds: parsed.expenseIds,
-        payload: parsed.data,
+      const parsed = bulkJobSchema.parse(req.body);
+      const uniqueFilterIds = parsed.filters.expenseIds ? Array.from(new Set(parsed.filters.expenseIds)) : [];
+      const expenseIds = uniqueFilterIds.length
+        ? (
+            await prisma.expense.findMany({
+              where: { id: { in: uniqueFilterIds }, userId },
+              select: { id: true },
+            })
+          ).map((expense) => expense.id)
+        : [];
+
+      if (!expenseIds.length) {
+        return res.status(400).json({ message: 'Nenhuma despesa encontrada para os filtros informados.' });
+      }
+
+      const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 30);
+      const job = await prisma.job.create({
+        data: {
+          type: 'bulkUpdate',
+          queue: 'bulkUpdateQueue',
+          status: 'pending',
+          payload: {
+            expenseIds,
+            data: parsed.data,
+            options: parsed.options,
+          },
+          userId,
+          expiresAt,
+        },
       });
-      return res.status(202).json({ jobId, status: 'queued' });
+
+      await publishBulkUpdateJob({
+        jobId: job.id,
+        payload: {
+          jobId: job.id,
+          filters: parsed.filters,
+          options: parsed.options,
+        },
+      });
+
+      return res.status(202).json({ jobId: job.id, status: 'queued' });
     } catch (error) {
       if (error instanceof ZodError) {
         return res.status(400).json({ message: error.errors.map((err) => err.message).join(', ') });

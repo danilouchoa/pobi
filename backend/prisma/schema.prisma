@@ -27,6 +27,7 @@ model User {
   debtors       Debtor[]
   expenses      Expense[]
   salaryHistory SalaryHistory[]
+  jobs          Job[]
 }
 
 // v5.2 state.origins
@@ -125,4 +126,25 @@ model SalaryHistory {
   // ou armazenados aqui se necessário para relatórios
   
   @@unique([userId, month]) // Garante 1 registro por mês/usuário
+}
+
+model Job {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  type          String
+  queue         String
+  status        String
+  attempts      Int      @default(0)
+  payload       Json
+  error         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  resultSummary Json?
+  expiresAt     DateTime?
+
+  userId String? @db.ObjectId
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
 }

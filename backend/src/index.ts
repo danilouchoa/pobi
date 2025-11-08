@@ -8,6 +8,7 @@ import expensesRoutes from './routes/expenses';
 import originsRoutes from './routes/origins';
 import debtorsRoutes from './routes/debtors';
 import salaryHistoryRoutes from './routes/salaryHistory';
+import jobsRoutes from './routes/jobs';
 import { requestLogger } from './middlewares/logger';
 import { globalErrorHandler, invalidJsonHandler } from './middlewares/errorHandler';
 import { config, isCorsAllowed } from './config';
@@ -40,6 +41,7 @@ app.use('/api/expenses', authenticate, expensesRoutes(prisma));
 app.use('/api/origins', authenticate, originsRoutes(prisma));
 app.use('/api/debtors', authenticate, debtorsRoutes(prisma));
 app.use('/api/salaryHistory', authenticate, salaryHistoryRoutes(prisma));
+app.use('/api/jobs', authenticate, jobsRoutes(prisma));
 
 // Rota de Teste "Hello World"
 app.get('/api/status', (req, res) => {

@@ -1,5 +1,5 @@
 import { Prisma, PrismaClient } from '@prisma/client';
-import { BulkUpdateInput } from '../schemas/bulkUpdate.schema';
+import { BulkUpdateData } from '../schemas/bulkUpdate.schema';
 import {
   buildInvalidationEntries,
   invalidateExpenseCache,
@@ -10,11 +10,11 @@ export type BulkUpdateJob = {
   jobId: string;
   userId: string;
   expenseIds: string[];
-  payload: BulkUpdateInput['data'];
+  payload: BulkUpdateData;
 };
 
 const buildUpdateManyData = (
-  payload: BulkUpdateInput['data']
+  payload: BulkUpdateData
 ): { data: Prisma.ExpenseUpdateManyMutationInput; hasData: boolean } => {
   const data: Prisma.ExpenseUpdateManyMutationInput = {};
   let hasData = false;
