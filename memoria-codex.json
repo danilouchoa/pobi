@@ -1,82 +1,156 @@
 {
-  "project_name": "Finance App Project",
-  "version": "v5.5",
-  "author": "Danilo Uchoa",
-  "description": "Aplicação completa de controle financeiro pessoal (frontend React + Tailwind, backend Node.js + TypeScript + Prisma + MongoDB), com autenticação JWT, rotas RESTful e suporte a despesas fixas, recorrentes e compartilhadas. A versão v5.5 introduz processamento assíncrono com RabbitMQ e worker dedicado para replicação de despesas recorrentes.",
-  "architecture": {
-    "frontend": {
-      "framework": "React 18 (Vite)",
-      "style": "TailwindCSS",
-      "state_management": "useState + Custom Hook useFinanceApp()",
-      "api_integration": "REST via Axios (autenticação JWT)",
-      "components": [
-        "Dashboard",
-        "Lançamentos",
-        "Salário",
-        "Cadastros",
-        "Exportação",
-        "UI Components (Tabs, Section, Field)"
-      ]
-    },
-    "backend": {
-      "framework": "Express + TypeScript",
-      "database": "MongoDB (via Prisma ORM)",
-      "authentication": "JWT (jsonwebtoken ^9.0.2)",
-      "services": {
-        "RabbitMQ": "CloudAMQP (amqplib ^0.10.9, @types/amqplib)",
-        "Prisma": "v6.19.0",
-        "Async Jobs": "Worker Node.js conectado ao RabbitMQ via recurring-jobs queue",
-        "Recurring Service": "processRecurringExpenses() duplica despesas fixas/recorrentes mensalmente"
+  "codex_memory": {
+    "project": "Finance App Project",
+    "version": "v5.7 (Análise de Segurança e Resiliência Integrada)",
+    "description": "Fullstack personal finance manager (React + Express + Prisma + MongoDB + RabbitMQ). Foco em robustez, segurança e modularização.",
+    "milestones": [
+      {
+        "id": 1,
+        "tag": "[BUG] Replicação e idempotência",
+        "status": "🟢 Resolvido",
+        "notes": "Index de fingerprint único criado. Script backfill ajustado com geração via generateFingerprint()."
       },
-      "routes": [
-        "/api/status",
-        "/api/auth",
-        "/api/expenses",
-        "/api/origins",
-        "/api/debtors",
-        "/api/salaryHistory"
-      ],
-      "docker_services": [
-        "backend (porta 4000)",
-        "frontend (porta 5173)",
-        "mongodb (porta 27017)",
-        "worker (processa fila recurring-jobs no RabbitMQ)"
-      ]
-    }
-  },
-  "key_updates": {
-    "RabbitMQ_integration": [
-      "Adicionado amqplib + @types/amqplib",
-      "Criado src/lib/rabbit.ts com connectRabbit() e publishRecurringJob()",
-      "Adicionado worker src/workers/recurringWorker.ts que consome fila recurring-jobs",
-      "Nova rota POST /api/expenses/recurring/queue para acionar job assíncrono",
-      "Atualizado docker-compose.yaml para incluir serviço worker"
+      {
+        "id": 2,
+        "tag": "[DB] Float → String precision",
+        "status": "🟢 Concluído",
+        "notes": "Campos amount/sharedAmount/limit migrados para String com coerção em helpers."
+      },
+      {
+        "id": 3,
+        "tag": "[API] Security & Config ENV",
+        "status": "🟢 Concluído",
+        "summary": "Adicionados Helmet, CORS dinâmico e validação de ENVs com Zod.",
+        "notes": [
+          "Criado backend/src/config.ts com validação Zod para PORT, DATABASE_URL, JWT_SECRET, RABBIT_URL e CORS_ORIGIN.",
+          "Atualizado backend/src/index.ts para usar config.ts, aplicar helmet() e CORS dinâmico.",
+          "Adicionadas dependências helmet, zod e @types/helmet no backend/package.json.",
+          "Servidor agora falha no boot se variáveis obrigatórias estiverem ausentes, garantindo segurança e previsibilidade."
+        ]
+      },
+      {
+        "id": 4,
+        "tag": "[Worker] RabbitMQ Robustness",
+        "status": "🟢 Concluído",
+        "notes": "Reconexão com backoff, prefetch(10), ConfirmChannel e graceful shutdown (SIGINT/SIGTERM)."
+      },
+      {
+        "id": 5,
+        "tag": "[API] Índices e filtros UTC",
+        "status": "🟢 Implementado",
+        "notes": "Expense model agora com @@index([userId, date]); consultas ajustadas para monthStart/monthEnd com Date.UTC."
+      },
+      {
+        "id": 6,
+        "tag": "[FE] MUI Only Theme",
+        "status": "🟡 Planejado",
+        "notes": "Removendo classes Tailwind remanescentes, consolidando ThemeProvider centralizado (palette + typography)."
+      },
+      {
+        "id": 7,
+        "tag": "[FE] Hooks Tipados + Query Cache",
+        "status": "🟡 Planejado",
+        "summary": "Dividir 'useFinanceApp' e adotar TanStack Query, implementando uma camada de serviço de API.",
+        "notes": [
+          "Refatorar 'useFinanceApp' em hooks menores (useExpenses, useCatalogs, useSalary).",
+          "Adotar TanStack Query para cache, 'refetch' e 'invalidation'.",
+          "Implementar Camada de API Dedicada (Sugestão 3.1): Criar 'frontend/src/services/api.ts' (com 'axios.create' e 'withCredentials') e 'frontend/src/services/expenseService.ts'.",
+          "Implementar Gerenciamento de Query Keys (Sugestão 3.2): Criar 'frontend/src/lib/queryKeys.ts' para centralizar e evitar 'magic strings' nas chaves do TanStack Query."
+        ]
+      },
+      {
+        "id": 8,
+        "tag": "[FE] Navegação mensal",
+        "status": "🟡 Planejado",
+        "notes": "Adicionar setas de navegação prev/next ao Dashboard com animação suave."
+      },
+      {
+        "id": 9,
+        "tag": "[FE] Toasts & Empty States",
+        "status": "🟡 Planejado",
+        "notes": "Integrar 'notistack' para feedbacks de CRUD (create, update, delete) e placeholders visuais em listas vazias."
+      },
+      {
+        "id": 10,
+        "tag": "[DX] Healthchecks e Docker Prod",
+        "status": "🟡 Planejado",
+        "notes": "Criar 'health:db', 'healthcheck' no 'docker-compose.yml' e otimização multi-stage builds (non-root, npm ci, prune)."
+      },
+      {
+        "id": 11,
+        "tag": "[Security] Validação de Rota (Zod)",
+        "status": "🟡 Planejado (NOVO)",
+        "notes": [
+          "Implementar Zod para validação de 'req.body', 'req.query' e 'req.params' em TODAS as rotas (Sugestão 1.1).",
+          "Criar diretório 'backend/src/schemas/' para centralizar os schemas (ex: 'expense.schema.ts').",
+          "Criar um middleware de validação reutilizável."
+        ]
+      },
+      {
+        "id": 12,
+        "tag": "[Security] Rate Limiting",
+        "status": "🟡 Planejado (NOVO)",
+        "notes": [
+          "Implementar 'express-rate-limit' para proteger contra ataques de força bruta e DoS (Sugestão 1.2).",
+          "Criar um 'authLimiter' estrito (ex: 10 reqs/10 min) para '/api/auth/login' e '/api/auth/register'.",
+          "Criar um 'apiLimiter' geral (ex: 100 reqs/15 min) para as demais rotas '/api/*'."
+        ]
+      },
+      {
+        "id": 13,
+        "tag": "[Security] Auth httpOnly Cookies",
+        "status": "🟡 Planejado (NOVO)",
+        "notes": [
+          "Refatorar a estratégia de autenticação para parar de usar 'localStorage' para o JWT (Sugestão 1.3).",
+          "Backend: Na rota de login, enviar o token via 'res.cookie(..., { httpOnly: true, secure: true, sameSite: 'strict' })'.",
+          "Backend: Criar rota '/api/auth/logout' que limpa o cookie.",
+          "Frontend: Configurar 'axios.defaults.withCredentials = true' no 'api.ts' (Milestone 7)."
+        ]
+      },
+      {
+        "id": 14,
+        "tag": "[Resilience] Dead Letter Queue (DLQ)",
+        "status": "🟡 Planejado (NOVO)",
+        "notes": [
+          "Implementar o padrão Dead Letter Queue no RabbitMQ para tratar mensagens 'envenenadas' (Sugestão 2.1).",
+          "Configurar a fila 'recurring-jobs' com 'deadLetterExchange'.",
+          "Atualizar lógica do 'recurringWorker.ts': usar 'channel.nack(msg, false, false)' em erros permanentes (ex: JSON.parse error) para mover a msg para a DLQ."
+        ]
+      },
+      {
+        "id": 15,
+        "tag": "[Refactor] Service/Repository Layer",
+        "status": "🟡 Planejado (NOVO)",
+        "notes": [
+          "Refatorar o backend para uma arquitetura de 3 camadas (Sugestão 2.2).",
+          "1. 'src/routes/': Apenas validação (Zod) e chamada de serviço.",
+          "2. 'src/services/': Toda a lógica de negócio (cálculos, permissões).",
+          "3. 'src/repositories/': A única camada que importa e usa 'prisma'."
+        ]
+      },
+      {
+        "id": 16,
+        "tag": "[DX] Testes Automatizados",
+        "status": "🟡 Planejado (NOVO)",
+        "notes": [
+          "Introduzir 'vitest' no projeto (Sugestão 4.1).",
+          "Backend: Testes unitários para a camada de 'services' (mockando o repositório) e testes de integração para as rotas (usando 'supertest').",
+          "Frontend: Testes de componentes com React Testing Library (RTL) e testes de hooks."
+        ]
+      },
+      {
+        "id": 17,
+        "tag": "[DX] Storybook",
+        "status": "🟡 Planejado (NOVO)",
+        "notes": "Adicionar Storybook ao frontend para desenvolver e documentar componentes de UI (MUI) em isolamento (Sugestão 4.2)."
+      }
     ],
-    "Recurring_expenses": [
-      "Implementado src/services/recurringService.ts com lógica de duplicação automática",
-      "Campos originId e debtorId tornados opcionais (String?) no schema.prisma",
-      "Helpers centralizados em src/utils/expenseHelpers.ts com buildCreateData e validateFlags",
-      "Correção de tipagem TS2322 (originId null-safe via ?? undefined)"
+    "last_action": "Análise de segurança e resiliência (finance_app_review.md) concluída e mesclada ao plano de projeto.",
+    "next_steps": [
+      "Priorizar e iniciar os Milestones de Segurança (11, 12, 13) que são críticos.",
+      "Continuar o trabalho no Milestone 3 (Validação de ENV com Zod).",
+      "Após a segurança da API, focar no refactor do Frontend (Milestone 7)."
     ],
-    "Schema_and_serialization": [
-      "createdAt e updatedAt tornam-se opcionais e com default automático",
-      "Serialização de despesas adaptada para campos nulos/antigos",
-      "Prisma sincronizado com MongoDB via npx prisma db push"
-    ]
-  },
-  "local_run_instructions": [
-    "cd backend",
-    "npm install  # instala amqplib + @types/amqplib",
-    "npx prisma generate",
-    "npx prisma db push  # garante compatibilidade com campos opcionais",
-    "npm run build  # deve compilar sem erros TS",
-    "docker compose up -d --build  # inicia API + worker + MongoDB + frontend",
-    "curl -X POST http://localhost:4000/api/expenses/recurring/queue  # testa fila assíncrona"
-  ],
-  "expected_behavior": {
-    "worker_logs": "{ created, skipped } para cada job processado",
-    "api_behavior": "Respostas rápidas mesmo com despesas recorrentes pesadas",
-    "queue_handling": "Jobs persistentes, reprocessamento automático em caso de erro (RabbitMQ nack)"
-  },
-  "release_notes": "v5.5 conclui a transição para arquitetura assíncrona com RabbitMQ, corrigindo tipagens e sincronizando schema Prisma para campos opcionais."
+    "commit_template": "• [Feature/Refactor/Fix] Descrição da mudança.\n• Relacionado ao(s) Milestone(s): #[ID]"
+  }
 }

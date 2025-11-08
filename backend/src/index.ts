@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
+import helmet from 'helmet';
 import { PrismaClient } from '@prisma/client';
 import authRoutes from './routes/auth';
 import { authenticate } from './middlewares/auth';
@@ -10,16 +10,26 @@ import debtorsRoutes from './routes/debtors';
 import salaryHistoryRoutes from './routes/salaryHistory';
 import { requestLogger } from './middlewares/logger';
 import { globalErrorHandler, invalidJsonHandler } from './middlewares/errorHandler';
-
-// Carrega as variáveis de ambiente do .env
-dotenv.config();
+import { config, isCorsAllowed } from './config';
 
 const app = express();
-const port = process.env.PORT || 4000;
+const port = config.port;
 const prisma = new PrismaClient();
 
 // Middlewares
-app.use(cors()); // Habilita o CORS
+app.use(helmet());
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (isCorsAllowed(origin || undefined)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    credentials: true,
+  })
+);
 app.use(requestLogger);
 app.use(express.json()); // Habilita o parsing de JSON
 app.use(invalidJsonHandler);
