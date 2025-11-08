@@ -1,6 +1,7 @@
+import crypto from 'crypto';
 import { Router, Request } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { addMonths, format, startOfMonth } from 'date-fns';
+import { addMonths, startOfMonth, format } from 'date-fns';
 import {
   addByRecurrence,
   buildCreateData,
@@ -12,17 +13,23 @@ import {
   generateFingerprint,
 } from '../utils/expenseHelpers';
 import { parseDecimal, toDecimalString } from '../utils/formatters';
-import { publishRecurringJob } from '../lib/rabbit';
+import { publishRecurringJob, publishBulkUpdateJob } from '../lib/rabbit';
 import { getOrSetCache } from '../lib/redisCache';
-import { redis } from '../lib/redisClient';
 import { deriveBillingMonth, BillingRolloverPolicy } from '../lib/billing';
+import {
+  ExpenseViewMode,
+  buildExpenseCacheKey,
+  monthKeyFromInput,
+  buildInvalidationEntries,
+  invalidateExpenseCache,
+} from '../utils/expenseCache';
+import { bulkUpdateSchema } from '../schemas/bulkUpdate.schema';
+import { ZodError } from 'zod';
 
 interface AuthenticatedRequest extends Request {
   userId?: string;
   body: ExpensePayload;
 }
-
-type ExpenseViewMode = 'calendar' | 'billing';
 
 class BillingConfigurationError extends Error {
   statusCode = 422;
@@ -56,14 +63,6 @@ const computeBillingMonth = async (
   return deriveBillingMonth(date, normalizedClosingDay, policy);
 };
 
-const buildInvalidationEntries = (
-  calendarMonth?: string | null,
-  billingMonth?: string | null
-) => [
-  { month: calendarMonth ?? null, mode: 'calendar' as ExpenseViewMode },
-  { month: billingMonth ?? null, mode: 'billing' as ExpenseViewMode },
-];
-
 const serializeExpense = (expense: any) => ({
   id: expense.id,
   description: expense.description ?? '',
@@ -84,28 +83,6 @@ const serializeExpense = (expense: any) => ({
   billingMonth: expense.billingMonth ?? null,
 });
 
-const buildExpenseCacheKey = (userId: string, monthKey: string, mode: ExpenseViewMode) =>
-  `finance:expenses:${mode}:${userId}:${monthKey}`;
-
-const monthKeyFromInput = (input?: string | Date | null) => {
-  if (!input) return null;
-  const date = typeof input === 'string' ? new Date(input) : input;
-  if (Number.isNaN(date.getTime())) return null;
-  return format(date, 'yyyy-MM');
-};
-
-const invalidateExpenseCache = async (
-  userId: string,
-  entries: Array<{ month: string | null | undefined; mode: ExpenseViewMode }>
-) => {
-  const keys = entries
-    .filter((entry): entry is { month: string; mode: ExpenseViewMode } => Boolean(entry.month))
-    .map((entry) => buildExpenseCacheKey(userId, entry.month, entry.mode));
-  if (keys.length) {
-    await redis.del(...keys);
-  }
-};
-
 
 export default function expensesRoutes(prisma: PrismaClient) {
   const router = Router();
@@ -121,6 +98,11 @@ export default function expensesRoutes(prisma: PrismaClient) {
       const modeParam = typeof req.query.mode === 'string' ? req.query.mode : 'calendar';
       const mode: ExpenseViewMode = modeParam === 'billing' ? 'billing' : 'calendar';
       const monthQuery = typeof req.query.month === 'string' ? req.query.month : undefined;
+      const pageParam = typeof req.query.page === 'string' ? Number(req.query.page) : 1;
+      const limitParam = typeof req.query.limit === 'string' ? Number(req.query.limit) : 20;
+      const page = Number.isFinite(pageParam) && pageParam > 0 ? Math.trunc(pageParam) : 1;
+      const limitCandidate = Number.isFinite(limitParam) && limitParam > 0 ? Math.trunc(limitParam) : 20;
+      const limit = Math.min(Math.max(limitCandidate, 1), 200);
 
       if (mode === 'billing') {
         if (!monthQuery || !/^\d{4}-\d{2}$/.test(monthQuery)) {
@@ -129,13 +111,27 @@ export default function expensesRoutes(prisma: PrismaClient) {
             .json({ message: 'Parâmetro month (YYYY-MM) é obrigatório no modo billing.' });
         }
 
-        const cacheKey = buildExpenseCacheKey(userId, monthQuery, 'billing');
+        const cacheKey = buildExpenseCacheKey(userId, monthQuery, 'billing', page, limit);
         const expenses = await getOrSetCache(cacheKey, async () => {
-          const result = await prisma.expense.findMany({
-            where: { userId, billingMonth: monthQuery },
-            orderBy: { date: 'desc' },
-          });
-          return result.map(serializeExpense);
+          const where = { userId, billingMonth: monthQuery };
+          const [items, total] = await prisma.$transaction([
+            prisma.expense.findMany({
+              where,
+              orderBy: { date: 'desc' },
+              skip: (page - 1) * limit,
+              take: limit,
+            }),
+            prisma.expense.count({ where }),
+          ]);
+          return {
+            data: items.map(serializeExpense),
+            pagination: {
+              page,
+              limit,
+              total,
+              pages: Math.max(1, Math.ceil(total / limit)),
+            },
+          };
         });
         return res.json(expenses);
       }
@@ -171,26 +167,59 @@ export default function expensesRoutes(prisma: PrismaClient) {
       const start = startOfMonth(new Date(targetYear, targetMonth, 1));
       const end = startOfMonth(addMonths(start, 1));
 
+      const where = {
+        userId,
+        date: {
+          gte: start,
+          lt: end,
+        },
+      };
+
       const monthKey = format(start, 'yyyy-MM');
-      const cacheKey = buildExpenseCacheKey(userId, monthKey, 'calendar');
+      const cacheKey = buildExpenseCacheKey(userId, monthKey, 'calendar', page, limit);
       const expenses = await getOrSetCache(cacheKey, async () => {
-        const result = await prisma.expense.findMany({
-          where: {
-            userId,
-            date: {
-              gte: start,
-              lt: end,
-            },
+        const [items, total] = await prisma.$transaction([
+          prisma.expense.findMany({ where, orderBy: { date: 'desc' }, skip: (page - 1) * limit, take: limit }),
+          prisma.expense.count({ where }),
+        ]);
+        return {
+          data: items.map(serializeExpense),
+          pagination: {
+            page,
+            limit,
+            total,
+            pages: Math.max(1, Math.ceil(total / limit)),
           },
-          orderBy: { date: 'desc' },
-        });
-        return result.map(serializeExpense);
+        };
       });
 
       res.json(expenses);
     } catch (error) {
       console.error('Erro ao listar despesas:', error);
       res.status(500).json({ message: 'Erro interno ao listar despesas.' });
+    }
+  });
+
+  router.post('/bulkUpdate', async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.userId;
+      if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
+
+      const parsed = bulkUpdateSchema.parse(req.body);
+      const jobId = crypto.randomUUID();
+      await publishBulkUpdateJob({
+        jobId,
+        userId,
+        expenseIds: parsed.expenseIds,
+        payload: parsed.data,
+      });
+      return res.status(202).json({ jobId, status: 'queued' });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        return res.status(400).json({ message: error.errors.map((err) => err.message).join(', ') });
+      }
+      console.error('Erro ao enfileirar edição em massa:', error);
+      return res.status(500).json({ message: 'Erro interno ao agendar edição em massa.' });
     }
   });
 

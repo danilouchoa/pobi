@@ -1,6 +1,6 @@
 import api from "./api";
-import { Expense, ExpensePayload } from "../types";
-import { ExpenseSchema, ExpensesSchema } from "../lib/schemas";
+import { Expense, ExpensePayload, ExpensesResponse, BulkUpdatePayload } from "../types";
+import { ExpenseSchema, ExpensesResponseSchema } from "../lib/schemas";
 
 const MONTH_FALLBACK = () => {
   const now = new Date();
@@ -26,9 +26,11 @@ const normalizeBillingMonth = (value: string) => {
 
 export async function getExpenses(
   month: string,
-  mode: "calendar" | "billing" = "calendar"
-): Promise<Expense[]> {
-  const params: Record<string, string> = { mode };
+  mode: "calendar" | "billing" = "calendar",
+  page = 1,
+  limit = 20
+): Promise<ExpensesResponse> {
+  const params: Record<string, string | number> = { mode, page, limit };
   if (mode === "billing") {
     params.month = normalizeBillingMonth(month);
   } else {
@@ -37,11 +39,11 @@ export async function getExpenses(
     params.month = calendar.month;
   }
 
-  const { data } = await api.get<Expense[]>("/api/expenses", {
+  const { data } = await api.get("/api/expenses", {
     params,
     headers: { "Cache-Control": "no-cache" },
   });
-  return ExpensesSchema.parse(data);
+  return ExpensesResponseSchema.parse(data);
 }
 
 export async function getRecurringExpenses(): Promise<Expense[]> {
@@ -80,4 +82,9 @@ export async function duplicateExpense(
 
 export async function createRecurringExpense(payload: ExpensePayload) {
   await api.post("/api/expenses/recurring", payload);
+}
+
+export async function bulkUpdateExpenses(payload: BulkUpdatePayload) {
+  const { data } = await api.post<{ jobId: string; status: string }>("/api/expenses/bulkUpdate", payload);
+  return data;
 }

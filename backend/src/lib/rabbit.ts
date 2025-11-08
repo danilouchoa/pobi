@@ -1,58 +1,140 @@
-import amqp from 'amqplib';
+import { connect, type ConfirmChannel, type Connection } from 'amqplib';
 
 const RABBIT_URL =
   process.env.RABBIT_URL || 'amqps://USER:PASSWORD@gorilla.lmq.cloudamqp.com/nokwohlm';
 
-type ConfirmConnection = amqp.Connection & {
-  createConfirmChannel: () => Promise<amqp.ConfirmChannel>;
+type RabbitContext = {
+  connection: Connection;
+  channel: ConfirmChannel;
 };
 
-let connection: ConfirmConnection | undefined;
-let channel: amqp.ConfirmChannel | undefined;
+let publisherContext: RabbitContext | null = null;
+const consumerContexts = new Map<string, RabbitContext>();
 
-async function createChannel(): Promise<amqp.ConfirmChannel> {
-  connection = (await amqp.connect(RABBIT_URL)) as unknown as ConfirmConnection;
-  connection.on('close', () => {
-    console.warn('[Rabbit] Connection closed. Will recreate channel on next publish.');
-    connection = undefined;
-    channel = undefined;
-  });
-  connection.on('error', (err) => {
-    console.error('[Rabbit] Connection error:', err);
-  });
-  const confirmChannel = (await connection.createConfirmChannel()) as unknown as amqp.ConfirmChannel;
-  await confirmChannel.assertQueue('recurring-jobs', { durable: true });
+const logConnected = () => {
   console.log('[Rabbit] Connected and queue ready');
-  return confirmChannel;
+};
+
+const formatError = (error: unknown) =>
+  error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+
+const attachConnectionHandlers = (connection: Connection, onClose: () => void) => {
+  connection.on('error', (error: unknown) => {
+    console.error('[Rabbit] connection error', formatError(error));
+  });
+  connection.on('close', () => {
+    console.warn('[Rabbit] connection closed');
+    onClose();
+  });
+};
+
+async function openContext(options: {
+  queue?: string;
+  prefetch?: number;
+  onClose: () => void;
+}): Promise<RabbitContext> {
+  const connection = await connect(RABBIT_URL);
+  attachConnectionHandlers(connection, options.onClose);
+
+  const channel = await connection.createConfirmChannel();
+  const prefetch = options.prefetch ?? 0;
+  if (prefetch > 0) {
+    await channel.prefetch(prefetch);
+  }
+  if (options.queue) {
+    await channel.assertQueue(options.queue, { durable: true });
+  }
+  logConnected();
+
+  return { connection, channel };
 }
 
-export async function connectRabbit(): Promise<amqp.ConfirmChannel> {
-  if (channel) return channel;
-  channel = await createChannel();
-  return channel!;
+const ensurePublisher = async (): Promise<RabbitContext> => {
+  if (publisherContext) {
+    return publisherContext;
+  }
+  publisherContext = await openContext({
+    onClose: () => {
+      publisherContext = null;
+    },
+  });
+  await publisherContext.channel.assertQueue('recurring-jobs', { durable: true });
+  await publisherContext.channel.assertQueue('bulk-jobs', { durable: true });
+  return publisherContext;
+};
+
+export async function createRabbit({
+  queue,
+  prefetch,
+}: {
+  queue: string;
+  prefetch?: number;
+}): Promise<RabbitContext> {
+  const cached = consumerContexts.get(queue);
+  if (cached) {
+    return cached;
+  }
+
+  const context = await openContext({
+    queue,
+    prefetch,
+    onClose: () => consumerContexts.delete(queue),
+  });
+  consumerContexts.set(queue, context);
+  return context;
 }
 
-const sendWithConfirm = (
-  ch: amqp.ConfirmChannel,
-  queue: string,
-  content: Buffer,
-  options?: amqp.Options.Publish
-) =>
-  new Promise<void>((resolve, reject) => {
-    ch.sendToQueue(queue, content, { persistent: true, ...(options || {}) }, (err) => {
+export async function publishToQueue(queue: string, payload: unknown) {
+  let context: RabbitContext | null = null;
+  let usingShared = true;
+
+  try {
+    context = await ensurePublisher();
+  } catch (error) {
+    console.error('[Rabbit] connection error', formatError(error));
+    usingShared = false;
+    context = await openContext({
+      queue,
+      onClose: () => undefined,
+    });
+  }
+
+  const { channel, connection } = context;
+  const body = Buffer.from(JSON.stringify(payload));
+  await new Promise<void>((resolve, reject) => {
+    channel.sendToQueue(queue, body, { persistent: true }, (err) => {
       if (err) return reject(err);
       resolve();
     });
   });
+  await channel.waitForConfirms();
+  console.log('[Rabbit] Job queued:', queue);
+
+  if (!usingShared) {
+    try {
+      await channel.close();
+    } catch (error) {
+      console.error('[Rabbit] connection error', formatError(error));
+    }
+    try {
+      await connection.close();
+    } catch (error) {
+      console.error('[Rabbit] connection error', formatError(error));
+    }
+  }
+}
 
 export async function publishRecurringJob(userId?: string) {
-  const ch = await connectRabbit();
-  const msg = JSON.stringify({ type: 'recurring.process', userId, ts: Date.now() });
-  try {
-    await sendWithConfirm(ch, 'recurring-jobs', Buffer.from(msg));
-    console.log('[Rabbit] Job queued:', msg);
-  } catch (error) {
-    console.error('[Rabbit] Failed to queue job:', error);
-    throw error;
-  }
+  await publishToQueue('recurring-jobs', { type: 'recurring.process', userId, ts: Date.now() });
+}
+
+type BulkUpdateMessage = {
+  jobId: string;
+  userId: string;
+  expenseIds: string[];
+  payload: Record<string, unknown>;
+};
+
+export async function publishBulkUpdateJob(message: BulkUpdateMessage) {
+  await publishToQueue('bulk-jobs', { type: 'bulk.update.expenses', ts: Date.now(), ...message });
 }

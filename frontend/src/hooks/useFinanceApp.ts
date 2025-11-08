@@ -32,13 +32,18 @@ export function useFinanceApp() {
 
   const isEnabled = Boolean(token);
 
-  const expenses = useExpenses(month, { enabled: isEnabled, mode: viewMode });
+  const expenses = useExpenses(month, {
+    enabled: isEnabled,
+    mode: viewMode,
+    page: 1,
+    limit: 1000,
+  });
   const catalogs = useCatalogs({ enabled: isEnabled });
   const salary = useSalary(month, { enabled: isEnabled });
 
   const state = useMemo(
     () => ({
-      expenses: expenses.expensesQuery.data ?? [],
+      expenses: expenses.expensesQuery.data?.data ?? [],
       origins: catalogs.originsQuery.data ?? [],
       debtors: catalogs.debtorsQuery.data ?? [],
       salaryHistory: salary.recordsMap ?? {},

@@ -34,6 +34,29 @@ export type ExpensePayload = {
   customDate?: string;
 };
 
+export type Pagination = {
+  page: number;
+  limit: number;
+  total: number;
+  pages: number;
+};
+
+export type ExpensesResponse = {
+  data: Expense[];
+  pagination: Pagination;
+};
+
+export type BulkUpdatePayload = {
+  expenseIds: string[];
+  data: {
+    category?: string;
+    originId?: string;
+    fixed?: boolean;
+    recurring?: boolean;
+    recurrenceType?: "monthly" | "weekly" | "yearly" | null;
+  };
+};
+
 export type Origin = {
   id: string;
   name: string;

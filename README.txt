@@ -22,3 +22,6 @@
 - Despesas de cartão recebem automaticamente o campo `billingMonth` (`YYYY-MM`) calculado a partir da data do lançamento e da política do cartão. Basta enviar `mode=billing&month=YYYY-MM` em `GET /api/expenses` para obter as faturas. O modo padrão continua sendo `calendar` (baseado na data do lançamento).
 - Para recalcular o campo em dados antigos execute `cd backend && npm run billing:backfill`. O script percorre cartões com `billingMonth` vazio, recalcula e invalida o cache Redis das faturas impactadas.
 
+### Paginação + edição em massa
+- `GET /api/expenses` aceita `page` e `limit` (padrão 20) e responde `{ data, pagination }`. O cache Redis é chaveado por mês/mode/página (`finance:expenses:<mode>:<user>:<YYYY-MM>:pX:lY`).
+- `POST /api/expenses/bulkUpdate` agenda atualizações em lote publicando na fila `bulk-jobs`. O backend responde `{ jobId, status: "queued" }` imediatamente e o worker `bulk-worker` aplica as alterações usando `prisma.expense.updateMany`.

@@ -5,6 +5,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import {
+  bulkUpdateExpenses,
   createExpense,
   createRecurringExpense,
   deleteExpense,
@@ -15,15 +16,17 @@ import {
   updateExpense,
 } from "../services/expenseService";
 import { expensesKeys } from "../lib/queryKeys";
-import { Expense, ExpensePayload } from "../types";
+import { Expense, ExpensePayload, ExpensesResponse, Pagination } from "../types";
 
 type Options = {
   enabled?: boolean;
   mode?: "calendar" | "billing";
+  page?: number;
+  limit?: number;
 };
 
 type OptimisticContext = {
-  previous: Expense[] | undefined;
+  previous: ExpensesResponse | undefined;
 };
 
 const mergeExpenseWithPayload = (
@@ -44,9 +47,14 @@ const mergeExpenseWithPayload = (
   installments: payload.installments ?? null,
   sharedWith: payload.sharedWith ?? null,
   sharedAmount: payload.sharedAmount ?? null,
+  billingMonth: base.billingMonth ?? null,
 });
 
-const buildOptimisticExpense = (payload: ExpensePayload): Expense =>
+const buildOptimisticExpense = (
+  payload: ExpensePayload,
+  mode: "calendar" | "billing",
+  month: string
+): Expense =>
   mergeExpenseWithPayload(
     {
       id: `temp-${Date.now()}`,
@@ -63,6 +71,7 @@ const buildOptimisticExpense = (payload: ExpensePayload): Expense =>
       installments: null,
       sharedWith: null,
       sharedAmount: null,
+      billingMonth: mode === "billing" ? month : null,
     },
     payload
   );
@@ -71,18 +80,22 @@ export function useExpenses(month: string, options: Options = {}) {
   const queryClient = useQueryClient();
   const enabled = options.enabled ?? true;
   const mode = options.mode ?? "calendar";
-  const monthKey = expensesKeys.month(month, mode);
+  const page = options.page ?? 1;
+  const limit = options.limit ?? 20;
+  const queryKey = expensesKeys.list(month, mode, page, limit);
+
   const rollback = (ctx?: OptimisticContext) => {
     if (!ctx?.previous) return;
-    queryClient.setQueryData(monthKey, ctx.previous);
+    queryClient.setQueryData<ExpensesResponse | undefined>(queryKey, ctx.previous);
   };
 
   const expensesQuery = useQuery({
-    queryKey: monthKey,
-    queryFn: () => getExpenses(month, mode),
+    queryKey,
+    queryFn: () => getExpenses(month, mode, page, limit),
     enabled,
     staleTime: 60_000,
     placeholderData: keepPreviousData,
+    keepPreviousData: true,
   });
 
   const recurringQuery = useQuery({
@@ -97,54 +110,92 @@ export function useExpenses(month: string, options: Options = {}) {
     enabled: false,
   });
 
-  const invalidateMonth = () => {
-    (['calendar', 'billing'] as const).forEach((view) => {
-      queryClient.invalidateQueries({ queryKey: expensesKeys.month(month, view) });
-    });
+  const invalidateAll = () => {
+    queryClient.invalidateQueries({ queryKey: expensesKeys.all });
   };
 
   const createMutation = useMutation({
     mutationFn: (payload: ExpensePayload) => createExpense(payload),
     onMutate: async (payload) => {
-      await queryClient.cancelQueries({ queryKey: monthKey });
-      const previous = queryClient.getQueryData<Expense[]>(monthKey);
-      const optimistic = buildOptimisticExpense(payload);
-      queryClient.setQueryData<Expense[]>(monthKey, (old = []) => [optimistic, ...old]);
-      return { previous } as OptimisticContext;
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<ExpensesResponse | undefined>(queryKey);
+      if (page === 1) {
+        const optimistic = buildOptimisticExpense(payload, mode, month);
+        queryClient.setQueryData<ExpensesResponse | undefined>(queryKey, (old) => {
+          const base: ExpensesResponse =
+            old ?? {
+              data: [],
+              pagination: { page: 1, limit, total: 0, pages: 1 },
+            };
+          const limitCap = base.pagination.limit ?? limit;
+          const nextTotal = base.pagination.total + 1;
+          const nextPages = Math.max(1, Math.ceil(nextTotal / limitCap));
+          return {
+            data: [optimistic, ...base.data].slice(0, limitCap),
+            pagination: {
+              ...base.pagination,
+              total: nextTotal,
+              pages: nextPages,
+            },
+          };
+        });
+      }
+      return { previous };
     },
     onError: (_err, _vars, ctx) => rollback(ctx),
-    onSettled: invalidateMonth,
+    onSettled: invalidateAll,
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: ExpensePayload }) =>
       updateExpense(id, payload),
     onMutate: async ({ id, payload }) => {
-      await queryClient.cancelQueries({ queryKey: monthKey });
-      const previous = queryClient.getQueryData<Expense[]>(monthKey);
-      queryClient.setQueryData<Expense[]>(monthKey, (old = []) =>
-        old.map((expense) =>
-          expense.id === id ? mergeExpenseWithPayload(expense, payload) : expense
-        )
-      );
-      return { previous } as OptimisticContext;
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<ExpensesResponse | undefined>(queryKey);
+      queryClient.setQueryData<ExpensesResponse | undefined>(queryKey, (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          data: old.data.map((expense) =>
+            expense.id === id ? mergeExpenseWithPayload(expense, payload) : expense
+          ),
+        };
+      });
+      return { previous };
     },
     onError: (_err, _vars, ctx) => rollback(ctx),
-    onSettled: invalidateMonth,
+    onSettled: invalidateAll,
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteExpense(id),
     onMutate: async (id) => {
-      await queryClient.cancelQueries({ queryKey: monthKey });
-      const previous = queryClient.getQueryData<Expense[]>(monthKey);
-      queryClient.setQueryData<Expense[]>(monthKey, (old = []) =>
-        old.filter((expense) => expense.id !== id)
-      );
-      return { previous } as OptimisticContext;
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<ExpensesResponse | undefined>(queryKey);
+      queryClient.setQueryData<ExpensesResponse | undefined>(queryKey, (old) => {
+        if (!old) return old;
+        const nextData = old.data.filter((expense) => expense.id !== id);
+        if (nextData.length === old.data.length) {
+          return old;
+        }
+        const limitCap = old.pagination.limit ?? limit;
+        const nextTotal = Math.max(0, old.pagination.total - 1);
+        const nextPages = Math.max(1, Math.ceil(nextTotal / limitCap));
+        const nextPage = Math.min(old.pagination.page, nextPages);
+        return {
+          data: nextData,
+          pagination: {
+            ...old.pagination,
+            total: nextTotal,
+            pages: nextPages,
+            page: nextPage,
+          },
+        };
+      });
+      return { previous };
     },
     onError: (_err, _vars, ctx) => rollback(ctx),
-    onSettled: invalidateMonth,
+    onSettled: invalidateAll,
   });
 
   const duplicateMutation = useMutation({
@@ -155,18 +206,32 @@ export function useExpenses(month: string, options: Options = {}) {
       id: string;
       options?: { incrementMonth?: boolean; customDate?: string };
     }) => duplicateExpense(id, duplicateOptions),
-    onSuccess: invalidateMonth,
+    onSuccess: invalidateAll,
   });
 
   const createRecurringMutation = useMutation({
     mutationFn: (payload: ExpensePayload) => createRecurringExpense(payload),
-    onSuccess: invalidateMonth,
+    onSuccess: invalidateAll,
   });
+
+  const bulkUpdateMutation = useMutation({
+    mutationFn: bulkUpdateExpenses,
+    onSuccess: invalidateAll,
+  });
+
+  const pagination: Pagination =
+    expensesQuery.data?.pagination ?? {
+      page,
+      limit,
+      total: 0,
+      pages: 1,
+    };
 
   return {
     expensesQuery,
     recurringQuery,
     sharedQuery,
+    pagination,
     createExpense: createMutation.mutateAsync,
     updateExpense: (id: string, payload: ExpensePayload) =>
       updateMutation.mutateAsync({ id, payload }),
@@ -176,5 +241,6 @@ export function useExpenses(month: string, options: Options = {}) {
     createRecurringExpense: createRecurringMutation.mutateAsync,
     fetchRecurringExpenses: recurringQuery.refetch,
     fetchSharedExpenses: sharedQuery.refetch,
+    bulkUpdate: bulkUpdateMutation.mutateAsync,
   };
 }

@@ -22,6 +22,17 @@ services:
     networks:
       - finance_net
 
+  bulk-worker:
+    build: ./backend
+    container_name: finance_bulk_worker
+    command: ["node", "dist/workers/bulkWorker.js"]
+    env_file:
+      - ./backend/.env
+    depends_on:
+      - mongo
+    networks:
+      - finance_net
+
   frontend:
     build: ./frontend
     container_name: finance_frontend

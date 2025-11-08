@@ -18,7 +18,7 @@ import {
 } from "@mui/material";
 import { useFinanceApp } from "./hooks/useFinanceApp";
 import Dashboard from "./pages/Dashboard";
-import Lancamentos from "./components/Lancamentos";
+import Lancamentos from "./pages/Lancamentos";
 import Salario from "./components/Salario";
 import Cadastros from "./components/Cadastros";
 import Exportacao from "./components/Exportacao";
@@ -213,6 +213,7 @@ function App() {
               <Lancamentos
                 state={state}
                 month={month}
+                onChangeMonth={setMonth}
                 createExpense={createExpense}
                 deleteExpense={deleteExpense}
                 duplicateExpense={duplicateExpense}

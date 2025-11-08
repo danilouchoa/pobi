@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Grid,
   TextField,
@@ -24,16 +24,22 @@ import {
   Snackbar,
   Alert,
   CircularProgress,
+  LinearProgress,
   Tooltip,
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import EditIcon from "@mui/icons-material/Edit";
+import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 import Section from "./ui/Section";
 import { todayISO, parseNum, toBRL } from "../utils/helpers";
+import { compareMonths, formatMonthLabel } from "../utils/dateHelpers";
 import LoopIcon from "@mui/icons-material/Loop";
 import EventIcon from "@mui/icons-material/Event";
 import HandshakeIcon from "@mui/icons-material/Handshake";
+import { AnimatePresence, motion } from "framer-motion";
+import ExpenseBulkModal from "./ExpenseBulkModal";
+import { useExpenses } from "../hooks/useExpenses";
 
 const CATEGORIES = [
   "Impostos e encargos",
@@ -50,6 +56,7 @@ const CATEGORIES = [
 export default function Lancamentos({
   state,
   month,
+  onChangeMonth,
   createExpense,
   deleteExpense,
   duplicateExpense,
@@ -66,7 +73,32 @@ export default function Lancamentos({
     () => Object.fromEntries(state.debtors.map((debtor) => [debtor.id, debtor.name])),
     [state.debtors]
   );
-  const expensesMonth = state.expenses.filter((expense) => (expense.date ?? "").slice(0, 7) === month);
+  const monthLabel = useMemo(() => formatMonthLabel(month), [month]);
+  const [page, setPage] = useState(1);
+  const [monthDirection, setMonthDirection] = useState(0);
+  const limit = 20;
+  const {
+    expensesQuery: paginatedQuery,
+    pagination,
+    bulkUpdate,
+  } = useExpenses(month, { enabled: true, mode: "calendar", page, limit });
+  const previousMonthRef = useRef(month);
+  const paginatedExpenses = paginatedQuery.data?.data ?? [];
+  const isPageLoading = paginatedQuery.isLoading;
+  const isPageFetching = paginatedQuery.isFetching;
+  const expensesError = paginatedQuery.error
+    ? paginatedQuery.error instanceof Error
+      ? paginatedQuery.error
+      : new Error("Não foi possível carregar os lançamentos.")
+    : null;
+
+  useEffect(() => {
+    const previous = previousMonthRef.current;
+    if (previous === month) return;
+    const diff = compareMonths(month, previous);
+    setMonthDirection(diff >= 0 ? 1 : -1);
+    previousMonthRef.current = month;
+  }, [month]);
 
   const [form, setForm] = useState({
     date: todayISO(),
@@ -106,6 +138,11 @@ export default function Lancamentos({
   });
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
   const [filterType, setFilterType] = useState("all");
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  const [calendarDialogOpen, setCalendarDialogOpen] = useState(false);
+  const [calendarValue, setCalendarValue] = useState(month);
 
   useEffect(() => {
     if (!form.originId && state.origins.length > 0) {
@@ -114,12 +151,9 @@ export default function Lancamentos({
   }, [state.origins, form.originId]);
 
   useEffect(() => {
-    console.log("Lancamentos updated", {
-      month,
-      expensesMonth: expensesMonth.length,
-      totalExpenses: state.expenses.length,
-    });
-  }, [month, expensesMonth.length, state.expenses.length]);
+    setPage(1);
+    setCalendarValue(month);
+  }, [month]);
 
   const handleChange = (field) => (event) => {
     const value = event.target.type === "checkbox" ? event.target.checked : event.target.value;
@@ -316,13 +350,72 @@ export default function Lancamentos({
   };
 
   const closeSnackbar = () => setSnackbar((prev) => ({ ...prev, open: false }));
+  const handleCalendarChange = (event) => setCalendarValue(event.target.value);
+  const handleCalendarSave = () => {
+    if (!calendarValue || !/^\d{4}-\d{2}$/.test(calendarValue)) return;
+    onChangeMonth(calendarValue);
+    setPage(1);
+    setCalendarDialogOpen(false);
+  };
 
-  const filteredExpenses = expensesMonth.filter((expense) => {
-    if (filterType === "recurring") return expense.recurring;
-    if (filterType === "fixed") return expense.fixed;
-    if (filterType === "shared") return Boolean(expense.sharedWith);
-    return true;
-  });
+  const filteredExpenses = useMemo(() => {
+    return paginatedExpenses.filter((expense) => {
+      if (filterType === "recurring") return expense.recurring;
+      if (filterType === "fixed") return expense.fixed;
+      if (filterType === "shared") return Boolean(expense.sharedWith);
+      return true;
+    });
+  }, [paginatedExpenses, filterType]);
+
+  const toggleSelection = (id, checked) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAll = (event) => {
+    const { checked } = event.target;
+    setSelectedIds((prev) => {
+      if (!checked) {
+        const next = new Set(prev);
+        filteredExpenses.forEach((expense) => next.delete(expense.id));
+        return next;
+      }
+      const next = new Set(prev);
+      filteredExpenses.forEach((expense) => next.add(expense.id));
+      return next;
+    });
+  };
+
+  const isAllSelected =
+    filteredExpenses.length > 0 && filteredExpenses.every((expense) => selectedIds.has(expense.id));
+  const isIndeterminate = selectedIds.size > 0 && !isAllSelected;
+
+  const handleBulkSubmit = async (values) => {
+    if (!selectedIds.size) return;
+    setBulkSubmitting(true);
+    try {
+      const result = await bulkUpdate({ expenseIds: Array.from(selectedIds), data: values });
+      setSnackbar({
+        open: true,
+        message: `Edição em massa agendada (job ${result.jobId})!`,
+        severity: "success",
+      });
+      setSelectedIds(new Set());
+      setBulkModalOpen(false);
+    } catch (error) {
+      console.error("Erro ao enviar edição em massa:", error);
+      setSnackbar({ open: true, message: "Falha ao agendar edição em massa.", severity: "error" });
+    } finally {
+      setBulkSubmitting(false);
+    }
+  };
 
   useEffect(() => {
     if (filterType === "recurring") {
@@ -436,25 +529,80 @@ export default function Lancamentos({
         title="Lançamentos do Mês"
         subtitle="Lista completa dos lançamentos no mês selecionado."
         right={
-          <TextField
-            select
-            size="small"
-            label="Filtro"
-            value={filterType}
-            onChange={(event) => setFilterType(event.target.value)}
-            sx={{ minWidth: 200 }}
-          >
-            <MenuItem value="all">Todos</MenuItem>
-            <MenuItem value="recurring">Recorrentes</MenuItem>
-            <MenuItem value="fixed">Fixas</MenuItem>
-            <MenuItem value="shared">Compartilhadas</MenuItem>
-          </TextField>
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems="center">
+            <Stack direction="row" spacing={1} alignItems="center">
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.div
+                  key={month}
+                  initial={{ opacity: 0, x: monthDirection * 24 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: monthDirection * -24 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <Typography sx={{ fontWeight: 600, textTransform: "none" }}>
+                    {monthLabel}
+                  </Typography>
+                </motion.div>
+              </AnimatePresence>
+              <Tooltip title="Selecionar mês">
+                <IconButton size="small" onClick={() => setCalendarDialogOpen(true)} aria-label="Selecionar mês">
+                  <CalendarMonthIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </Stack>
+            <TextField
+              select
+              size="small"
+              label="Filtro"
+              value={filterType}
+              onChange={(event) => setFilterType(event.target.value)}
+              sx={{ minWidth: 200 }}
+            >
+              <MenuItem value="all">Todos</MenuItem>
+              <MenuItem value="recurring">Recorrentes</MenuItem>
+              <MenuItem value="fixed">Fixas</MenuItem>
+              <MenuItem value="shared">Compartilhadas</MenuItem>
+            </TextField>
+          </Stack>
         }
       >
+        {paginatedQuery.isError && expensesError && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {expensesError.message || "Não foi possível carregar os lançamentos."}
+          </Alert>
+        )}
+        <Stack
+          direction={{ xs: "column", md: "row" }}
+          spacing={2}
+          alignItems={{ xs: "flex-start", md: "center" }}
+          justifyContent="space-between"
+          sx={{ mb: 2 }}
+        >
+          <Typography variant="body2" color="text.secondary">
+            {selectedIds.size} lançamento(s) selecionado(s)
+          </Typography>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() => setBulkModalOpen(true)}
+              disabled={selectedIds.size === 0 || bulkSubmitting}
+            >
+              {bulkSubmitting ? "Enviando..." : "Editar selecionados"}
+            </Button>
+          </Stack>
+        </Stack>
         <TableContainer component={Paper} variant="outlined">
           <Table size="small">
             <TableHead>
               <TableRow>
+                <TableCell padding="checkbox">
+                  <Checkbox
+                    checked={isAllSelected}
+                    indeterminate={isIndeterminate}
+                    onChange={handleSelectAll}
+                  />
+                </TableCell>
                 <TableCell>Data</TableCell>
                 <TableCell>Descrição</TableCell>
                 <TableCell>Origem</TableCell>
@@ -467,8 +615,21 @@ export default function Lancamentos({
               </TableRow>
             </TableHead>
             <TableBody>
+              {isPageLoading && (
+                <TableRow>
+                  <TableCell colSpan={10} align="center">
+                    <CircularProgress size={20} />
+                  </TableCell>
+                </TableRow>
+              )}
               {filteredExpenses.map((expense) => (
                 <TableRow key={expense.id} hover sx={{ bgcolor: expense.debtorId ? "secondary.50" : undefined }}>
+                  <TableCell padding="checkbox">
+                    <Checkbox
+                      checked={selectedIds.has(expense.id)}
+                      onChange={(event) => toggleSelection(expense.id, event.target.checked)}
+                    />
+                  </TableCell>
                   <TableCell>{expense.date}</TableCell>
                   <TableCell>{expense.description}</TableCell>
                   <TableCell>{originById[expense.originId]?.name ?? "Deletada"}</TableCell>
@@ -516,9 +677,9 @@ export default function Lancamentos({
                   </TableCell>
                 </TableRow>
               ))}
-              {filteredExpenses.length === 0 && (
+              {!isPageLoading && filteredExpenses.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={9}>
+                  <TableCell colSpan={10}>
                     <Typography align="center" color="text.secondary">
                       Sem lançamentos registrados para este mês.
                     </Typography>
@@ -528,6 +689,36 @@ export default function Lancamentos({
             </TableBody>
           </Table>
         </TableContainer>
+        {isPageFetching && !isPageLoading && <LinearProgress sx={{ mt: 1 }} />}
+        <Stack
+          direction={{ xs: "column", md: "row" }}
+          spacing={2}
+          alignItems={{ xs: "flex-start", md: "center" }}
+          justifyContent="space-between"
+          sx={{ mt: 2 }}
+        >
+          <Typography variant="body2" color="text.secondary">
+            Página {pagination.page} de {pagination.pages} • {pagination.total} lançamentos
+          </Typography>
+          <Stack direction="row" spacing={1}>
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+              disabled={pagination.page <= 1 || isPageFetching}
+            >
+              Anterior
+            </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() => setPage((prev) => Math.min(prev + 1, pagination.pages))}
+              disabled={pagination.page >= pagination.pages || isPageFetching}
+            >
+              Próxima
+            </Button>
+          </Stack>
+        </Stack>
       </Section>
 
       <Dialog open={dialogOpen} onClose={closeDialog} fullWidth maxWidth="md">
@@ -642,6 +833,31 @@ export default function Lancamentos({
           </Button>
         </DialogActions>
       </Dialog>
+      <Dialog open={calendarDialogOpen} onClose={() => setCalendarDialogOpen(false)}>
+        <DialogTitle>Selecionar mês</DialogTitle>
+        <DialogContent>
+          <TextField
+            type="month"
+            value={calendarValue}
+            onChange={handleCalendarChange}
+            InputLabelProps={{ shrink: true }}
+            sx={{ mt: 1, minWidth: 220 }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCalendarDialogOpen(false)}>Cancelar</Button>
+          <Button variant="contained" onClick={handleCalendarSave}>
+            Aplicar
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <ExpenseBulkModal
+        open={bulkModalOpen}
+        onClose={() => !bulkSubmitting && setBulkModalOpen(false)}
+        onSubmit={handleBulkSubmit}
+        origins={state.origins}
+        categories={CATEGORIES}
+      />
 
       <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={closeSnackbar} anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
         <Alert severity={snackbar.severity} variant="filled" onClose={closeSnackbar}>

@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import { deriveBillingMonth, BillingRolloverPolicy } from '../src/lib/billing';
-import { redis } from '../src/lib/redisClient';
+import { invalidateExpenseCache } from '../src/utils/expenseCache';
 
 const prisma = new PrismaClient();
 
@@ -9,9 +9,6 @@ const normalizeType = (value?: string | null) =>
   value ? value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase() : '';
 
 const isCard = (type?: string | null) => normalizeType(type) === 'cartao';
-
-const buildBillingCacheKey = (userId: string, month: string) =>
-  `finance:expenses:billing:${userId}:${month}`;
 
 async function main() {
   const origins = await prisma.origin.findMany({
@@ -56,10 +53,8 @@ async function main() {
   }
 
   for (const [userId, months] of invalidations.entries()) {
-    const keys = Array.from(months).map((month) => buildBillingCacheKey(userId, month));
-    if (keys.length) {
-      await redis.del(...keys);
-    }
+    const entries = Array.from(months).map((month) => ({ month, mode: 'billing' as const }));
+    await invalidateExpenseCache(userId, entries);
   }
 
   console.log(`Backfill concluído. Despesas atualizadas: ${updated}`);

@@ -39,6 +39,18 @@ export const ExpenseSchema = z.object({
 
 export const ExpensesSchema = z.array(ExpenseSchema);
 
+export const PaginationSchema = z.object({
+  page: z.number(),
+  limit: z.number(),
+  total: z.number(),
+  pages: z.number(),
+});
+
+export const ExpensesResponseSchema = z.object({
+  data: ExpensesSchema,
+  pagination: PaginationSchema,
+});
+
 export const OriginSchema = z.object({
   id: z.string(),
   name: z.string(),
