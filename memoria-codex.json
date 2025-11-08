@@ -5,6 +5,21 @@
     "description": "Fullstack personal finance manager (React + Express + Prisma + MongoDB + RabbitMQ). Foco em robustez, segurança e modularização.",
     "milestones": [
       {
+        "id": 0,
+        "tag": "[BUG] Fatura de Cartão (closingDay + dia útil + billingMonth)",
+        "status": "🟡 Planejado (NOVO)",
+        "summary": "Corrigir classificação de despesas de cartões para a fatura correta com base no dia de fechamento e ajuste para próximo dia útil, adicionando campo billingMonth e suporte de filtro por fatura.",
+        "notes": [
+          "Schema: Origin.closingDay (Int), Origin.billingRolloverPolicy (enum: NEXT_BUSINESS_DAY|PREVIOUS_BUSINESS_DAY), Expense.billingMonth (YYYY-MM) + índice.",
+          "Backend: deriveBillingMonth(txDate, closingDay, policy) e adjustToBusinessDay(); preencher billingMonth em todas mutações de despesas de cartão.",
+          "API: GET /api/expenses aceita mode=billing para filtrar por billingMonth; mode=calendar mantém comportamento atual.",
+          "Redis: chaves de cache por billingMonth para cartões; invalidar nas mutações.",
+          "Frontend: adicionar suporte a mode=billing nas telas de despesas/cartões; exibir billingMonth no payload.",
+          "Backfill: script para calcular billingMonth retroativamente para despesas existentes de cartões."
+        ]
+      }
+      ,
+      {
         "id": 1,
         "tag": "[BUG] Replicação e idempotência",
         "status": "🟢 Resolvido",
@@ -66,9 +81,31 @@
       },
       {
         "id": 8,
-        "tag": "[FE] Navegação mensal",
-        "status": "🟡 Planejado",
-        "notes": "Adicionar setas de navegação prev/next ao Dashboard com animação suave."
+        "tag": "[FE/BE] Navegação mensal + Cache Redis + Build Estabilizado",
+        "status": "🟢 Concluído (Validação Final OK)",
+        "summary": "Frontend, backend e worker operando em contêineres Docker com cache híbrido Redis, build multi-stage Prisma estável e jobs de recorrência ativos via RabbitMQ.",
+        "notes": [
+          "Frontend validado com MonthNavigator animado e integração completa ao estado global (TanStack Query + dayjs).",
+          "Backend compilando e rodando com Prisma Client gerado antes do build, corrigindo a inicialização atrasada do @prisma/client.",
+          "Worker em execução contínua, consumindo a fila recurring-jobs e processando corretamente os jobs de despesas recorrentes.",
+          "Redis (Upstash) com cache distribuído ativo e TTL de 1h para endpoints /api/expenses e /api/salaryHistory.",
+          "RabbitMQ conectado e confirmando publicação e processamento de jobs.",
+          "Docker build multi-stage final corrigido: Prisma schema copiado antes do npm ci e client gerado no builder stage, com .prisma e node_modules replicados no runtime.",
+          "Logs de backend e worker confirmam [CACHE MISS] e [CACHE HIT] com chaves finance:expenses:<user>:<month> e execução estável de recurringWorker.js.",
+          "Frontend acessível via http://localhost:4000/api/status e servindo index React sem erros."
+        ],
+        "validation_logs": [
+          "🚀 Backend server pronto e rodando na porta 4000",
+          "[Rabbit] Connected and queue ready",
+          "[Worker] Waiting for jobs in recurring-jobs queue...",
+          "[CACHE MISS] finance:expenses:<user>:2025-11 → stored",
+          "[Worker] Completed: { created: 0, skipped: 41 }"
+        ],
+        "next_steps": [
+          "Iniciar o Milestone 9 ([FE] Toasts & Empty States) para UX e feedback visual de CRUDs.",
+          "Integrar autenticação avançada (Google + Resend MFA) conforme plano adicional.",
+          "Monitorar métricas de cache e fila via dashboards RabbitMQ e Upstash."
+        ]
       },
       {
         "id": 9,

@@ -1,5 +1,8 @@
-import { Router, Request } from 'express';
-import { PrismaClient, Prisma } from '@prisma/client';
+import { Router, Request, Response } from 'express';
+import { PrismaClient } from '@prisma/client';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
+import { getOrSetCache } from '../lib/redisCache';
+import { redis } from '../lib/redisClient';
 
 interface AuthenticatedRequest extends Request {
   userId?: string;
@@ -23,14 +26,42 @@ const serializeSalaryHistory = (record: {
   userId: record.userId,
 });
 
-const handlePrismaError = (error: unknown, res: any) => {
-  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-    return res
-      .status(409)
-      .json({ error: 'Registro duplicado (violação de constraint Prisma).' });
+const handlePrismaError = (error: unknown, res: Response) => {
+  if (error instanceof PrismaClientKnownRequestError) {
+    if (error.code === 'P2002') {
+      return res
+        .status(409)
+        .json({ error: 'Registro duplicado (violação de constraint Prisma).' });
+    }
+    if (error.code === 'P2025') {
+      return res.status(404).json({ error: 'Registro não encontrado.' });
+    }
+    console.error('Prisma error (salary history):', error);
+    return res.status(400).json({ error: 'Falha ao acessar o banco de dados.' });
   }
 
-  return res.status(500).json({ message: 'Erro interno na operação de histórico salarial.' });
+  if (error instanceof Error) {
+    console.error('Erro interno na operação de histórico salarial:', error);
+  } else {
+    console.error('Erro desconhecido na operação de histórico salarial:', error);
+  }
+
+  return res.status(500).json({ error: 'Erro interno na operação de histórico salarial.' });
+};
+
+const isValidMonthParam = (value?: string): value is string => Boolean(value && /^\d{4}-\d{2}$/.test(value));
+
+const buildSalaryCacheKey = (userId: string, monthKey = 'all') =>
+  `finance:salary:${userId}:${monthKey}`;
+
+const invalidateSalaryCache = async (userId: string, ...months: Array<string | null | undefined>) => {
+  const keys = new Set<string>([buildSalaryCacheKey(userId, 'all')]);
+  months.forEach((month) => {
+    if (isValidMonthParam(month ?? undefined)) {
+      keys.add(buildSalaryCacheKey(userId, month as string));
+    }
+  });
+  await redis.del(...Array.from(keys));
 };
 
 export default function salaryHistoryRoutes(prisma: PrismaClient) {
@@ -41,15 +72,24 @@ export default function salaryHistoryRoutes(prisma: PrismaClient) {
       const userId = req.userId;
       if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
 
-      const records = await prisma.salaryHistory.findMany({
-        where: { userId },
-        orderBy: { month: 'desc' },
+      const monthFilter =
+        typeof req.query.month === 'string' && isValidMonthParam(req.query.month)
+          ? req.query.month
+          : undefined;
+      const cacheKey = buildSalaryCacheKey(userId, monthFilter ?? 'all');
+      const records = await getOrSetCache(cacheKey, async () => {
+        const where = monthFilter ? { userId, month: monthFilter } : { userId };
+        const found = await prisma.salaryHistory.findMany({
+          where,
+          orderBy: { month: 'desc' },
+        });
+        return found.map(serializeSalaryHistory);
       });
 
-      res.json(records.map(serializeSalaryHistory));
-    } catch (error) {
+      res.json(records);
+    } catch (error: unknown) {
       console.error('Erro ao listar histórico salarial:', error);
-      res.status(500).json({ message: 'Erro interno ao listar histórico salarial.' });
+      return handlePrismaError(error, res);
     }
   });
 
@@ -74,8 +114,9 @@ export default function salaryHistoryRoutes(prisma: PrismaClient) {
         },
       });
 
+      await invalidateSalaryCache(userId, month);
       res.status(201).json(serializeSalaryHistory(record));
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Erro ao criar histórico salarial:', error);
       return handlePrismaError(error, res);
     }
@@ -105,8 +146,9 @@ export default function salaryHistoryRoutes(prisma: PrismaClient) {
         },
       });
 
+      await invalidateSalaryCache(userId, existing.month, record.month);
       res.json(serializeSalaryHistory(record));
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Erro ao atualizar histórico salarial:', error);
       return handlePrismaError(error, res);
     }
@@ -124,10 +166,11 @@ export default function salaryHistoryRoutes(prisma: PrismaClient) {
       }
 
       await prisma.salaryHistory.delete({ where: { id } });
+      await invalidateSalaryCache(userId, existing.month);
       res.status(204).send();
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Erro ao excluir histórico salarial:', error);
-      res.status(500).json({ message: 'Erro interno ao excluir histórico salarial.' });
+      return handlePrismaError(error, res);
     }
   });
 

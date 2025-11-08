@@ -13,6 +13,8 @@ import {
 } from '../utils/expenseHelpers';
 import { parseDecimal, toDecimalString } from '../utils/formatters';
 import { publishRecurringJob } from '../lib/rabbit';
+import { getOrSetCache } from '../lib/redisCache';
+import { redis } from '../lib/redisClient';
 
 interface AuthenticatedRequest extends Request {
   userId?: string;
@@ -37,6 +39,25 @@ const serializeExpense = (expense: any) => ({
   createdAt: expense.createdAt ? new Date(expense.createdAt).toISOString() : null,
   updatedAt: expense.updatedAt ? new Date(expense.updatedAt).toISOString() : null,
 });
+
+const buildExpenseCacheKey = (userId: string, monthKey: string) =>
+  `finance:expenses:${userId}:${monthKey}`;
+
+const monthKeyFromInput = (input?: string | Date | null) => {
+  if (!input) return null;
+  const date = typeof input === 'string' ? new Date(input) : input;
+  if (Number.isNaN(date.getTime())) return null;
+  return format(date, 'yyyy-MM');
+};
+
+const invalidateExpenseCache = async (userId: string, ...months: Array<string | null | undefined>) => {
+  const keys = months
+    .filter((monthKey): monthKey is string => Boolean(monthKey))
+    .map((monthKey) => buildExpenseCacheKey(userId, monthKey));
+  if (keys.length) {
+    await redis.del(...keys);
+  }
+};
 
 
 export default function expensesRoutes(prisma: PrismaClient) {
@@ -84,18 +105,23 @@ export default function expensesRoutes(prisma: PrismaClient) {
       const start = startOfMonth(new Date(targetYear, targetMonth, 1));
       const end = startOfMonth(addMonths(start, 1));
 
-      const expenses = await prisma.expense.findMany({
-        where: {
-          userId,
-          date: {
-            gte: start,
-            lt: end,
+      const monthKey = format(start, 'yyyy-MM');
+      const cacheKey = buildExpenseCacheKey(userId, monthKey);
+      const expenses = await getOrSetCache(cacheKey, async () => {
+        const result = await prisma.expense.findMany({
+          where: {
+            userId,
+            date: {
+              gte: start,
+              lt: end,
+            },
           },
-        },
-        orderBy: { date: 'desc' },
+          orderBy: { date: 'desc' },
+        });
+        return result.map(serializeExpense);
       });
 
-      res.json(expenses.map(serializeExpense));
+      res.json(expenses);
     } catch (error) {
       console.error('Erro ao listar despesas:', error);
       res.status(500).json({ message: 'Erro interno ao listar despesas.' });
@@ -151,6 +177,7 @@ export default function expensesRoutes(prisma: PrismaClient) {
       });
 
       const expense = await prisma.expense.create({ data: payload });
+      await invalidateExpenseCache(userId, monthKeyFromInput(expense.date));
 
       res.status(201).json(serializeExpense(expense));
     } catch (error) {
@@ -173,6 +200,7 @@ export default function expensesRoutes(prisma: PrismaClient) {
       const payload = buildCreateData(userId, req.body);
 
       const expense = await prisma.expense.create({ data: payload });
+      await invalidateExpenseCache(userId, monthKeyFromInput(expense.date));
 
       res.status(201).json(serializeExpense(expense));
     } catch (error) {
@@ -218,6 +246,11 @@ export default function expensesRoutes(prisma: PrismaClient) {
         where: { id },
         data: updateData,
       });
+      await invalidateExpenseCache(
+        userId,
+        monthKeyFromInput(existing.date),
+        monthKeyFromInput(expense.date)
+      );
 
       res.json(serializeExpense(expense));
     } catch (error) {
@@ -249,6 +282,7 @@ export default function expensesRoutes(prisma: PrismaClient) {
       }
 
       await prisma.expense.delete({ where: { id } });
+      await invalidateExpenseCache(userId, monthKeyFromInput(existing.date));
 
       res.status(204).send();
     } catch (error) {
@@ -313,6 +347,7 @@ export default function expensesRoutes(prisma: PrismaClient) {
           fingerprint,
         }),
       });
+      await invalidateExpenseCache(userId, monthKey);
 
       res.status(201).json(serializeExpense(duplicated));
     } catch (error) {
@@ -360,6 +395,11 @@ export default function expensesRoutes(prisma: PrismaClient) {
         where: { id },
         data: updateData,
       });
+      await invalidateExpenseCache(
+        userId,
+        monthKeyFromInput(existing.date),
+        monthKeyFromInput(updated.date)
+      );
 
       res.json(serializeExpense(updated));
     } catch (error) {
