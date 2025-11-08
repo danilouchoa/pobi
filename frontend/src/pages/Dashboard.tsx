@@ -1,26 +1,75 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import {
+  Box,
+  Chip,
   Grid,
-  Typography,
+  Stack,
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
-  TableContainer,
-  Chip,
-  Box,
-  Stack,
+  Typography,
 } from "@mui/material";
-import Section from "./ui/Section";
-import KPI from "./ui/KPI";
+import Section from "../components/ui/Section";
+import KPI from "../components/ui/KPI";
+import MonthNavigator from "../components/MonthNavigator";
 import { toBRL, parseNum } from "../utils/helpers";
 import { DEFAULT_SALARY_TEMPLATE } from "../hooks/useFinanceApp";
 import { formatCurrency, formatDate } from "../utils/formatters";
+import type { Debtor, Expense, Origin } from "../types";
 
-export default function Dashboard({ state, month }) {
-  const originById = Object.fromEntries(state.origins.map((origin) => [origin.id, origin]));
-  const debtorById = Object.fromEntries(state.debtors.map((debtor) => [debtor.id, debtor.name]));
+const palette = ["#6366f1", "#3b82f6", "#10b981", "#f97316", "#ec4899", "#0ea5e9"] as const;
+
+type DashboardSalaryRecord = {
+  id?: string;
+  month: string;
+  hours: string | number;
+  hourRate: string | number;
+  taxRate: string | number;
+  cnae?: string | null;
+};
+
+type DashboardState = {
+  expenses: Expense[];
+  origins: Origin[];
+  debtors: Debtor[];
+  salaryHistory: Record<string, DashboardSalaryRecord>;
+  recurringExpenses: Expense[];
+  sharedExpenses: Expense[];
+};
+
+type DashboardProps = {
+  state: DashboardState;
+  month: string;
+  onChangeMonth: (value: string) => void;
+};
+
+const groupBySum = <T,>(
+  items: T[],
+  keyFn: (item: T) => string | null | undefined,
+  valueFn: (item: T) => number | string
+) => {
+  const map = new Map<string, number>();
+  for (const item of items) {
+    const key = keyFn(item) ?? "-";
+    const value = parseNum(valueFn(item));
+    map.set(key, (map.get(key) ?? 0) + value);
+  }
+  return Array.from(map.entries()).map(([name, value]) => ({ name, value }));
+};
+
+export default function Dashboard({ state, month, onChangeMonth }: DashboardProps) {
+  const originById = useMemo(
+    () => Object.fromEntries(state.origins.map((origin) => [origin.id, origin])),
+    [state.origins]
+  );
+  const debtorById = useMemo(
+    () => Object.fromEntries(state.debtors.map((debtor) => [debtor.id, debtor.name])),
+    [state.debtors]
+  );
+
   useEffect(() => {
     console.log("Dashboard updated", {
       month,
@@ -32,7 +81,7 @@ export default function Dashboard({ state, month }) {
 
   const expensesMonth = state.expenses;
   const myExpensesMonth = expensesMonth.filter((expense) => !expense.debtorId);
-  const debtExpensesMonth = expensesMonth.filter((expense) => !!expense.debtorId);
+  const debtExpensesMonth = expensesMonth.filter((expense) => Boolean(expense.debtorId));
 
   const salaryData = state.salaryHistory[month] ?? DEFAULT_SALARY_TEMPLATE;
   const hours = parseNum(salaryData?.hours);
@@ -42,29 +91,42 @@ export default function Dashboard({ state, month }) {
   const tax = gross * taxRate;
   const net = gross - tax;
 
-  const totalsByOrigin = state.origins.reduce((acc, origin) => ({ ...acc, [origin.id]: 0 }), { total: 0 });
-  for (const expense of expensesMonth) {
+  const totalsByOrigin: Record<string, number> = { total: 0 };
+  state.origins.forEach((origin) => {
+    totalsByOrigin[origin.id] = 0;
+  });
+  expensesMonth.forEach((expense) => {
     const amount = parseNum(expense.amount);
-    if (totalsByOrigin[expense.originId] !== undefined) {
+    if (expense.originId && totalsByOrigin[expense.originId] !== undefined) {
       totalsByOrigin[expense.originId] += amount;
     }
     totalsByOrigin.total += amount;
-  }
+  });
 
-  const totalsMyExpensesByType = { Cartão: 0, Conta: 0, total: 0 };
-  for (const expense of myExpensesMonth) {
+  const totalsMyExpensesByType: Record<string, number> = { Cartão: 0, Conta: 0, total: 0 };
+  myExpensesMonth.forEach((expense) => {
     const amount = parseNum(expense.amount);
-    const origin = originById[expense.originId];
+    const origin = expense.originId ? originById[expense.originId] : undefined;
     if (origin) {
       totalsMyExpensesByType[origin.type] += amount;
       totalsMyExpensesByType.total += amount;
     }
-  }
+  });
 
   const totalDebts = debtExpensesMonth.reduce((acc, expense) => acc + parseNum(expense.amount), 0);
-  const recurringTotal = expensesMonth.reduce((acc, expense) => (expense.recurring ? acc + parseNum(expense.amount) : acc), 0);
-  const fixedTotal = expensesMonth.reduce((acc, expense) => (expense.fixed ? acc + parseNum(expense.amount) : acc), 0);
-  const sharedTotal = expensesMonth.reduce((acc, expense) => acc + parseNum(expense.sharedAmount ?? 0), 0);
+  const recurringTotal = expensesMonth.reduce(
+    (acc, expense) => (expense.recurring ? acc + parseNum(expense.amount) : acc),
+    0
+  );
+  const fixedTotal = expensesMonth.reduce(
+    (acc, expense) => (expense.fixed ? acc + parseNum(expense.amount) : acc),
+    0
+  );
+  const sharedTotal = expensesMonth.reduce(
+    (acc, expense) => acc + parseNum(expense.sharedAmount ?? 0),
+    0
+  );
+
   const summary = {
     totalContas: totalsMyExpensesByType["Conta"],
     totalCartoes: totalsMyExpensesByType["Cartão"],
@@ -73,26 +135,35 @@ export default function Dashboard({ state, month }) {
     saldoFinal: net - totalsMyExpensesByType["total"],
   };
 
-  const groupBySum = (arr, keyFn, valFn) => {
-    const map = new Map();
-    for (const item of arr) {
-      const key = keyFn(item) ?? "-";
-      const value = parseNum(valFn(item));
-      map.set(key, (map.get(key) || 0) + value);
-    }
-    return Array.from(map.entries()).map(([name, value]) => ({ name, value }));
-  };
-
   const categoriesData = groupBySum(
     expensesMonth,
     (expense) => expense.category,
     (expense) => expense.amount
   );
   const categoriesTotal = categoriesData.reduce((acc, item) => acc + item.value, 0);
-  const palette = ["#6366f1", "#3b82f6", "#10b981", "#f97316", "#ec4899", "#0ea5e9"];
 
   return (
     <Stack spacing={3}>
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: { xs: "column", md: "row" },
+          alignItems: { xs: "flex-start", md: "center" },
+          justifyContent: "space-between",
+          gap: 2,
+        }}
+      >
+        <Box>
+          <Typography variant="h5" fontWeight={700} gutterBottom>
+            Navegação mensal
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Use as setas para viajar entre meses sem perder o cache local.
+          </Typography>
+        </Box>
+        <MonthNavigator month={month} onChange={onChangeMonth} />
+      </Box>
+
       <Grid container spacing={2}>
         <Grid item xs={12} md={3}>
           <KPI label="Salário Líquido (Mês)" value={toBRL(net)} sub={`Bruto ${toBRL(gross)}`} />
@@ -147,17 +218,10 @@ export default function Dashboard({ state, month }) {
         {categoriesData.length > 0 ? (
           <Stack spacing={2}>
             {categoriesData.map((category, index) => {
-              const percent = categoriesTotal
-                ? Math.round((category.value / categoriesTotal) * 100)
-                : 0;
+              const percent = categoriesTotal ? Math.round((category.value / categoriesTotal) * 100) : 0;
               return (
                 <Box key={category.name} sx={{ width: "100%" }}>
-                  <Stack
-                    direction="row"
-                    justifyContent="space-between"
-                    alignItems="center"
-                    sx={{ mb: 0.5 }}
-                  >
+                  <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.5 }}>
                     <Typography fontWeight={600}>{category.name}</Typography>
                     <Typography color="text.secondary">{percent}%</Typography>
                   </Stack>
@@ -184,9 +248,7 @@ export default function Dashboard({ state, month }) {
             })}
           </Stack>
         ) : (
-          <Typography color="text.secondary">
-            Nenhum lançamento encontrado para este mês.
-          </Typography>
+          <Typography color="text.secondary">Nenhum lançamento encontrado para este mês.</Typography>
         )}
       </Section>
 
@@ -205,10 +267,7 @@ export default function Dashboard({ state, month }) {
                 <TableCell align="center" sx={{ fontWeight: 600, px: 2, py: 1.5 }}>
                   Data
                 </TableCell>
-                <TableCell
-                  align="left"
-                  sx={{ fontWeight: 600, px: 2, py: 1.5, maxWidth: 220 }}
-                >
+                <TableCell align="left" sx={{ fontWeight: 600, px: 2, py: 1.5, maxWidth: 220 }}>
                   Descrição
                 </TableCell>
                 <TableCell align="center" sx={{ fontWeight: 600, px: 2, py: 1.5 }}>
@@ -226,7 +285,7 @@ export default function Dashboard({ state, month }) {
               </TableRow>
             </TableHead>
             <TableBody>
-              {expensesMonth.slice(0, 10).map((expense, idx) => (
+              {expensesMonth.slice(0, 10).map((expense) => (
                 <TableRow
                   key={expense.id}
                   hover
@@ -252,7 +311,7 @@ export default function Dashboard({ state, month }) {
                     {expense.description}
                   </TableCell>
                   <TableCell align="center" sx={{ px: 2, py: 1.25 }}>
-                    {originById[expense.originId]?.name ?? "Deletada"}
+                    {expense.originId ? originById[expense.originId]?.name ?? "Deletada" : "-"}
                   </TableCell>
                   <TableCell align="center" sx={{ px: 2, py: 1.25 }}>
                     {expense.debtorId ? (

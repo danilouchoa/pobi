@@ -15,10 +15,9 @@ import {
   Alert,
   Skeleton,
   Divider,
-  TextField,
 } from "@mui/material";
 import { useFinanceApp } from "./hooks/useFinanceApp";
-import Dashboard from "./components/Dashboard";
+import Dashboard from "./pages/Dashboard";
 import Lancamentos from "./components/Lancamentos";
 import Salario from "./components/Salario";
 import Cadastros from "./components/Cadastros";
@@ -178,18 +177,6 @@ function App() {
                   />
                 ))}
               </Tabs>
-              <Stack direction="row" spacing={2} alignItems="center">
-                <Typography variant="body2" color="text.secondary">
-                  Mês de referência
-                </Typography>
-                <TextField
-                  type="month"
-                  size="small"
-                  value={month}
-                  onChange={(e) => setMonth(e.target.value)}
-                  sx={{ minWidth: 150 }}
-                />
-              </Stack>
             </Box>
           </Stack>
 
@@ -211,7 +198,9 @@ function App() {
           </Paper>
         ) : (
           <Stack spacing={4}>
-            {tab === "dashboard" && <Dashboard state={state} month={month} />}
+            {tab === "dashboard" && (
+              <Dashboard state={state} month={month} onChangeMonth={setMonth} />
+            )}
             {tab === "lancamentos" && (
               <Lancamentos
                 state={state}
