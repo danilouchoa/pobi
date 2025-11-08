@@ -199,7 +199,7 @@ export default function expensesRoutes(prisma: PrismaClient) {
     }
   });
 
-  router.post('/bulk', async (req: AuthenticatedRequest, res) => {
+  router.post('/bulkUpdate', async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.userId;
       if (!userId) return res.status(401).json({ message: 'Não autorizado.' });

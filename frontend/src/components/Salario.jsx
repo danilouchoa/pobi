@@ -1,16 +1,10 @@
 import { useEffect, useState } from "react";
-import {
-  Grid,
-  TextField,
-  Button,
-  Stack,
-  Typography,
-  Alert,
-} from "@mui/material";
+import { Grid, TextField, Button, Stack, Typography } from "@mui/material";
 import Section from "./ui/Section";
 import KPI from "./ui/KPI";
 import { parseNum, toBRL } from "../utils/helpers";
 import { DEFAULT_SALARY_TEMPLATE } from "../hooks/useFinanceApp";
+import { useToast } from "../ui/feedback";
 
 export default function Salario({ month, salary, saveSalary }) {
   const [form, setForm] = useState(() => ({
@@ -20,7 +14,7 @@ export default function Salario({ month, salary, saveSalary }) {
     cnae: salary?.cnae ?? DEFAULT_SALARY_TEMPLATE.cnae,
   }));
   const [saving, setSaving] = useState(false);
-  const [feedback, setFeedback] = useState(null);
+  const toast = useToast();
 
   useEffect(() => {
     setForm({
@@ -42,14 +36,11 @@ export default function Salario({ month, salary, saveSalary }) {
   const handleSubmit = async (event) => {
     event.preventDefault();
     setSaving(true);
-    setFeedback(null);
     try {
       await saveSalary(month, form);
-      setFeedback("Dados salvos com sucesso.");
+      toast.success();
     } catch (error) {
-      console.error("Erro ao salvar salário:", error);
-      const message = error.response?.data?.message ?? error.message ?? "Erro ao salvar.";
-      setFeedback(message);
+      toast.error(error);
     } finally {
       setSaving(false);
     }
@@ -109,9 +100,6 @@ export default function Salario({ month, salary, saveSalary }) {
             <Typography variant="body2" color="text.secondary">
               Os dados são sincronizados com a API autenticada.
             </Typography>
-            {feedback && (
-              <Alert severity={feedback.includes("sucesso") ? "success" : "error"}>{feedback}</Alert>
-            )}
           </Stack>
         </Stack>
       </Section>

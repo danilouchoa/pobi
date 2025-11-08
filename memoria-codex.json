@@ -7,14 +7,19 @@
       {
         "id": 9,
         "tag": "[FE] Toasts & Empty States",
-        "status": "🟡 Planejado",
-        "summary": "Adicionar feedbacks visuais consistentes (sucesso/erro) e placeholders de listas vazias para melhorar a UX em CRUDs.",
+        "status": "🟡 Em Execução (Codex)",
+        "summary": "Adicionar feedbacks visuais consistentes (sucesso/erro) e placeholders de listas vazias para melhorar a UX em CRUDs, com documentação explicativa em todo o código gerado.",
         "notes": [
+          "Exemplo de configuração docker-compose (YAML):\nservices:\n  mongo:\n    image: mongo:7\n    # Remover binding host 27017 (use apenas rede interna do compose)\n    # ports:\n    #   - \"27017:27017\"\n\n  backend:\n    build: ./backend\n    # Se precisar expor só para host em outra porta, altere 4000 para outra porta livre (ex.: 14000)\n    ports:\n      - \"14000:4000\"\n    # ...existing code...",
           "Implementar notistack com provedores no App; padronizar mensagens por tipo de operação.",
-          "Criar EmptyStates (MUI) com CTA para listas de despesas/catálogos sem dados.",
-          "Mapear códigos/erros do backend em mensagens legíveis.",
-          "Critérios de aceite: toasts em create/update/delete, placeholders exibidos em listas vazias, nenhum console error.",
-          "Riscos: duplicidade de toasts; mitigar com chaves e debounce."
+          "Criar hook useToast() com funções success/error/info/warning e comentários explicando propósito, uso e integração.",
+          "Criar componente EmptyState (MUI) com CTA, título e descrição — totalmente comentado sobre seu papel na UX e funcionamento interno.",
+          "Criar utilitário mapBackendError() traduzindo códigos técnicos em mensagens legíveis; comentar cada caso de erro e como é tratado.",
+          "Integrar toasts e EmptyStates nas telas de CRUD existentes, com comentários em cada ponto de uso explicando a ação do usuário e o feedback exibido.",
+          "Incluir lógica para prevenir duplicidade de toasts (chave única + debounce), com comentários detalhando a mitigação e o racional.",
+          "Critérios de aceite: toasts em create/update/delete, placeholders exibidos em listas vazias, nenhum console error, e todos os arquivos novos/alterados devidamente comentados.",
+          "Riscos: duplicidade de toasts; mitigar com chaves únicas e debounce.",
+          "Todos os códigos gerados devem conter comentários explicativos sobre propósito, funcionamento e integração com o restante do app."
         ]
       },
       {
@@ -95,6 +100,55 @@
           "Backfill: script para preencher billingMonth retroativo.",
           "Critérios de aceite: lançamento 08/11 no cartão (fech. 09 com WE→segunda) cai em fatura de 12/2025 automaticamente.",
           "Riscos: cartões sem closingDay; retornar 422 e guiar configuração."
+        ]
+      },
+      {
+        "id": 14,
+        "tag": "[Resilience] Dead Letter Queue (DLQ)",
+        "status": "🟡 Planejado (NOVO)",
+        "summary": "Segregar mensagens irrecuperáveis para análise e reprocessamento seguro.",
+        "notes": [
+          "DLQ acoplada à recurring-jobs; nack com requeue=false em erros permanentes.",
+          "Métricas básicas de taxa de dead-letter.",
+          "Critérios de aceite: mensagens inválidas não travam a fila principal.",
+          "Riscos: descarte indevido; mitigar com policies e retenção temporária."
+        ]
+      },
+      {
+        "id": 15,
+        "tag": "[Refactor] Service/Repository Layer",
+        "status": "🟡 Planejado (NOVO)",
+        "summary": "Separar responsabilidades em três camadas para clareza, testes e evolução segura.",
+        "notes": [
+          "Routes: validação + orquestração; Services: regras; Repositories: Prisma-only.",
+          "Injeção de dependência para facilitar mocks nos testes.",
+          "Critérios de aceite: rotas finas; services sem import de Prisma.",
+          "Riscos: refator parcelado; mitigar com feature toggles e suíte de testes (#16)."
+        ]
+      },
+      {
+        "id": 13,
+        "tag": "[Security] Auth httpOnly Cookies",
+        "status": "🟡 Planejado (NOVO)",
+        "summary": "Trocar armazenamento de tokens para cookies httpOnly/sameSite, reduzindo superfície XSS.",
+        "notes": [
+          "Login entrega JWT via cookie httpOnly; logout limpa cookie.",
+          "Axios withCredentials; refresh token seguro; access em memória.",
+          "Critérios de aceite: rotas autenticadas funcionam sem localStorage.",
+          "Riscos: CORS e domínio; mitigar com configuração rigorosa e ambiente controlado."
+        ]
+      },
+      {
+        "id": 18,
+        "tag": "[Security] Autenticação Avançada (MFA + Google Login)",
+        "status": "🟡 Planejado (NOVO)",
+        "summary": "Adicionar MFA via Resend (OTP) e login social Google OAuth2 com fluxo completo de tokens.",
+        "notes": [
+          "Rotas: /auth/register, /auth/login, /auth/refresh, /auth/logout, /auth/resend, /auth/google.",
+          "Cookies httpOnly para refresh; access token em memória; interceptors Axios.",
+          "Front: MFAForm e botão Google; backend: validações de estado/nonce.",
+          "Critérios de aceite: MFA opcional funcional; Google login end-to-end.",
+          "Riscos: fluxo OAuth mal configurado; mitigar com testes em sandbox e logs detalhados."
         ]
       },
       {
@@ -187,60 +241,12 @@
           "Critérios de aceite: nenhuma duplicidade em replays.",
           "Riscos: colisão de fingerprint; mitigado com sal e campos chave."
         ]
-      },
-      {
-        "id": 14,
-        "tag": "[Resilience] Dead Letter Queue (DLQ)",
-        "status": "🟡 Planejado (NOVO)",
-        "summary": "Segregar mensagens irrecuperáveis para análise e reprocessamento seguro.",
-        "notes": [
-          "DLQ acoplada à recurring-jobs; nack com requeue=false em erros permanentes.",
-          "Métricas básicas de taxa de dead-letter.",
-          "Critérios de aceite: mensagens inválidas não travam a fila principal.",
-          "Riscos: descarte indevido; mitigar com policies e retenção temporária."
-        ]
-      },
-      {
-        "id": 15,
-        "tag": "[Refactor] Service/Repository Layer",
-        "status": "🟡 Planejado (NOVO)",
-        "summary": "Separar responsabilidades em três camadas para clareza, testes e evolução segura.",
-        "notes": [
-          "Routes: validação + orquestração; Services: regras; Repositories: Prisma-only.",
-          "Injeção de dependência para facilitar mocks nos testes.",
-          "Critérios de aceite: rotas finas; services sem import de Prisma.",
-          "Riscos: refator parcelado; mitigar com feature toggles e suíte de testes (#16)."
-        ]
-      },
-      {
-        "id": 13,
-        "tag": "[Security] Auth httpOnly Cookies",
-        "status": "🟡 Planejado (NOVO)",
-        "summary": "Trocar armazenamento de tokens para cookies httpOnly/sameSite, reduzindo superfície XSS.",
-        "notes": [
-          "Login entrega JWT via cookie httpOnly; logout limpa cookie.",
-          "Axios withCredentials; refresh token seguro; access em memória.",
-          "Critérios de aceite: rotas autenticadas funcionam sem localStorage.",
-          "Riscos: CORS e domínio; mitigar com configuração rigorosa e ambiente controlado."
-        ]
-      },
-      {
-        "id": 18,
-        "tag": "[Security] Autenticação Avançada (MFA + Google Login)",
-        "status": "🟡 Planejado (NOVO)",
-        "summary": "Adicionar MFA via Resend (OTP) e login social Google OAuth2 com fluxo completo de tokens.",
-        "notes": [
-          "Rotas: /auth/register, /auth/login, /auth/refresh, /auth/logout, /auth/resend, /auth/google.",
-          "Cookies httpOnly para refresh; access token em memória; interceptors Axios.",
-          "Front: MFAForm e botão Google; backend: validações de estado/nonce.",
-          "Critérios de aceite: MFA opcional funcional; Google login end-to-end.",
-          "Riscos: fluxo OAuth mal configurado; mitigar com testes em sandbox e logs detalhados."
-        ]
       }
     ],
-    "last_action": "Reordenação por dificuldade e refinamento das descrições concluídos.",
+    "last_action": "Instruções detalhadas para Codex executando a Milestone #9 com comentários explicativos adicionadas.",
     "next_steps": [
-      "Executar Milestone 9 (Toasts) e 17 (Storybook) como quick wins.",
+      "Codex executará a Milestone #9 (Toasts & Empty States) com código comentado.",
+      "Executar Milestone 17 (Storybook) como quick win subsequente.",
       "Implementar 10/11/12/16 para elevar qualidade/segurança e dar base ao Milestone 0.",
       "Entregar Milestone 0 (billingMonth) com backfill e testes.",
       "Planejar 14/15 (resiliência/arquitetura) e 13/18 (autenticação segura e avançada)."

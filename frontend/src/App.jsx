@@ -68,6 +68,8 @@ function App() {
     createRecurringExpense,
     fetchRecurringExpenses,
     fetchSharedExpenses,
+    categories,
+    addCategory,
   } = useFinanceApp();
 
   const debouncedRefresh = useMemo(() => debounce(refresh, 500), [refresh]);
@@ -221,6 +223,7 @@ function App() {
                 createRecurringExpense={createRecurringExpense}
                 fetchRecurringExpenses={fetchRecurringExpenses}
                 fetchSharedExpenses={fetchSharedExpenses}
+                categories={categories}
               />
             )}
             {tab === "salary" && (
@@ -240,6 +243,8 @@ function App() {
                 createDebtor={createDebtor}
                 deleteDebtor={deleteDebtor}
                 updateDebtor={updateDebtor}
+                categories={categories}
+                addCategory={addCategory}
               />
             )}
             {tab === "export" && <Exportacao state={state} month={month} />}

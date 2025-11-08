@@ -47,13 +47,19 @@ export type ExpensesResponse = {
 };
 
 export type BulkUpdatePayload = {
-  expenseIds: string[];
+  filters: {
+    expenseIds: string[];
+  };
   data: {
     category?: string;
     originId?: string;
     fixed?: boolean;
     recurring?: boolean;
     recurrenceType?: "monthly" | "weekly" | "yearly" | null;
+  };
+  options?: {
+    mode?: "calendar" | "billing";
+    invalidate?: boolean;
   };
 };
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useRef } from "react";
 import {
   Grid,
   TextField,
@@ -18,13 +18,13 @@ import {
   DialogActions,
   Checkbox,
   FormControlLabel,
-  Snackbar,
-  Alert,
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import Section from "./ui/Section";
 import { parseNum, toBRL } from "../utils/helpers";
+import { useToast } from "../ui/feedback";
+import EmptyState from "./ui/EmptyState";
 
 export default function Cadastros({
   origins,
@@ -35,6 +35,8 @@ export default function Cadastros({
   createDebtor,
   deleteDebtor,
   updateDebtor,
+  categories,
+  addCategory,
 }) {
   const [originForm, setOriginForm] = useState({
     name: "",
@@ -56,14 +58,14 @@ export default function Cadastros({
     closingDay: "",
     billingRolloverPolicy: "NEXT_BUSINESS_DAY",
   });
-  const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
-
-  useEffect(() => {
-    console.log("Cadastros updated:", { originsCount: origins?.length ?? 0, debtorsCount: debtors?.length ?? 0 });
-  }, [origins, debtors]);
-
-  const showSnackbar = (message, severity = "success") => setSnackbar({ open: true, message, severity });
-  const closeSnackbar = () => setSnackbar((prev) => ({ ...prev, open: false }));
+  const toast = useToast();
+  const originNameRef = useRef(null);
+  const debtorNameRef = useRef(null);
+  const categoryNameRef = useRef(null);
+  const focusOriginForm = () => originNameRef.current?.focus();
+  const focusDebtorForm = () => debtorNameRef.current?.focus();
+  const focusCategoryForm = () => categoryNameRef.current?.focus();
+  const [categoryName, setCategoryName] = useState("");
 
   const handleOriginChange = (field) => (event) => {
     const value = event.target.value;
@@ -81,10 +83,33 @@ export default function Cadastros({
     setDebtorForm({ name: event.target.value });
   };
 
+  const handleCategoryChange = (event) => {
+    setCategoryName(event.target.value);
+  };
+
+  const handleAddCategory = () => {
+    if (!categoryName.trim()) {
+      toast.warning("Informe o nome da categoria.");
+      focusCategoryForm();
+      return;
+    }
+    try {
+      addCategory(categoryName);
+      setCategoryName("");
+      toast.success();
+    } catch (error) {
+      toast.error(error);
+    }
+  };
+
   const addOrigin = async () => {
-    if (!originForm.name.trim()) return;
+    if (!originForm.name.trim()) {
+      toast.warning("Informe o nome da origem.");
+      focusOriginForm();
+      return;
+    }
     if (originForm.type === "Cartão" && !originForm.closingDay.trim()) {
-      showSnackbar("Informe o dia de fechamento do cartão.", "error");
+      toast.warning("Informe o dia de fechamento do cartão.");
       return;
     }
     setOriginLoading(true);
@@ -111,10 +136,9 @@ export default function Cadastros({
         closingDay: "",
         billingRolloverPolicy: "NEXT_BUSINESS_DAY",
       });
-      showSnackbar("Origem adicionada!");
+      toast.success();
     } catch (error) {
-      console.error("Erro ao criar origem:", error);
-      showSnackbar("Erro ao criar origem.", "error");
+      toast.error(error);
     } finally {
       setOriginLoading(false);
     }
@@ -124,23 +148,25 @@ export default function Cadastros({
     if (!window.confirm("Deseja remover esta origem?")) return;
     try {
       await deleteOrigin(id);
-      showSnackbar("Origem removida!");
+      toast.success();
     } catch (error) {
-      console.error("Erro ao remover origem:", error);
-      showSnackbar("Erro ao remover origem.", "error");
+      toast.error(error);
     }
   };
 
   const addDebtor = async () => {
-    if (!debtorForm.name.trim()) return;
+    if (!debtorForm.name.trim()) {
+      toast.warning("Informe o nome da pessoa.");
+      focusDebtorForm();
+      return;
+    }
     setDebtorLoading(true);
     try {
       await createDebtor({ name: debtorForm.name.trim() });
       setDebtorForm({ name: "" });
-      showSnackbar("Devedor adicionado!");
+      toast.success();
     } catch (error) {
-      console.error("Erro ao criar devedor:", error);
-      showSnackbar("Erro ao criar devedor.", "error");
+      toast.error(error);
     } finally {
       setDebtorLoading(false);
     }
@@ -150,10 +176,9 @@ export default function Cadastros({
     if (!window.confirm("Deseja remover este devedor?")) return;
     try {
       await deleteDebtor(id);
-      showSnackbar("Devedor removido!");
+      toast.success();
     } catch (error) {
-      console.error("Erro ao remover devedor:", error);
-      showSnackbar("Erro ao remover devedor.", "error");
+      toast.error(error);
     }
   };
 
@@ -199,15 +224,13 @@ export default function Cadastros({
             ? dialogValues.billingRolloverPolicy
             : null;
         await updateOrigin(dialogState.entity.id, payload);
-        showSnackbar("Origem atualizada!");
       } else {
         await updateDebtor(dialogState.entity.id, payload);
-        showSnackbar("Devedor atualizado!");
       }
+      toast.success();
       closeDialog();
     } catch (error) {
-      console.error("Erro ao atualizar registro:", error);
-      showSnackbar("Erro ao salvar alterações.", "error");
+      toast.error(error);
     }
   };
 
@@ -218,7 +241,14 @@ export default function Cadastros({
           <Stack spacing={3}>
             <Grid container spacing={2}>
               <Grid item xs={12}>
-                <TextField label="Nome" placeholder="Ex.: Cartão Nubank" fullWidth value={originForm.name} onChange={handleOriginChange("name")} />
+                <TextField
+                  label="Nome"
+                  placeholder="Ex.: Cartão Nubank"
+                  fullWidth
+                  value={originForm.name}
+                  onChange={handleOriginChange("name")}
+                  inputRef={originNameRef}
+                />
               </Grid>
               <Grid item xs={12} sm={6}>
                 <TextField select label="Tipo" fullWidth value={originForm.type} onChange={handleOriginChange("type")}>
@@ -266,48 +296,52 @@ export default function Cadastros({
             <Typography variant="subtitle2" color="text.secondary">
               Contas cadastradas
             </Typography>
-            <List>
-              {origins.map((origin) => (
-                <ListItem
-                  key={origin.id}
-                  secondaryAction={
-                    <Stack direction="row" spacing={1}>
-                      <IconButton onClick={() => openDialog("origin", origin)} size="small">
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton edge="end" color="error" onClick={() => delOrigin(origin.id)} size="small">
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Stack>
-                  }
-                >
-                  <ListItemText
-                    primary={
-                      <Stack direction="row" spacing={1} alignItems="center">
-                        <Typography fontWeight={600}>{origin.name}</Typography>
-                        <Chip label={origin.type} size="small" />
-                        <Chip
-                          label={origin.active ? "Ativo" : "Inativo"}
-                          size="small"
-                          color={origin.active ? "success" : "default"}
-                          variant="outlined"
-                        />
+            {origins.length ? (
+              <List>
+                {origins.map((origin) => (
+                  <ListItem
+                    key={origin.id}
+                    secondaryAction={
+                      <Stack direction="row" spacing={1}>
+                        <IconButton onClick={() => openDialog("origin", origin)} size="small">
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton edge="end" color="error" onClick={() => delOrigin(origin.id)} size="small">
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
                       </Stack>
                     }
-                    secondary={`Status: ${origin.status ?? "-"} • Limite: ${
-                      origin.limit ? toBRL(parseNum(origin.limit)) : "N/A"
-                    }${origin.type === "Cartão"
-                      ? ` • Fechamento: ${origin.closingDay ?? "Configurar"} (${origin.billingRolloverPolicy ?? "NEXT_BUSINESS_DAY"})`
-                      : ""}`}
-                  />
-                </ListItem>
-              ))}
-              {origins.length === 0 && (
-                <ListItem>
-                  <ListItemText primary={<Typography color="text.secondary">Nenhuma conta cadastrada ainda.</Typography>} />
-                </ListItem>
-              )}
-            </List>
+                  >
+                    <ListItemText
+                      primary={
+                        <Stack direction="row" spacing={1} alignItems="center">
+                          <Typography fontWeight={600}>{origin.name}</Typography>
+                          <Chip label={origin.type} size="small" />
+                          <Chip
+                            label={origin.active ? "Ativo" : "Inativo"}
+                            size="small"
+                            color={origin.active ? "success" : "default"}
+                            variant="outlined"
+                          />
+                        </Stack>
+                      }
+                      secondary={`Status: ${origin.status ?? "-"} • Limite: ${
+                        origin.limit ? toBRL(parseNum(origin.limit)) : "N/A"
+                      }${origin.type === "Cartão"
+                        ? ` • Fechamento: ${origin.closingDay ?? "Configurar"} (${origin.billingRolloverPolicy ?? "NEXT_BUSINESS_DAY"})`
+                        : ""}`}
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            ) : (
+              <EmptyState
+                title="Nenhuma conta cadastrada"
+                description="Cadastre suas contas e cartões para começar a lançar despesas."
+                ctaLabel="Adicionar origem"
+                onCtaClick={focusOriginForm}
+              />
+            )}
           </Stack>
         </Section>
       </Grid>
@@ -322,6 +356,7 @@ export default function Cadastros({
                 fullWidth
                 value={debtorForm.name}
                 onChange={handleDebtorChange}
+                inputRef={debtorNameRef}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
                     event.preventDefault();
@@ -334,38 +369,82 @@ export default function Cadastros({
               </Button>
             </Stack>
             <Divider />
-            <List>
-              {debtors.map((debtor) => (
-                <ListItem
-                  key={debtor.id}
-                  secondaryAction={
-                    <Stack direction="row" spacing={1}>
-                      <IconButton onClick={() => openDialog("debtor", debtor)} size="small">
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton edge="end" color="error" onClick={() => delDebtor(debtor.id)} size="small">
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Stack>
-                  }
-                >
-                  <ListItemText
-                    primary={
-                      <Stack direction="row" spacing={1} alignItems="center">
-                        <Typography fontWeight={600}>{debtor.name}</Typography>
-                        <Chip label={debtor.active ? "Ativo" : "Inativo"} size="small" color={debtor.active ? "success" : "default"} variant="outlined" />
+            {debtors.length ? (
+              <List>
+                {debtors.map((debtor) => (
+                  <ListItem
+                    key={debtor.id}
+                    secondaryAction={
+                      <Stack direction="row" spacing={1}>
+                        <IconButton onClick={() => openDialog("debtor", debtor)} size="small">
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton edge="end" color="error" onClick={() => delDebtor(debtor.id)} size="small">
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
                       </Stack>
                     }
-                    secondary={`Status: ${debtor.status ?? "-"}`}
-                  />
-                </ListItem>
-              ))}
-              {debtors.length === 0 && (
-                <ListItem>
-                  <ListItemText primary={<Typography color="text.secondary">Nenhuma pessoa cadastrada ainda.</Typography>} />
-                </ListItem>
-              )}
-            </List>
+                  >
+                    <ListItemText
+                      primary={
+                        <Stack direction="row" spacing={1} alignItems="center">
+                          <Typography fontWeight={600}>{debtor.name}</Typography>
+                          <Chip label={debtor.active ? "Ativo" : "Inativo"} size="small" color={debtor.active ? "success" : "default"} variant="outlined" />
+                        </Stack>
+                      }
+                      secondary={`Status: ${debtor.status ?? "-"}`}
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            ) : (
+              <EmptyState
+                title="Nenhum devedor cadastrado"
+                description="Cadastre as pessoas com quem compartilha despesas."
+                ctaLabel="Adicionar pessoa"
+                onCtaClick={focusDebtorForm}
+              />
+            )}
+          </Stack>
+        </Section>
+      </Grid>
+
+      <Grid item xs={12}>
+        <Section title="Categorias" subtitle="Personalize as categorias usadas nos lançamentos e edições em massa.">
+          <Stack spacing={3}>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+              <TextField
+                label="Nome da categoria"
+                placeholder="Ex.: Saúde"
+                fullWidth
+                value={categoryName}
+                onChange={handleCategoryChange}
+                inputRef={categoryNameRef}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    handleAddCategory();
+                  }
+                }}
+              />
+              <Button variant="outlined" onClick={handleAddCategory} sx={{ minWidth: 200 }}>
+                Cadastrar categoria
+              </Button>
+            </Stack>
+            {categories?.length ? (
+              <Stack direction="row" spacing={1} flexWrap="wrap">
+                {categories.map((category) => (
+                  <Chip key={category} label={category} variant="outlined" />
+                ))}
+              </Stack>
+            ) : (
+              <EmptyState
+                title="Nenhuma categoria disponível"
+                description="As categorias cadastradas serão exibidas aqui."
+                ctaLabel="Adicionar categoria"
+                onCtaClick={focusCategoryForm}
+              />
+            )}
           </Stack>
         </Section>
       </Grid>
@@ -419,12 +498,6 @@ export default function Cadastros({
           </Button>
         </DialogActions>
       </Dialog>
-
-      <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={closeSnackbar} anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
-        <Alert severity={snackbar.severity} variant="filled" onClose={closeSnackbar}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
     </Grid>
   );
 }

@@ -1,15 +1,17 @@
-import { connect, type ConfirmChannel, type Connection } from 'amqplib';
+import { connect, type ConfirmChannel } from 'amqplib';
 import crypto from 'crypto';
 
 const RABBIT_URL =
   process.env.RABBIT_URL || 'amqps://USER:PASSWORD@gorilla.lmq.cloudamqp.com/nokwohlm';
 
+type RabbitConnection = Awaited<ReturnType<typeof connect>>;
+
 type RabbitContext = {
-  connection: Connection;
+  connection: RabbitConnection;
   channel: ConfirmChannel;
 };
 
-let sharedConnection: Connection | null = null;
+let sharedConnection: RabbitConnection | null = null;
 let sharedChannel: ConfirmChannel | null = null;
 const consumerContexts = new Map<string, RabbitContext>();
 
@@ -20,10 +22,7 @@ const logConnected = () => {
   console.log('[Rabbit] Connected and queue ready');
 };
 
-const attachConnectionHandlers = (
-  connection: Connection,
-  onClose: () => void
-) => {
+const attachConnectionHandlers = (connection: RabbitConnection, onClose: () => void) => {
   connection.on('error', (error: unknown) => {
     console.error('[Rabbit] connection error', formatError(error));
   });
@@ -46,27 +45,29 @@ const attachChannelHandlers = (
   });
 };
 
-const ensureSharedConnection = async (): Promise<Connection> => {
+const ensureSharedConnection = async (): Promise<RabbitConnection> => {
   if (sharedConnection) return sharedConnection;
-  sharedConnection = await connect(RABBIT_URL);
-  attachConnectionHandlers(sharedConnection, () => {
+  const connection = await connect(RABBIT_URL);
+  sharedConnection = connection;
+  attachConnectionHandlers(connection, () => {
     sharedConnection = null;
     sharedChannel = null;
   });
-  return sharedConnection;
+  return connection;
 };
 
 const ensureSharedChannel = async (): Promise<ConfirmChannel> => {
   if (sharedChannel) return sharedChannel;
   const connection = await ensureSharedConnection();
-  sharedChannel = await connection.createConfirmChannel();
-  attachChannelHandlers(sharedChannel, () => {
+  const channel = await connection.createConfirmChannel();
+  sharedChannel = channel;
+  attachChannelHandlers(channel, () => {
     sharedChannel = null;
   });
-  await sharedChannel.assertQueue('recurring-jobs', { durable: true });
-  await sharedChannel.assertQueue('bulkUpdateQueue', { durable: true });
+  await channel.assertQueue('recurring-jobs', { durable: true });
+  await channel.assertQueue('bulkUpdateQueue', { durable: true });
   logConnected();
-  return sharedChannel;
+  return channel;
 };
 
 async function openContext(options: {

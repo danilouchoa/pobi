@@ -9,6 +9,8 @@ const QUEUE_NAME = 'bulkUpdateQueue';
 const PREFETCH = 5;
 const MAX_ATTEMPTS = 3;
 
+const buildEmptySummary = () => ({ processed: 0, updated: 0, failed: 0 });
+
 type StoredJobPayload = {
   expenseIds: string[];
   data: BulkUpdateData;
@@ -95,7 +97,21 @@ async function startBulkWorker() {
       }
 
       const payload = job.payload as StoredJobPayload | null;
-      const expenseIds = payload?.expenseIds ?? [];
+      if (!payload?.data) {
+        await prisma.job.update({
+          where: { id: jobId },
+          data: {
+            status: 'failed',
+            finishedAt: new Date(),
+            error: 'Job sem payload para processar.',
+            resultSummary: buildEmptySummary(),
+          },
+        });
+        ack();
+        return;
+      }
+
+      const expenseIds = Array.isArray(payload.expenseIds) ? payload.expenseIds : [];
       if (!expenseIds.length) {
         await prisma.job.update({
           where: { id: jobId },
@@ -103,7 +119,22 @@ async function startBulkWorker() {
             status: 'failed',
             finishedAt: new Date(),
             error: 'Job sem despesas para processar.',
-            resultSummary: { processed: 0, updated: 0, failed: 0 },
+            resultSummary: buildEmptySummary(),
+          },
+        });
+        ack();
+        return;
+      }
+
+      const userId = job.userId;
+      if (!userId) {
+        await prisma.job.update({
+          where: { id: jobId },
+          data: {
+            status: 'failed',
+            finishedAt: new Date(),
+            error: 'Job sem usuário associado.',
+            resultSummary: buildEmptySummary(),
           },
         });
         ack();
@@ -123,7 +154,7 @@ async function startBulkWorker() {
 
       const result = await applyBulkUpdate(prisma, {
         jobId,
-        userId: job.userId,
+        userId,
         expenseIds,
         payload: payload.data,
       });
@@ -163,7 +194,7 @@ async function startBulkWorker() {
             status: 'failed',
             finishedAt: new Date(),
             error: formatError(error),
-            resultSummary: job.resultSummary ?? { processed: 0, updated: 0, failed: 0 },
+            resultSummary: job.resultSummary ?? buildEmptySummary(),
           },
         });
         drop();

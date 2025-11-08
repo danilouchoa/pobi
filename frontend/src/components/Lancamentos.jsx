@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import {
   Grid,
   TextField,
@@ -21,7 +21,6 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Snackbar,
   Alert,
   CircularProgress,
   LinearProgress,
@@ -40,18 +39,8 @@ import HandshakeIcon from "@mui/icons-material/Handshake";
 import { AnimatePresence, motion } from "framer-motion";
 import ExpenseBulkModal from "./ExpenseBulkModal";
 import { useExpenses } from "../hooks/useExpenses";
-
-const CATEGORIES = [
-  "Impostos e encargos",
-  "Moradia",
-  "Comunicação e Internet",
-  "Compras / E-commerce",
-  "Lazer / Viagem",
-  "Finanças pessoais",
-  "Serviços / Assinaturas",
-  "Educação / Cursos",
-  "Outros",
-];
+import { useToast } from "../ui/feedback";
+import EmptyState from "./ui/EmptyState";
 
 export default function Lancamentos({
   state,
@@ -64,7 +53,13 @@ export default function Lancamentos({
   createRecurringExpense,
   fetchRecurringExpenses,
   fetchSharedExpenses,
+  categories,
 }) {
+  const resolvedCategories = useMemo(
+    () => (categories && categories.length ? categories : ["Outros"]),
+    [categories]
+  );
+  const defaultCategory = resolvedCategories[0] ?? "Outros";
   const originById = useMemo(
     () => Object.fromEntries(state.origins.map((origin) => [origin.id, origin])),
     [state.origins]
@@ -82,6 +77,15 @@ export default function Lancamentos({
     pagination,
     bulkUpdate,
   } = useExpenses(month, { enabled: true, mode: "calendar", page, limit });
+  const toast = useToast();
+  const createSectionRef = useRef(null);
+  const descriptionInputRef = useRef(null);
+  const focusCreateForm = useCallback(() => {
+    createSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (descriptionInputRef.current) {
+      descriptionInputRef.current.focus();
+    }
+  }, []);
   const previousMonthRef = useRef(month);
   const paginatedExpenses = paginatedQuery.data?.data ?? [];
   const isPageLoading = paginatedQuery.isLoading;
@@ -104,7 +108,7 @@ export default function Lancamentos({
     date: todayISO(),
     description: "",
     originId: state.origins[0]?.id || "",
-    category: "Outros",
+    category: defaultCategory,
     isInstallment: false,
     installments: "",
     debtorId: "",
@@ -124,7 +128,7 @@ export default function Lancamentos({
     description: "",
     amount: "",
     date: todayISO(),
-    category: "Outros",
+    category: defaultCategory,
     originId: "",
     debtorId: "",
     parcela: "Único",
@@ -136,7 +140,6 @@ export default function Lancamentos({
     sharedAmount: "",
     incrementMonth: false,
   });
-  const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
   const [filterType, setFilterType] = useState("all");
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
@@ -149,6 +152,24 @@ export default function Lancamentos({
       setForm((current) => ({ ...current, originId: state.origins[0].id }));
     }
   }, [state.origins, form.originId]);
+
+  useEffect(() => {
+    setForm((current) => {
+      if (!current.category || resolvedCategories.includes(current.category)) {
+        return current;
+      }
+      return { ...current, category: defaultCategory };
+    });
+  }, [resolvedCategories, defaultCategory]);
+
+  useEffect(() => {
+    setDialogValues((current) => {
+      if (!current.category || resolvedCategories.includes(current.category)) {
+        return current;
+      }
+      return { ...current, category: defaultCategory };
+    });
+  }, [resolvedCategories, defaultCategory]);
 
   useEffect(() => {
     setPage(1);
@@ -169,13 +190,16 @@ export default function Lancamentos({
   const handleAddExpense = async () => {
     const totalAmount = parseNum(form.amount);
     const description = form.description.trim();
-    if (!description || !form.originId || totalAmount <= 0) return;
+    if (!description || !form.originId || totalAmount <= 0) {
+      toast.warning("Informe descrição, origem e valor válidos.");
+      return;
+    }
 
     const payloads = [];
     if (form.sharedEnabled) {
       const sharedValue = parseNum(form.sharedAmount);
       if (!form.sharedWith.trim() || sharedValue <= 0 || sharedValue > totalAmount) {
-        alert("Dados de divisão compartilhada inválidos.");
+        toast.warning("Dados de divisão compartilhada inválidos.");
         return;
       }
     }
@@ -215,8 +239,8 @@ export default function Lancamentos({
       payloads.push(basePayload);
     }
 
+    setSubmitting(true);
     try {
-      setSubmitting(true);
       for (const payload of payloads) {
         if (payload.recurring || payload.fixed) {
           await createRecurringExpense(payload);
@@ -237,9 +261,9 @@ export default function Lancamentos({
         sharedWith: "",
         sharedAmount: "",
       }));
+      toast.success();
     } catch (error) {
-      console.error("Erro ao salvar lançamento:", error);
-      alert("Não foi possível salvar o lançamento. Tente novamente.");
+      toast.error(error);
     } finally {
       setSubmitting(false);
     }
@@ -249,9 +273,9 @@ export default function Lancamentos({
     if (!window.confirm("Deseja excluir este lançamento?")) return;
     try {
       await deleteExpense(id);
+      toast.success();
     } catch (error) {
-      console.error("Erro ao excluir lançamento:", error);
-      alert("Não foi possível excluir o lançamento.");
+      toast.error(error);
     }
   };
 
@@ -259,13 +283,12 @@ export default function Lancamentos({
     try {
       setActionId(expense.id);
       await duplicateExpense(expense.id, { incrementMonth: true });
-      setSnackbar({ open: true, message: "Lançamento duplicado!", severity: "success" });
+      toast.success();
       if (expense.recurring) {
-        setSnackbar({ open: true, message: "Despesa recorrente duplicada para o próximo período!", severity: "success" });
+        toast.info("Despesa recorrente duplicada para o próximo período.");
       }
     } catch (error) {
-      console.error("Erro ao duplicar lançamento:", error);
-      setSnackbar({ open: true, message: "Erro ao duplicar lançamento.", severity: "error" });
+      toast.error(error);
     } finally {
       setActionId(null);
     }
@@ -305,19 +328,19 @@ export default function Lancamentos({
 
   const handleAdjust = async () => {
     if (!editingExpense) return;
+    const amountNumber = parseNum(dialogValues.amount);
+    if (Number.isNaN(amountNumber) || amountNumber <= 0) {
+      toast.warning("Informe um valor válido para o lançamento.");
+      return;
+    }
+    const sharedAmountNumber = dialogValues.sharedEnabled ? parseNum(dialogValues.sharedAmount) : null;
+    if (dialogValues.sharedEnabled && (sharedAmountNumber <= 0 || sharedAmountNumber > amountNumber)) {
+      toast.warning("Valor compartilhado inválido.");
+      return;
+    }
+    const parcelaValue = dialogValues.isInstallment ? dialogValues.parcela || "1/1" : "Único";
+    setDialogLoading(true);
     try {
-      setDialogLoading(true);
-      const amountNumber = parseNum(dialogValues.amount);
-      if (Number.isNaN(amountNumber) || amountNumber <= 0) {
-        throw new Error("Valor inválido.");
-      }
-      const sharedAmountNumber = dialogValues.sharedEnabled ? parseNum(dialogValues.sharedAmount) : null;
-      if (dialogValues.sharedEnabled && (sharedAmountNumber <= 0 || sharedAmountNumber > amountNumber)) {
-        throw new Error("Valor compartilhado inválido.");
-      }
-      const parcelaValue = dialogValues.isInstallment
-        ? dialogValues.parcela || "1/1"
-        : "Único";
       await adjustExpense(editingExpense.id, {
         description: dialogValues.description,
         amount: amountNumber,
@@ -333,12 +356,11 @@ export default function Lancamentos({
         sharedAmount: dialogValues.sharedEnabled ? sharedAmountNumber : null,
         incrementMonth: dialogValues.incrementMonth,
       });
-      setSnackbar({ open: true, message: "Lançamento atualizado!", severity: "success" });
+      toast.success();
       setDialogOpen(false);
       setEditingExpense(null);
     } catch (error) {
-      console.error("Erro ao ajustar lançamento:", error);
-      setSnackbar({ open: true, message: "Erro ao salvar alterações.", severity: "error" });
+      toast.error(error);
     } finally {
       setDialogLoading(false);
     }
@@ -349,7 +371,6 @@ export default function Lancamentos({
     setEditingExpense(null);
   };
 
-  const closeSnackbar = () => setSnackbar((prev) => ({ ...prev, open: false }));
   const handleCalendarChange = (event) => setCalendarValue(event.target.value);
   const handleCalendarSave = () => {
     if (!calendarValue || !/^\d{4}-\d{2}$/.test(calendarValue)) return;
@@ -401,17 +422,19 @@ export default function Lancamentos({
     if (!selectedIds.size) return;
     setBulkSubmitting(true);
     try {
-      const result = await bulkUpdate({ expenseIds: Array.from(selectedIds), data: values });
-      setSnackbar({
-        open: true,
-        message: `Edição em massa agendada (job ${result.jobId})!`,
-        severity: "success",
+      const result = await bulkUpdate({ 
+        filters: { expenseIds: Array.from(selectedIds) }, 
+        data: values,
+        options: { mode: 'calendar', invalidate: true }
       });
+      toast.success();
+      if (result?.jobId) {
+        toast.info(`Job ${result.jobId} agendado para processamento.`);
+      }
       setSelectedIds(new Set());
       setBulkModalOpen(false);
     } catch (error) {
-      console.error("Erro ao enviar edição em massa:", error);
-      setSnackbar({ open: true, message: "Falha ao agendar edição em massa.", severity: "error" });
+      toast.error(error);
     } finally {
       setBulkSubmitting(false);
     }
@@ -427,21 +450,28 @@ export default function Lancamentos({
 
   return (
     <Stack spacing={3}>
-      <Section
-        title="Adicionar Lançamento"
-        subtitle="Cadastre novos lançamentos financeiros com opção de parcelamento."
-        right={
-          <Button variant="contained" color="secondary" onClick={handleAddExpense} disabled={submitting || state.origins.length === 0}>
-            {submitting ? "Salvando..." : "Adicionar lançamento"}
-          </Button>
-        }
-      >
+      <div ref={createSectionRef}>
+        <Section
+          title="Adicionar Lançamento"
+          subtitle="Cadastre novos lançamentos financeiros com opção de parcelamento."
+          right={
+            <Button variant="contained" color="secondary" onClick={handleAddExpense} disabled={submitting || state.origins.length === 0}>
+              {submitting ? "Salvando..." : "Adicionar lançamento"}
+            </Button>
+          }
+        >
         <Grid container spacing={2}>
           <Grid item xs={12} md={3}>
             <TextField label="Data" type="date" fullWidth value={form.date} onChange={handleChange("date")} InputLabelProps={{ shrink: true }} />
           </Grid>
           <Grid item xs={12} md={5}>
-            <TextField label="Descrição" fullWidth value={form.description} onChange={handleChange("description")} />
+            <TextField
+              label="Descrição"
+              fullWidth
+              value={form.description}
+              onChange={handleChange("description")}
+              inputRef={descriptionInputRef}
+            />
           </Grid>
           <Grid item xs={12} md={4}>
             <TextField select label="Origem" fullWidth value={form.originId} onChange={handleChange("originId")} disabled={state.origins.length === 0}>
@@ -454,7 +484,7 @@ export default function Lancamentos({
           </Grid>
           <Grid item xs={12} md={4}>
             <TextField select label="Categoria" fullWidth value={form.category} onChange={handleChange("category")}>
-              {CATEGORIES.map((category) => (
+              {resolvedCategories.map((category) => (
                 <MenuItem key={category} value={category}>
                   {category}
                 </MenuItem>
@@ -523,7 +553,8 @@ export default function Lancamentos({
             </Grid>
           )}
         </Grid>
-      </Section>
+        </Section>
+      </div>
 
       <Section
         title="Lançamentos do Mês"
@@ -680,9 +711,12 @@ export default function Lancamentos({
               {!isPageLoading && filteredExpenses.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={10}>
-                    <Typography align="center" color="text.secondary">
-                      Sem lançamentos registrados para este mês.
-                    </Typography>
+                    <EmptyState
+                      title="Nenhum lançamento encontrado"
+                      description="Os lançamentos que você criar aparecerão aqui."
+                      ctaLabel="Adicionar novo"
+                      onCtaClick={focusCreateForm}
+                    />
                   </TableCell>
                 </TableRow>
               )}
@@ -736,7 +770,7 @@ export default function Lancamentos({
             </Grid>
             <Grid item xs={12} md={6}>
               <TextField select label="Categoria" value={dialogValues.category} onChange={handleDialogChange("category")} fullWidth>
-                {CATEGORIES.map((category) => (
+                {resolvedCategories.map((category) => (
                   <MenuItem key={category} value={category}>
                     {category}
                   </MenuItem>
@@ -856,14 +890,9 @@ export default function Lancamentos({
         onClose={() => !bulkSubmitting && setBulkModalOpen(false)}
         onSubmit={handleBulkSubmit}
         origins={state.origins}
-        categories={CATEGORIES}
+        categories={resolvedCategories}
       />
 
-      <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={closeSnackbar} anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
-        <Alert severity={snackbar.severity} variant="filled" onClose={closeSnackbar}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
     </Stack>
   );
 }

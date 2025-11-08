@@ -8,6 +8,7 @@ export const bulkUpdateDataSchema = z
     fixed: z.boolean().optional(),
     recurring: z.boolean().optional(),
     recurrenceType: recurrenceSchema.nullable().optional(),
+    originId: z.string().min(1).nullable().optional(),
   })
   .refine((payload) => Object.keys(payload).length > 0, {
     message: 'Informe pelo menos um campo para atualização.',

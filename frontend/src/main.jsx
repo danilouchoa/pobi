@@ -7,6 +7,7 @@ import "./index.css";
 import App from "./App.jsx";
 import { AuthProvider } from "./context/AuthProvider.jsx";
 import theme from "./theme";
+import { FeedbackProvider } from "./ui/feedback";
 
 const queryClient = new QueryClient();
 const isDev = import.meta.env.DEV;
@@ -14,12 +15,14 @@ const isDev = import.meta.env.DEV;
 createRoot(document.getElementById("root")).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider theme={theme}>
-        <CssBaseline />
-        <AuthProvider>
-          <App />
-        </AuthProvider>
-      </ThemeProvider>
+      <FeedbackProvider>
+        <ThemeProvider theme={theme}>
+          <CssBaseline />
+          <AuthProvider>
+            <App />
+          </AuthProvider>
+        </ThemeProvider>
+      </FeedbackProvider>
       {isDev ? <ReactQueryDevtools initialIsOpen={false} /> : null}
     </QueryClientProvider>
   </StrictMode>

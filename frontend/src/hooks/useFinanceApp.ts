@@ -5,6 +5,7 @@ import { useSalary } from "./useSalary";
 import { readLS, saveLS, parseNum } from "../utils/helpers";
 import { useAuth } from "../context/AuthProvider";
 import { ExpensePayload, OriginPayload, DebtorPayload } from "../types";
+import { useCategories } from "./useCategories";
 
 const MONTH_STORAGE_KEY = "pf-month";
 
@@ -40,6 +41,7 @@ export function useFinanceApp() {
   });
   const catalogs = useCatalogs({ enabled: isEnabled });
   const salary = useSalary(month, { enabled: isEnabled });
+  const { categories, addCategory } = useCategories();
 
   const state = useMemo(
     () => ({
@@ -49,6 +51,7 @@ export function useFinanceApp() {
       salaryHistory: salary.recordsMap ?? {},
       recurringExpenses: expenses.recurringQuery.data ?? [],
       sharedExpenses: expenses.sharedQuery.data ?? [],
+      categories,
     }),
     [
       expenses.expensesQuery.data,
@@ -57,6 +60,7 @@ export function useFinanceApp() {
       salary.recordsMap,
       expenses.recurringQuery.data,
       expenses.sharedQuery.data,
+      categories,
     ]
   );
 
@@ -217,5 +221,7 @@ export function useFinanceApp() {
     createRecurringExpense,
     fetchRecurringExpenses: expenses.fetchRecurringExpenses,
     fetchSharedExpenses: expenses.fetchSharedExpenses,
+    categories,
+    addCategory,
   };
 }
