@@ -93,6 +93,16 @@ export default function Lancamentos({
     amount: "",
     date: todayISO(),
     category: "Outros",
+    originId: "",
+    debtorId: "",
+    parcela: "Único",
+    isInstallment: false,
+    expenseType: "normal",
+    recurrenceType: "monthly",
+    sharedEnabled: false,
+    sharedWith: "",
+    sharedAmount: "",
+    incrementMonth: false,
   });
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
   const [filterType, setFilterType] = useState("all");
@@ -228,29 +238,66 @@ export default function Lancamentos({
   };
 
   const openEditDialog = (expense) => {
+    const expenseType = expense.recurring ? "recurring" : expense.fixed ? "fixed" : "normal";
     setEditingExpense(expense);
     setDialogValues({
-      description: expense.description,
-      amount: String(expense.amount),
-      date: expense.date,
-      category: expense.category,
+      description: expense.description ?? "",
+      amount: String(expense.amount ?? ""),
+      date: (expense.date ?? "").slice(0, 10),
+      category: expense.category ?? "Outros",
+      originId: expense.originId || "",
+      debtorId: expense.debtorId || "",
+      parcela: expense.parcela || "Único",
+      expenseType,
+      isInstallment: Boolean(expense.parcela && expense.parcela !== "Único"),
+      recurrenceType: expense.recurrenceType || "monthly",
+      sharedEnabled: Boolean(expense.sharedWith),
+      sharedWith: expense.sharedWith || "",
+      sharedAmount: expense.sharedAmount != null ? String(expense.sharedAmount) : "",
+      incrementMonth: Boolean(expense.incrementMonth),
     });
     setDialogOpen(true);
   };
 
   const handleDialogChange = (field) => (event) => {
-    setDialogValues((current) => ({ ...current, [field]: event.target.value }));
+    const value = event.target.type === "checkbox" ? event.target.checked : event.target.value;
+    setDialogValues((current) => ({
+      ...current,
+      [field]: value,
+      ...(field === "expenseType" && value !== "recurring" ? { recurrenceType: "monthly" } : null),
+      ...(field === "sharedEnabled" && !value ? { sharedWith: "", sharedAmount: "" } : null),
+    }));
   };
 
   const handleAdjust = async () => {
     if (!editingExpense) return;
     try {
       setDialogLoading(true);
+      const amountNumber = parseNum(dialogValues.amount);
+      if (Number.isNaN(amountNumber) || amountNumber <= 0) {
+        throw new Error("Valor inválido.");
+      }
+      const sharedAmountNumber = dialogValues.sharedEnabled ? parseNum(dialogValues.sharedAmount) : null;
+      if (dialogValues.sharedEnabled && (sharedAmountNumber <= 0 || sharedAmountNumber > amountNumber)) {
+        throw new Error("Valor compartilhado inválido.");
+      }
+      const parcelaValue = dialogValues.isInstallment
+        ? dialogValues.parcela || "1/1"
+        : "Único";
       await adjustExpense(editingExpense.id, {
         description: dialogValues.description,
-        amount: Number(dialogValues.amount),
+        amount: amountNumber,
         date: dialogValues.date,
         category: dialogValues.category,
+        originId: dialogValues.originId || null,
+        debtorId: dialogValues.debtorId || null,
+        parcela: parcelaValue,
+        recurring: dialogValues.expenseType === "recurring",
+        recurrenceType: dialogValues.expenseType === "recurring" ? dialogValues.recurrenceType : null,
+        fixed: dialogValues.expenseType === "fixed",
+        sharedWith: dialogValues.sharedEnabled ? dialogValues.sharedWith : null,
+        sharedAmount: dialogValues.sharedEnabled ? sharedAmountNumber : null,
+        incrementMonth: dialogValues.incrementMonth,
       });
       setSnackbar({ open: true, message: "Lançamento atualizado!", severity: "success" });
       setDialogOpen(false);
@@ -483,21 +530,110 @@ export default function Lancamentos({
         </TableContainer>
       </Section>
 
-      <Dialog open={dialogOpen} onClose={closeDialog} fullWidth maxWidth="sm">
+      <Dialog open={dialogOpen} onClose={closeDialog} fullWidth maxWidth="md">
         <DialogTitle>Editar lançamento</DialogTitle>
         <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            <TextField label="Descrição" value={dialogValues.description} onChange={handleDialogChange("description")} fullWidth />
-            <TextField label="Valor (R$)" value={dialogValues.amount} onChange={handleDialogChange("amount")} fullWidth inputProps={{ inputMode: "decimal" }} />
-            <TextField label="Data" type="date" value={dialogValues.date} onChange={handleDialogChange("date")} InputLabelProps={{ shrink: true }} fullWidth />
-            <TextField select label="Categoria" value={dialogValues.category} onChange={handleDialogChange("category")} fullWidth>
-              {CATEGORIES.map((category) => (
-                <MenuItem key={category} value={category}>
-                  {category}
-                </MenuItem>
-              ))}
-            </TextField>
-          </Stack>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12}>
+              <TextField label="Descrição" value={dialogValues.description} onChange={handleDialogChange("description")} fullWidth />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField label="Valor (R$)" value={dialogValues.amount} onChange={handleDialogChange("amount")} fullWidth type="number" inputProps={{ step: "0.01" }} />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField label="Data" type="date" value={dialogValues.date} onChange={handleDialogChange("date")} InputLabelProps={{ shrink: true }} fullWidth />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField select label="Categoria" value={dialogValues.category} onChange={handleDialogChange("category")} fullWidth>
+                {CATEGORIES.map((category) => (
+                  <MenuItem key={category} value={category}>
+                    {category}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField select label="Origem" value={dialogValues.originId} onChange={handleDialogChange("originId")} fullWidth>
+                <MenuItem value="">Selecionar origem</MenuItem>
+                {state.origins.map((origin) => (
+                  <MenuItem key={origin.id} value={origin.id}>
+                    {origin.name}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField select label="Devedor" value={dialogValues.debtorId} onChange={handleDialogChange("debtorId")} fullWidth>
+                <MenuItem value="">Minha despesa</MenuItem>
+                {state.debtors.map((debtor) => (
+                  <MenuItem key={debtor.id} value={debtor.id}>
+                    {debtor.name}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <FormControlLabel
+                control={<Checkbox checked={dialogValues.isInstallment} onChange={handleDialogChange("isInstallment")} />}
+                label="Lançamento parcelado?"
+              />
+            </Grid>
+            {dialogValues.isInstallment && (
+              <Grid item xs={12} md={6}>
+                <TextField
+                  label="Parcela (ex: 1/7)"
+                  value={dialogValues.parcela}
+                  onChange={handleDialogChange("parcela")}
+                  fullWidth
+                />
+              </Grid>
+            )}
+            <Grid item xs={12} md={6}>
+              <TextField select label="Tipo de despesa" fullWidth value={dialogValues.expenseType} onChange={handleDialogChange("expenseType")}>
+                <MenuItem value="normal">Normal</MenuItem>
+                <MenuItem value="recurring">Recorrente</MenuItem>
+                <MenuItem value="fixed">Fixa</MenuItem>
+              </TextField>
+            </Grid>
+            {dialogValues.expenseType === "recurring" && (
+              <Grid item xs={12} md={6}>
+                <TextField select label="Recorrência" fullWidth value={dialogValues.recurrenceType} onChange={handleDialogChange("recurrenceType")}>
+                  <MenuItem value="monthly">Mensal</MenuItem>
+                  <MenuItem value="weekly">Semanal</MenuItem>
+                  <MenuItem value="yearly">Anual</MenuItem>
+                </TextField>
+              </Grid>
+            )}
+            <Grid item xs={12}>
+              <FormControlLabel
+                control={<Checkbox checked={dialogValues.sharedEnabled} onChange={handleDialogChange("sharedEnabled")} />}
+                label="Dividir pagamento com outra pessoa?"
+              />
+            </Grid>
+            {dialogValues.sharedEnabled && (
+              <>
+                <Grid item xs={12} md={6}>
+                  <TextField label="Nome da pessoa" fullWidth value={dialogValues.sharedWith} onChange={handleDialogChange("sharedWith")} />
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <TextField
+                    label="Valor dividido (R$)"
+                    fullWidth
+                    type="number"
+                    value={dialogValues.sharedAmount}
+                    onChange={handleDialogChange("sharedAmount")}
+                    inputProps={{ step: "0.01" }}
+                  />
+                </Grid>
+              </>
+            )}
+            <Grid item xs={12}>
+              <FormControlLabel
+                control={<Checkbox checked={dialogValues.incrementMonth} onChange={handleDialogChange("incrementMonth")} />}
+                label="Incrementar mês automaticamente"
+              />
+            </Grid>
+          </Grid>
         </DialogContent>
         <DialogActions>
           <Button onClick={closeDialog}>Cancelar</Button>
