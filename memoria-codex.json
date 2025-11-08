@@ -2,211 +2,248 @@
   "codex_memory": {
     "project": "Finance App Project",
     "version": "v5.7 (Análise de Segurança e Resiliência Integrada)",
-    "description": "Fullstack personal finance manager (React + Express + Prisma + MongoDB + RabbitMQ). Foco em robustez, segurança e modularização.",
+    "description": "Aplicação fullstack de controle financeiro (React + Express + Prisma + MongoDB + RabbitMQ + Upstash Redis), com foco em modularização, segurança e resiliência.",
     "milestones": [
-      {
-        "id": 0,
-        "tag": "[BUG] Fatura de Cartão (closingDay + dia útil + billingMonth)",
-        "status": "🟡 Planejado (NOVO)",
-        "summary": "Corrigir classificação de despesas de cartões para a fatura correta com base no dia de fechamento e ajuste para próximo dia útil, adicionando campo billingMonth e suporte de filtro por fatura.",
-        "notes": [
-          "Schema: Origin.closingDay (Int), Origin.billingRolloverPolicy (enum: NEXT_BUSINESS_DAY|PREVIOUS_BUSINESS_DAY), Expense.billingMonth (YYYY-MM) + índice.",
-          "Backend: deriveBillingMonth(txDate, closingDay, policy) e adjustToBusinessDay(); preencher billingMonth em todas mutações de despesas de cartão.",
-          "API: GET /api/expenses aceita mode=billing para filtrar por billingMonth; mode=calendar mantém comportamento atual.",
-          "Redis: chaves de cache por billingMonth para cartões; invalidar nas mutações.",
-          "Frontend: adicionar suporte a mode=billing nas telas de despesas/cartões; exibir billingMonth no payload.",
-          "Backfill: script para calcular billingMonth retroativamente para despesas existentes de cartões."
-        ]
-      }
-      ,
-      {
-        "id": 1,
-        "tag": "[BUG] Replicação e idempotência",
-        "status": "🟢 Resolvido",
-        "notes": "Index de fingerprint único criado. Script backfill ajustado com geração via generateFingerprint()."
-      },
-      {
-        "id": 2,
-        "tag": "[DB] Float → String precision",
-        "status": "🟢 Concluído",
-        "notes": "Campos amount/sharedAmount/limit migrados para String com coerção em helpers."
-      },
-      {
-        "id": 3,
-        "tag": "[API] Security & Config ENV",
-        "status": "🟢 Concluído",
-        "summary": "Adicionados Helmet, CORS dinâmico e validação de ENVs com Zod.",
-        "notes": [
-          "Criado backend/src/config.ts com validação Zod para PORT, DATABASE_URL, JWT_SECRET, RABBIT_URL e CORS_ORIGIN.",
-          "Atualizado backend/src/index.ts para usar config.ts, aplicar helmet() e CORS dinâmico.",
-          "Adicionadas dependências helmet, zod e @types/helmet no backend/package.json.",
-          "Servidor agora falha no boot se variáveis obrigatórias estiverem ausentes, garantindo segurança e previsibilidade."
-        ]
-      },
-      {
-        "id": 4,
-        "tag": "[Worker] RabbitMQ Robustness",
-        "status": "🟢 Concluído",
-        "notes": "Reconexão com backoff, prefetch(10), ConfirmChannel e graceful shutdown (SIGINT/SIGTERM)."
-      },
-      {
-        "id": 5,
-        "tag": "[API] Índices e filtros UTC",
-        "status": "🟢 Implementado",
-        "notes": "Expense model agora com @@index([userId, date]); consultas ajustadas para monthStart/monthEnd com Date.UTC."
-      },
-      {
-        "id": 6,
-        "tag": "[FE] MUI Only Theme",
-        "status": "🟢 Implementado",
-        "notes": "Removendo classes Tailwind remanescentes, consolidando ThemeProvider centralizado (palette + typography)."
-      },
-      {
-        "id": 7,
-        "tag": "[FE] Hooks Tipados + Query Cache",
-        "status": "🟢 Concluído",
-        "summary": "Refatoração do hook global 'useFinanceApp' em hooks modulares com TanStack Query e camada de API dedicada.",
-        "notes": [
-          "Criada camada de serviço REST com Axios (`src/services/api.ts`) incluindo interceptors, baseURL dinâmica e suporte a credenciais.",
-          "Implementados serviços específicos: `expenseService.ts`, `catalogService.ts`, `salaryService.ts`, com funções CRUD e tipagem forte (ExpensePayload, SalaryPayload etc.).",
-          "Adotado TanStack Query v5 para cache, refetch e invalidação, integrando com `useQuery`, `useMutation` e `useQueryClient`.",
-          "Centralizadas Query Keys em `src/lib/queryKeys.ts`, com namespaces (`expensesKeys`, `catalogKeys`, `salaryKeys`) para evitar magic strings e facilitar invalidations.",
-          "Divisão do antigo hook em três especializados: `useExpenses`, `useCatalogs`, `useSalary`, com mutações e queries isoladas.",
-          "Integrado `QueryClientProvider` no `main.jsx` envolvendo o `App`, fornecendo cache global e controle de reatividade.",
-          "Atualizados componentes para consumir os novos hooks (`App.jsx` e seções de Dashboard, Lançamentos, Salário etc.), substituindo a lógica antiga de LocalStorage.",
-          "Estrutura final: `frontend/src/{lib,services,hooks}` modularizada, pronta para migração completa do estado local para REST API.",
-          "Resultados: cache por mês, revalidação automática, isolamento de responsabilidades e tipagem TypeScript forte entre frontend e backend.",
-          "Próximos passos: substituir chamadas remanescentes de LocalStorage, conectar AuthProvider ao Axios (token JWT), e descontinuar o estado global antigo."
-        ]
-      },
-      {
-        "id": 8,
-        "tag": "[FE/BE] Navegação mensal + Cache Redis + Build Estabilizado",
-        "status": "🟢 Concluído (Validação Final OK)",
-        "summary": "Frontend, backend e worker operando em contêineres Docker com cache híbrido Redis, build multi-stage Prisma estável e jobs de recorrência ativos via RabbitMQ.",
-        "notes": [
-          "Frontend validado com MonthNavigator animado e integração completa ao estado global (TanStack Query + dayjs).",
-          "Backend compilando e rodando com Prisma Client gerado antes do build, corrigindo a inicialização atrasada do @prisma/client.",
-          "Worker em execução contínua, consumindo a fila recurring-jobs e processando corretamente os jobs de despesas recorrentes.",
-          "Redis (Upstash) com cache distribuído ativo e TTL de 1h para endpoints /api/expenses e /api/salaryHistory.",
-          "RabbitMQ conectado e confirmando publicação e processamento de jobs.",
-          "Docker build multi-stage final corrigido: Prisma schema copiado antes do npm ci e client gerado no builder stage, com .prisma e node_modules replicados no runtime.",
-          "Logs de backend e worker confirmam [CACHE MISS] e [CACHE HIT] com chaves finance:expenses:<user>:<month> e execução estável de recurringWorker.js.",
-          "Frontend acessível via http://localhost:4000/api/status e servindo index React sem erros."
-        ],
-        "validation_logs": [
-          "🚀 Backend server pronto e rodando na porta 4000",
-          "[Rabbit] Connected and queue ready",
-          "[Worker] Waiting for jobs in recurring-jobs queue...",
-          "[CACHE MISS] finance:expenses:<user>:2025-11 → stored",
-          "[Worker] Completed: { created: 0, skipped: 41 }"
-        ],
-        "next_steps": [
-          "Iniciar o Milestone 9 ([FE] Toasts & Empty States) para UX e feedback visual de CRUDs.",
-          "Integrar autenticação avançada (Google + Resend MFA) conforme plano adicional.",
-          "Monitorar métricas de cache e fila via dashboards RabbitMQ e Upstash."
-        ]
-      },
       {
         "id": 9,
         "tag": "[FE] Toasts & Empty States",
         "status": "🟡 Planejado",
-        "notes": "Integrar 'notistack' para feedbacks de CRUD (create, update, delete) e placeholders visuais em listas vazias."
-      },
-      {
-        "id": 10,
-        "tag": "[DX] Healthchecks e Docker Prod",
-        "status": "🟡 Planejado",
-        "notes": "Criar 'health:db', 'healthcheck' no 'docker-compose.yml' e otimização multi-stage builds (non-root, npm ci, prune)."
-      },
-      {
-        "id": 11,
-        "tag": "[Security] Validação de Rota (Zod)",
-        "status": "🟡 Planejado (NOVO)",
+        "summary": "Adicionar feedbacks visuais consistentes (sucesso/erro) e placeholders de listas vazias para melhorar a UX em CRUDs.",
         "notes": [
-          "Implementar Zod para validação de 'req.body', 'req.query' e 'req.params' em TODAS as rotas (Sugestão 1.1).",
-          "Criar diretório 'backend/src/schemas/' para centralizar os schemas (ex: 'expense.schema.ts').",
-          "Criar um middleware de validação reutilizável."
-        ]
-      },
-      {
-        "id": 12,
-        "tag": "[Security] Rate Limiting",
-        "status": "🟡 Planejado (NOVO)",
-        "notes": [
-          "Implementar 'express-rate-limit' para proteger contra ataques de força bruta e DoS (Sugestão 1.2).",
-          "Criar um 'authLimiter' estrito (ex: 10 reqs/10 min) para '/api/auth/login' e '/api/auth/register'.",
-          "Criar um 'apiLimiter' geral (ex: 100 reqs/15 min) para as demais rotas '/api/*'."
-        ]
-      },
-      {
-        "id": 13,
-        "tag": "[Security] Auth httpOnly Cookies",
-        "status": "🟡 Planejado (NOVO)",
-        "notes": [
-          "Refatorar a estratégia de autenticação para parar de usar 'localStorage' para o JWT (Sugestão 1.3).",
-          "Backend: Na rota de login, enviar o token via 'res.cookie(..., { httpOnly: true, secure: true, sameSite: 'strict' })'.",
-          "Backend: Criar rota '/api/auth/logout' que limpa o cookie.",
-          "Frontend: Configurar 'axios.defaults.withCredentials = true' no 'api.ts' (Milestone 7)."
-        ]
-      },
-      {
-        "id": 14,
-        "tag": "[Resilience] Dead Letter Queue (DLQ)",
-        "status": "🟡 Planejado (NOVO)",
-        "notes": [
-          "Implementar o padrão Dead Letter Queue no RabbitMQ para tratar mensagens 'envenenadas' (Sugestão 2.1).",
-          "Configurar a fila 'recurring-jobs' com 'deadLetterExchange'.",
-          "Atualizar lógica do 'recurringWorker.ts': usar 'channel.nack(msg, false, false)' em erros permanentes (ex: JSON.parse error) para mover a msg para a DLQ."
-        ]
-      },
-      {
-        "id": 15,
-        "tag": "[Refactor] Service/Repository Layer",
-        "status": "🟡 Planejado (NOVO)",
-        "notes": [
-          "Refatorar o backend para uma arquitetura de 3 camadas (Sugestão 2.2).",
-          "1. 'src/routes/': Apenas validação (Zod) e chamada de serviço.",
-          "2. 'src/services/': Toda a lógica de negócio (cálculos, permissões).",
-          "3. 'src/repositories/': A única camada que importa e usa 'prisma'."
-        ]
-      },
-      {
-        "id": 16,
-        "tag": "[DX] Testes Automatizados",
-        "status": "🟡 Planejado (NOVO)",
-        "notes": [
-          "Introduzir 'vitest' no projeto (Sugestão 4.1).",
-          "Backend: Testes unitários para a camada de 'services' (mockando o repositório) e testes de integração para as rotas (usando 'supertest').",
-          "Frontend: Testes de componentes com React Testing Library (RTL) e testes de hooks."
+          "Implementar notistack com provedores no App; padronizar mensagens por tipo de operação.",
+          "Criar EmptyStates (MUI) com CTA para listas de despesas/catálogos sem dados.",
+          "Mapear códigos/erros do backend em mensagens legíveis.",
+          "Critérios de aceite: toasts em create/update/delete, placeholders exibidos em listas vazias, nenhum console error.",
+          "Riscos: duplicidade de toasts; mitigar com chaves e debounce."
         ]
       },
       {
         "id": 17,
         "tag": "[DX] Storybook",
         "status": "🟡 Planejado (NOVO)",
-        "notes": "Adicionar Storybook ao frontend para desenvolver e documentar componentes de UI (MUI) em isolamento (Sugestão 4.2)."
+        "summary": "Documentar componentes MUI e cenários de UI isolados para acelerar desenvolvimento e QA.",
+        "notes": [
+          "Configurar Storybook com suporte ao tema MUI e mocks de dados.",
+          "Criar stories para MonthNavigator, cards/KPIs e formulários base.",
+          "Adicionar controles (args) e docs automáticas.",
+          "Critérios de aceite: stories executando via npm run storybook sem warnings.",
+          "Riscos: drift com produção; mitigar com stories atômicos e knobs."
+        ]
+      },
+      {
+        "id": 10,
+        "tag": "[DX] Healthchecks e Docker Prod",
+        "status": "🟡 Planejado",
+        "summary": "Aprimorar observabilidade e robustez de execução em contêineres.",
+        "notes": [
+          "Endpoint /api/health e script health:db (ping Mongo).",
+          "Healthcheck no docker-compose para backend/worker.",
+          "Otimizar Dockerfile (non-root opcional, npm ci, prune caches).",
+          "Critérios de aceite: docker compose up estável com health=healthy.",
+          "Riscos: falsos positivos; mitigar com checks que consultem dependências reais."
+        ]
+      },
+      {
+        "id": 11,
+        "tag": "[Security] Validação de Rota (Zod)",
+        "status": "🟡 Planejado (NOVO)",
+        "summary": "Validar entrada de dados (body/query/params) em todas as rotas para reduzir erros e vetores de abuso.",
+        "notes": [
+          "Criar backend/src/schemas/* com Zod por recurso (expense, origin, auth...).",
+          "Middleware genérico de validação com mensagens padronizadas.",
+          "Atualizar rotas para usar schemas antes de services.",
+          "Critérios de aceite: requisições inválidas retornam 400 com detalhes; logs sem stack-trace de validação.",
+          "Riscos: quebra silenciosa; mitigar com smoke tests e feature flags por rota."
+        ]
+      },
+      {
+        "id": 12,
+        "tag": "[Security] Rate Limiting",
+        "status": "🟡 Planejado (NOVO)",
+        "summary": "Proteger endpoints críticos de brute force/DoS com limites por IP/rota.",
+        "notes": [
+          "express-rate-limit: authLimiter (10 req/10min) e apiLimiter (100 req/15min).",
+          "Aplicar cabeçalhos Retry-After e respostas JSON padrão.",
+          "Adicionar métricas simples (contadores) para monitorar hits.",
+          "Critérios de aceite: limites efetivos em /auth/* e /api/*; sem bloqueios falsos em uso normal.",
+          "Riscos: proxies/nat; mitigar com confiança de IPs ou X-Forwarded-For conforme infra."
+        ]
+      },
+      {
+        "id": 16,
+        "tag": "[DX] Testes Automatizados",
+        "status": "🟡 Planejado (NOVO)",
+        "summary": "Cobertura unitária e de integração para áreas críticas e novas regras de fatura.",
+        "notes": [
+          "Backend: Vitest + Supertest para services e rotas (auth, expenses, worker).",
+          "Frontend: RTL para componentes e hooks com QueryClientProvider.",
+          "Cobrir deriveBillingMonth() e adjustToBusinessDay() (fechamento no WE, virada, NEXT/PREVIOUS).",
+          "Critérios de aceite: CI roda com cobertura mínima 80% nas áreas críticas.",
+          "Riscos: flakiness; mitigar com seeds determinísticos e mocks de clock."
+        ]
+      },
+      {
+        "id": 0,
+        "tag": "[BUG] Fatura de Cartão (closingDay + dia útil + billingMonth)",
+        "status": "🟡 Planejado (NOVO)",
+        "summary": "Classificar despesas de cartão pela fatura correta com base no dia de fechamento (ajustado para dia útil), gravando billingMonth.",
+        "notes": [
+          "Schema: Origin.closingDay (Int) e billingRolloverPolicy; Expense.billingMonth (YYYY-MM) + índice.",
+          "Helpers: deriveBillingMonth(txDate, closingDay, policy) e adjustToBusinessDay().",
+          "API: GET /api/expenses suporta mode=billing; mutações preenchem billingMonth quando origin.type='Cartão'.",
+          "Redis: chaves por billingMonth para cartões; invalidar em mutações.",
+          "Backfill: script para preencher billingMonth retroativo.",
+          "Critérios de aceite: lançamento 08/11 no cartão (fech. 09 com WE→segunda) cai em fatura de 12/2025 automaticamente.",
+          "Riscos: cartões sem closingDay; retornar 422 e guiar configuração."
+        ]
+      },
+      {
+        "id": 5,
+        "tag": "[API] Índices e filtros UTC",
+        "status": "🟢 Implementado",
+        "summary": "Normalizar consultas mensais por UTC para evitar desvios de timezone.",
+        "notes": [
+          "@@index([userId, date]) e range por Date.UTC em filtros.",
+          "Critérios de aceite: mesma query retorna os mesmos itens independente de TZ do host.",
+          "Riscos: dados legados com TZ local; mitigado por conversão centralizada."
+        ]
+      },
+      {
+        "id": 6,
+        "tag": "[FE] MUI Only Theme",
+        "status": "🟢 Implementado",
+        "summary": "Unificar design system em MUI e remover resíduos de Tailwind.",
+        "notes": [
+          "ThemeProvider central; paleta/tipografia padronizadas.",
+          "Critérios de aceite: nenhuma classe Tailwind ativa; UI consistente.",
+          "Riscos: regressões visuais; mitigar com verificação manual das principais telas."
+        ]
+      },
+      {
+        "id": 7,
+        "tag": "[FE] Hooks Tipados + Query Cache",
+        "status": "🟢 Concluído",
+        "summary": "Refatorar useFinanceApp em hooks modulares com TanStack Query e serviços REST tipados.",
+        "notes": [
+          "useExpenses/useCatalogs/useSalary + Query Keys centralizadas.",
+          "Axios com interceptors; tipagem de payloads/DTOs.",
+          "Critérios de aceite: cache por mês, invalidação após mutações; zero acesso a LocalStorage.",
+          "Riscos: chaves inconsistentes; mitigado por queryKeys.ts."
+        ]
+      },
+      {
+        "id": 8,
+        "tag": "[FE/BE] Navegação mensal + Cache Redis + Build Estabilizado",
+        "status": "🟢 Concluído (Validação Final OK)",
+        "summary": "UX de navegação temporal suave, cache distribuído Redis e build Docker multi-stage estável com Prisma.",
+        "notes": [
+          "MonthNavigator com Framer Motion; integração useFinanceApp.",
+          "Upstash Redis por usuário/mês e invalidation pós-mutation.",
+          "Docker: prisma generate no builder; cópia de .prisma para runtime.",
+          "Critérios de aceite: logs com [CACHE HIT/MISS]; containers healthy.",
+          "Riscos: WSL1; mitigar executando build em WSL2/Docker."
+        ]
+      },
+      {
+        "id": 4,
+        "tag": "[Worker] RabbitMQ Robustness",
+        "status": "🟢 Concluído",
+        "summary": "Resiliência no processamento assíncrono de jobs de recorrência.",
+        "notes": [
+          "Reconexão com backoff, prefetch(10), ConfirmChannel, shutdown limpo.",
+          "Critérios de aceite: worker permanece estável em reconexões.",
+          "Riscos: mensagens venenosas; mitigação futura com DLQ (#14)."
+        ]
+      },
+      {
+        "id": 3,
+        "tag": "[API] Security & Config ENV",
+        "status": "🟢 Concluído",
+        "summary": "Endurecer configuração e headers de segurança na API.",
+        "notes": [
+          "Zod para ENVs críticos; Helmet e CORS dinâmico.",
+          "Critérios de aceite: boot falha sem ENVs; headers presentes.",
+          "Riscos: CORS mal configurado; mitigar com allowlist por ambiente."
+        ]
+      },
+      {
+        "id": 2,
+        "tag": "[DB] Float → String precision",
+        "status": "🟢 Concluído",
+        "summary": "Evitar erros de arredondamento em valores monetários.",
+        "notes": [
+          "Valores monetários como string + coerções nos helpers.",
+          "Critérios de aceite: comparação monetária determinística.",
+          "Riscos: parsing negligenciado; mitigado em helpers centralizados."
+        ]
+      },
+      {
+        "id": 1,
+        "tag": "[BUG] Replicação e idempotência",
+        "status": "🟢 Resolvido",
+        "summary": "Eliminar duplicações de recorrentes por meio de fingerprint único.",
+        "notes": [
+          "Índice único por fingerprint + backfill idempotente.",
+          "Critérios de aceite: nenhuma duplicidade em replays.",
+          "Riscos: colisão de fingerprint; mitigado com sal e campos chave."
+        ]
+      },
+      {
+        "id": 14,
+        "tag": "[Resilience] Dead Letter Queue (DLQ)",
+        "status": "🟡 Planejado (NOVO)",
+        "summary": "Segregar mensagens irrecuperáveis para análise e reprocessamento seguro.",
+        "notes": [
+          "DLQ acoplada à recurring-jobs; nack com requeue=false em erros permanentes.",
+          "Métricas básicas de taxa de dead-letter.",
+          "Critérios de aceite: mensagens inválidas não travam a fila principal.",
+          "Riscos: descarte indevido; mitigar com policies e retenção temporária."
+        ]
+      },
+      {
+        "id": 15,
+        "tag": "[Refactor] Service/Repository Layer",
+        "status": "🟡 Planejado (NOVO)",
+        "summary": "Separar responsabilidades em três camadas para clareza, testes e evolução segura.",
+        "notes": [
+          "Routes: validação + orquestração; Services: regras; Repositories: Prisma-only.",
+          "Injeção de dependência para facilitar mocks nos testes.",
+          "Critérios de aceite: rotas finas; services sem import de Prisma.",
+          "Riscos: refator parcelado; mitigar com feature toggles e suíte de testes (#16)."
+        ]
+      },
+      {
+        "id": 13,
+        "tag": "[Security] Auth httpOnly Cookies",
+        "status": "🟡 Planejado (NOVO)",
+        "summary": "Trocar armazenamento de tokens para cookies httpOnly/sameSite, reduzindo superfície XSS.",
+        "notes": [
+          "Login entrega JWT via cookie httpOnly; logout limpa cookie.",
+          "Axios withCredentials; refresh token seguro; access em memória.",
+          "Critérios de aceite: rotas autenticadas funcionam sem localStorage.",
+          "Riscos: CORS e domínio; mitigar com configuração rigorosa e ambiente controlado."
+        ]
       },
       {
         "id": 18,
         "tag": "[Security] Autenticação Avançada (MFA + Google Login)",
         "status": "🟡 Planejado (NOVO)",
-        "summary": "Implementar autenticação JWT com refresh automático, MFA via Resend e login social Google OAuth 2.0.",
+        "summary": "Adicionar MFA via Resend (OTP) e login social Google OAuth2 com fluxo completo de tokens.",
         "notes": [
-          "Backend: novas rotas /auth/login, /auth/register, /auth/refresh, /auth/logout, /auth/resend e /auth/google.",
-          "Integração com Resend API para envio de código MFA (OTP) por e-mail ou SMS.",
-          "Suporte a Google Sign-In via OAuth2 (backend e frontend).",
-          "Cookies httpOnly e SameSite=Lax para Refresh Token; Access Token em memória.",
-          "Frontend: AuthProvider, interceptors Axios, MFAForm e botão de login Google.",
-          "Fluxo de refresh automático, logout seguro e fallback VITE_USE_REST mantido."
+          "Rotas: /auth/register, /auth/login, /auth/refresh, /auth/logout, /auth/resend, /auth/google.",
+          "Cookies httpOnly para refresh; access token em memória; interceptors Axios.",
+          "Front: MFAForm e botão Google; backend: validações de estado/nonce.",
+          "Critérios de aceite: MFA opcional funcional; Google login end-to-end.",
+          "Riscos: fluxo OAuth mal configurado; mitigar com testes em sandbox e logs detalhados."
         ]
       }
     ],
-    "last_action": "Análise de segurança e resiliência (finance_app_review.md) concluída e mesclada ao plano de projeto.",
+    "last_action": "Reordenação por dificuldade e refinamento das descrições concluídos.",
     "next_steps": [
-      "Priorizar e iniciar os Milestones de Segurança (11, 12, 13) que são críticos.",
-      "Continuar o trabalho no Milestone 3 (Validação de ENV com Zod).",
-      "Após a segurança da API, focar no refactor do Frontend (Milestone 7)."
+      "Executar Milestone 9 (Toasts) e 17 (Storybook) como quick wins.",
+      "Implementar 10/11/12/16 para elevar qualidade/segurança e dar base ao Milestone 0.",
+      "Entregar Milestone 0 (billingMonth) com backfill e testes.",
+      "Planejar 14/15 (resiliência/arquitetura) e 13/18 (autenticação segura e avançada)."
     ],
     "commit_template": "• [Feature/Refactor/Fix] Descrição da mudança.\n• Relacionado ao(s) Milestone(s): #[ID]"
   }

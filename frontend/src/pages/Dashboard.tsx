@@ -10,6 +10,8 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from "@mui/material";
 import Section from "../components/ui/Section";
@@ -44,6 +46,8 @@ type DashboardProps = {
   state: DashboardState;
   month: string;
   onChangeMonth: (value: string) => void;
+  viewMode: "calendar" | "billing";
+  onChangeViewMode: (mode: "calendar" | "billing") => void;
 };
 
 const groupBySum = <T,>(
@@ -60,7 +64,7 @@ const groupBySum = <T,>(
   return Array.from(map.entries()).map(([name, value]) => ({ name, value }));
 };
 
-export default function Dashboard({ state, month, onChangeMonth }: DashboardProps) {
+export default function Dashboard({ state, month, onChangeMonth, viewMode, onChangeViewMode }: DashboardProps) {
   const originById = useMemo(
     () => Object.fromEntries(state.origins.map((origin) => [origin.id, origin])),
     [state.origins]
@@ -142,6 +146,12 @@ export default function Dashboard({ state, month, onChangeMonth }: DashboardProp
   );
   const categoriesTotal = categoriesData.reduce((acc, item) => acc + item.value, 0);
 
+  const handleModeChange = (_: unknown, value: "calendar" | "billing" | null) => {
+    if (value) {
+      onChangeViewMode(value);
+    }
+  };
+
   return (
     <Stack spacing={3}>
       <Box
@@ -158,10 +168,25 @@ export default function Dashboard({ state, month, onChangeMonth }: DashboardProp
             Navegação mensal
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Use as setas para viajar entre meses sem perder o cache local.
+            Use as setas para viajar entre meses e escolha se prefere visualizar por calendário ou fatura de cartão.
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Modo atual: {viewMode === "billing" ? "Faturas (Cartões)" : "Calendário (Todos)"}
           </Typography>
         </Box>
-        <MonthNavigator month={month} onChange={onChangeMonth} />
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems="center">
+          <MonthNavigator month={month} onChange={onChangeMonth} />
+          <ToggleButtonGroup
+            size="small"
+            color="primary"
+            value={viewMode}
+            exclusive
+            onChange={handleModeChange}
+          >
+            <ToggleButton value="calendar">Calendário</ToggleButton>
+            <ToggleButton value="billing">Fatura</ToggleButton>
+          </ToggleButtonGroup>
+        </Stack>
       </Box>
 
       <Grid container spacing={2}>

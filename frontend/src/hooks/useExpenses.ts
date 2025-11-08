@@ -19,6 +19,7 @@ import { Expense, ExpensePayload } from "../types";
 
 type Options = {
   enabled?: boolean;
+  mode?: "calendar" | "billing";
 };
 
 type OptimisticContext = {
@@ -69,7 +70,8 @@ const buildOptimisticExpense = (payload: ExpensePayload): Expense =>
 export function useExpenses(month: string, options: Options = {}) {
   const queryClient = useQueryClient();
   const enabled = options.enabled ?? true;
-  const monthKey = expensesKeys.month(month);
+  const mode = options.mode ?? "calendar";
+  const monthKey = expensesKeys.month(month, mode);
   const rollback = (ctx?: OptimisticContext) => {
     if (!ctx?.previous) return;
     queryClient.setQueryData(monthKey, ctx.previous);
@@ -77,7 +79,7 @@ export function useExpenses(month: string, options: Options = {}) {
 
   const expensesQuery = useQuery({
     queryKey: monthKey,
-    queryFn: () => getExpenses(month),
+    queryFn: () => getExpenses(month, mode),
     enabled,
     staleTime: 60_000,
     placeholderData: keepPreviousData,
@@ -95,8 +97,11 @@ export function useExpenses(month: string, options: Options = {}) {
     enabled: false,
   });
 
-  const invalidateMonth = () =>
-    queryClient.invalidateQueries({ queryKey: monthKey });
+  const invalidateMonth = () => {
+    (['calendar', 'billing'] as const).forEach((view) => {
+      queryClient.invalidateQueries({ queryKey: expensesKeys.month(month, view) });
+    });
+  };
 
   const createMutation = useMutation({
     mutationFn: (payload: ExpensePayload) => createExpense(payload),

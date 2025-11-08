@@ -49,6 +49,8 @@ function App() {
     state,
     month,
     setMonth,
+    viewMode,
+    setViewMode,
     loading,
     error,
     refresh,
@@ -199,7 +201,13 @@ function App() {
         ) : (
           <Stack spacing={4}>
             {tab === "dashboard" && (
-              <Dashboard state={state} month={month} onChangeMonth={setMonth} />
+              <Dashboard
+                state={state}
+                month={month}
+                onChangeMonth={setMonth}
+                viewMode={viewMode}
+                onChangeViewMode={setViewMode}
+              />
             )}
             {tab === "lancamentos" && (
               <Lancamentos

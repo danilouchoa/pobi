@@ -10,6 +10,8 @@
     "prisma:generate": "prisma generate",
     "fingerprints:backfill": "tsx scripts/backfill-fingerprints.ts",
     "fingerprints:regenerate": "tsx scripts/regenerate-fingerprints.ts",
+    "billing:backfill": "tsx scripts/backfill-billing-month.ts",
+    "test:billing": "tsx src/lib/billing.test.ts",
     "health:db": "ts-node scripts/db-health.ts",
     "seed": "ts-node prisma/seed.ts",
     "lint": "eslint . --ext .ts",

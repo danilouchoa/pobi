@@ -13,6 +13,7 @@ export type Expense = {
   installments?: number | null;
   sharedWith?: string | null;
   sharedAmount?: number | null;
+  billingMonth?: string | null;
 };
 
 export type ExpensePayload = {
@@ -41,6 +42,8 @@ export type Origin = {
   limit?: number | null;
   status?: string | null;
   active?: boolean;
+  closingDay?: number | null;
+  billingRolloverPolicy?: "NEXT_BUSINESS_DAY" | "PREVIOUS_BUSINESS_DAY" | null;
 };
 
 export type OriginPayload = {
@@ -50,6 +53,8 @@ export type OriginPayload = {
   limit?: number | null;
   status?: string | null;
   active?: boolean;
+  closingDay?: number | null;
+  billingRolloverPolicy?: "NEXT_BUSINESS_DAY" | "PREVIOUS_BUSINESS_DAY" | null;
 };
 
 export type Debtor = {

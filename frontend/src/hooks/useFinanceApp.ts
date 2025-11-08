@@ -8,6 +8,13 @@ import { ExpensePayload, OriginPayload, DebtorPayload } from "../types";
 
 const MONTH_STORAGE_KEY = "pf-month";
 
+const normalizeClosingDay = (value: unknown) => {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+  const parsed = Number(value);
+  return Number.isNaN(parsed) ? null : parsed;
+};
+
 export const DEFAULT_SALARY_TEMPLATE = {
   hours: "178",
   hourRate: "95.24",
@@ -21,10 +28,11 @@ export function useFinanceApp() {
   const [month, setMonthState] = useState(() =>
     readLS(MONTH_STORAGE_KEY, new Date().toISOString().slice(0, 7))
   );
+  const [viewMode, setViewMode] = useState<"calendar" | "billing">("calendar");
 
   const isEnabled = Boolean(token);
 
-  const expenses = useExpenses(month, { enabled: isEnabled });
+  const expenses = useExpenses(month, { enabled: isEnabled, mode: viewMode });
   const catalogs = useCatalogs({ enabled: isEnabled });
   const salary = useSalary(month, { enabled: isEnabled });
 
@@ -124,6 +132,8 @@ export function useFinanceApp() {
       await catalogs.createOrigin({
         ...payload,
         limit: Number.isNaN(limit as number) ? null : limit,
+        closingDay: normalizeClosingDay(payload.closingDay),
+        billingRolloverPolicy: payload.billingRolloverPolicy ?? null,
       });
     },
     [catalogs]
@@ -138,6 +148,8 @@ export function useFinanceApp() {
       await catalogs.updateOrigin(id, {
         ...payload,
         limit: Number.isNaN(limit as number) ? null : limit,
+        closingDay: normalizeClosingDay(payload.closingDay),
+        billingRolloverPolicy: payload.billingRolloverPolicy ?? null,
       });
     },
     [catalogs]
@@ -181,6 +193,8 @@ export function useFinanceApp() {
     state,
     month,
     setMonth,
+    viewMode,
+    setViewMode,
     loading,
     error,
     refresh,

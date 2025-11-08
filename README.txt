@@ -17,4 +17,8 @@
 - Após qualquer alteração rode `docker compose build --no-cache backend worker && docker compose up -d`.
 - Para validar a conexão execute `docker compose exec backend npm run health:db`.
 
+### Fechamento de cartões e faturas (billing)
+- Cada origem do tipo **Cartão** possui agora `closingDay` (1..31) e `billingRolloverPolicy` (`NEXT_BUSINESS_DAY` ou `PREVIOUS_BUSINESS_DAY`). Sem esses dados não é possível lançar novas despesas nesse cartão (o backend responde 422).
+- Despesas de cartão recebem automaticamente o campo `billingMonth` (`YYYY-MM`) calculado a partir da data do lançamento e da política do cartão. Basta enviar `mode=billing&month=YYYY-MM` em `GET /api/expenses` para obter as faturas. O modo padrão continua sendo `calendar` (baseado na data do lançamento).
+- Para recalcular o campo em dados antigos execute `cd backend && npm run billing:backfill`. O script percorre cartões com `billingMonth` vazio, recalcula e invalida o cache Redis das faturas impactadas.
 

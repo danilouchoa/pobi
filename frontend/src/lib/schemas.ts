@@ -2,6 +2,14 @@ import { z } from "zod";
 
 const nullableString = z.union([z.string(), z.null(), z.undefined()]);
 const nullableNumber = z.union([z.number(), z.null(), z.undefined()]);
+const billingPolicySchema = z
+  .union([
+    z.literal("NEXT_BUSINESS_DAY"),
+    z.literal("PREVIOUS_BUSINESS_DAY"),
+    z.null(),
+    z.undefined(),
+  ])
+  .transform((value) => value ?? null);
 
 export const ExpenseSchema = z.object({
   id: z.string(),
@@ -26,6 +34,7 @@ export const ExpenseSchema = z.object({
   installments: nullableNumber.transform((value) => value ?? null),
   sharedWith: nullableString.transform((value) => value ?? null),
   sharedAmount: nullableNumber.transform((value) => value ?? null),
+  billingMonth: nullableString.transform((value) => value ?? null),
 });
 
 export const ExpensesSchema = z.array(ExpenseSchema);
@@ -38,6 +47,8 @@ export const OriginSchema = z.object({
   limit: nullableNumber.transform((value) => value ?? null),
   status: nullableString.transform((value) => value ?? null),
   active: z.boolean().optional(),
+  closingDay: nullableNumber.transform((value) => value ?? null),
+  billingRolloverPolicy: billingPolicySchema,
 });
 
 export const OriginsSchema = z.array(OriginSchema);

@@ -15,11 +15,54 @@ import { parseDecimal, toDecimalString } from '../utils/formatters';
 import { publishRecurringJob } from '../lib/rabbit';
 import { getOrSetCache } from '../lib/redisCache';
 import { redis } from '../lib/redisClient';
+import { deriveBillingMonth, BillingRolloverPolicy } from '../lib/billing';
 
 interface AuthenticatedRequest extends Request {
   userId?: string;
   body: ExpensePayload;
 }
+
+type ExpenseViewMode = 'calendar' | 'billing';
+
+class BillingConfigurationError extends Error {
+  statusCode = 422;
+  constructor(message = 'Configurar fechamento do cartão.') {
+    super(message);
+  }
+}
+
+const normalizeOriginType = (value?: string | null) =>
+  value ? value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase() : '';
+
+const shouldApplyBillingLogic = (originType?: string | null) =>
+  normalizeOriginType(originType) === 'cartao';
+
+const computeBillingMonth = async (
+  prisma: PrismaClient,
+  originId: string | null | undefined,
+  date: Date
+): Promise<string | null> => {
+  if (!originId) return null;
+  const origin = await prisma.origin.findUnique({ where: { id: originId } });
+  if (!origin || !shouldApplyBillingLogic(origin.type)) {
+    return null;
+  }
+  const closingDay = origin.closingDay ?? null;
+  const normalizedClosingDay = closingDay != null ? Math.trunc(closingDay) : null;
+  if (!normalizedClosingDay || normalizedClosingDay < 1 || normalizedClosingDay > 31) {
+    throw new BillingConfigurationError('Configurar fechamento do cartão.');
+  }
+  const policy = (origin.billingRolloverPolicy ?? 'NEXT_BUSINESS_DAY') as BillingRolloverPolicy;
+  return deriveBillingMonth(date, normalizedClosingDay, policy);
+};
+
+const buildInvalidationEntries = (
+  calendarMonth?: string | null,
+  billingMonth?: string | null
+) => [
+  { month: calendarMonth ?? null, mode: 'calendar' as ExpenseViewMode },
+  { month: billingMonth ?? null, mode: 'billing' as ExpenseViewMode },
+];
 
 const serializeExpense = (expense: any) => ({
   id: expense.id,
@@ -38,10 +81,11 @@ const serializeExpense = (expense: any) => ({
   sharedAmount: expense.sharedAmount != null ? parseDecimal(expense.sharedAmount) : null,
   createdAt: expense.createdAt ? new Date(expense.createdAt).toISOString() : null,
   updatedAt: expense.updatedAt ? new Date(expense.updatedAt).toISOString() : null,
+  billingMonth: expense.billingMonth ?? null,
 });
 
-const buildExpenseCacheKey = (userId: string, monthKey: string) =>
-  `finance:expenses:${userId}:${monthKey}`;
+const buildExpenseCacheKey = (userId: string, monthKey: string, mode: ExpenseViewMode) =>
+  `finance:expenses:${mode}:${userId}:${monthKey}`;
 
 const monthKeyFromInput = (input?: string | Date | null) => {
   if (!input) return null;
@@ -50,10 +94,13 @@ const monthKeyFromInput = (input?: string | Date | null) => {
   return format(date, 'yyyy-MM');
 };
 
-const invalidateExpenseCache = async (userId: string, ...months: Array<string | null | undefined>) => {
-  const keys = months
-    .filter((monthKey): monthKey is string => Boolean(monthKey))
-    .map((monthKey) => buildExpenseCacheKey(userId, monthKey));
+const invalidateExpenseCache = async (
+  userId: string,
+  entries: Array<{ month: string | null | undefined; mode: ExpenseViewMode }>
+) => {
+  const keys = entries
+    .filter((entry): entry is { month: string; mode: ExpenseViewMode } => Boolean(entry.month))
+    .map((entry) => buildExpenseCacheKey(userId, entry.month, entry.mode));
   if (keys.length) {
     await redis.del(...keys);
   }
@@ -71,10 +118,29 @@ export default function expensesRoutes(prisma: PrismaClient) {
         return res.status(401).json({ message: 'Não autorizado.' });
       }
 
-      const { month: monthQuery, year: yearQuery } = req.query as {
-        month?: string;
-        year?: string;
-      };
+      const modeParam = typeof req.query.mode === 'string' ? req.query.mode : 'calendar';
+      const mode: ExpenseViewMode = modeParam === 'billing' ? 'billing' : 'calendar';
+      const monthQuery = typeof req.query.month === 'string' ? req.query.month : undefined;
+
+      if (mode === 'billing') {
+        if (!monthQuery || !/^\d{4}-\d{2}$/.test(monthQuery)) {
+          return res
+            .status(400)
+            .json({ message: 'Parâmetro month (YYYY-MM) é obrigatório no modo billing.' });
+        }
+
+        const cacheKey = buildExpenseCacheKey(userId, monthQuery, 'billing');
+        const expenses = await getOrSetCache(cacheKey, async () => {
+          const result = await prisma.expense.findMany({
+            where: { userId, billingMonth: monthQuery },
+            orderBy: { date: 'desc' },
+          });
+          return result.map(serializeExpense);
+        });
+        return res.json(expenses);
+      }
+
+      const yearQuery = typeof req.query.year === 'string' ? req.query.year : undefined;
 
       const now = new Date();
       let targetYear = now.getFullYear();
@@ -106,7 +172,7 @@ export default function expensesRoutes(prisma: PrismaClient) {
       const end = startOfMonth(addMonths(start, 1));
 
       const monthKey = format(start, 'yyyy-MM');
-      const cacheKey = buildExpenseCacheKey(userId, monthKey);
+      const cacheKey = buildExpenseCacheKey(userId, monthKey, 'calendar');
       const expenses = await getOrSetCache(cacheKey, async () => {
         const result = await prisma.expense.findMany({
           where: {
@@ -176,12 +242,22 @@ export default function expensesRoutes(prisma: PrismaClient) {
         fixed: req.body.fixed ?? false,
       });
 
-      const expense = await prisma.expense.create({ data: payload });
-      await invalidateExpenseCache(userId, monthKeyFromInput(expense.date));
+      const billingMonth = await computeBillingMonth(prisma, payload.originId ?? null, payload.date);
+      const expense = await prisma.expense.create({ data: { ...payload, billingMonth } });
+      await invalidateExpenseCache(
+        userId,
+        buildInvalidationEntries(
+          monthKeyFromInput(expense.date),
+          expense.billingMonth ?? billingMonth ?? null
+        )
+      );
 
       res.status(201).json(serializeExpense(expense));
     } catch (error) {
       console.error('Erro ao criar despesa recorrente:', error);
+      if (error instanceof BillingConfigurationError) {
+        return res.status(error.statusCode).json({ message: error.message });
+      }
       if (error instanceof Error) {
         return res.status(400).json({ message: error.message });
       }
@@ -199,12 +275,22 @@ export default function expensesRoutes(prisma: PrismaClient) {
 
       const payload = buildCreateData(userId, req.body);
 
-      const expense = await prisma.expense.create({ data: payload });
-      await invalidateExpenseCache(userId, monthKeyFromInput(expense.date));
+      const billingMonth = await computeBillingMonth(prisma, payload.originId ?? null, payload.date);
+      const expense = await prisma.expense.create({ data: { ...payload, billingMonth } });
+      await invalidateExpenseCache(
+        userId,
+        buildInvalidationEntries(
+          monthKeyFromInput(expense.date),
+          expense.billingMonth ?? billingMonth ?? null
+        )
+      );
 
       res.status(201).json(serializeExpense(expense));
     } catch (error) {
       console.error('Erro ao criar despesa:', error);
+      if (error instanceof BillingConfigurationError) {
+        return res.status(error.statusCode).json({ message: error.message });
+      }
       if (error instanceof Error && error.message.includes('Campos obrigatórios')) {
         return res.status(400).json({ message: error.message });
       }
@@ -242,19 +328,33 @@ export default function expensesRoutes(prisma: PrismaClient) {
         }
       }
 
+      const nextDate = (updateData.date as Date | undefined) ?? new Date(existing.date);
+      const nextOriginId =
+        (updateData.originId as string | null | undefined) ?? existing.originId ?? null;
+      const billingMonth = await computeBillingMonth(prisma, nextOriginId, nextDate);
+      updateData.billingMonth = billingMonth;
+
       const expense = await prisma.expense.update({
         where: { id },
         data: updateData,
       });
-      await invalidateExpenseCache(
-        userId,
-        monthKeyFromInput(existing.date),
-        monthKeyFromInput(expense.date)
-      );
+      await invalidateExpenseCache(userId, [
+        ...buildInvalidationEntries(
+          monthKeyFromInput(existing.date),
+          existing.billingMonth ?? null
+        ),
+        ...buildInvalidationEntries(
+          monthKeyFromInput(expense.date),
+          expense.billingMonth ?? billingMonth ?? null
+        ),
+      ]);
 
       res.json(serializeExpense(expense));
     } catch (error) {
       console.error('Erro ao atualizar despesa:', error);
+      if (error instanceof BillingConfigurationError) {
+        return res.status(error.statusCode).json({ message: error.message });
+      }
       if (error instanceof Error && error.message.includes('recorrente e fixa')) {
         return res.status(400).json({ message: error.message });
       }
@@ -282,7 +382,13 @@ export default function expensesRoutes(prisma: PrismaClient) {
       }
 
       await prisma.expense.delete({ where: { id } });
-      await invalidateExpenseCache(userId, monthKeyFromInput(existing.date));
+      await invalidateExpenseCache(
+        userId,
+        buildInvalidationEntries(
+          monthKeyFromInput(existing.date),
+          existing.billingMonth ?? null
+        )
+      );
 
       res.status(204).send();
     } catch (error) {
@@ -329,29 +435,41 @@ export default function expensesRoutes(prisma: PrismaClient) {
       ].join('|');
       const fingerprint = generateFingerprint(fingerprintSeed);
 
-      const duplicated = await prisma.expense.create({
-        data: buildCreateData(userId, {
-          description: existing.description,
-          category: existing.category,
-          parcela: existing.parcela,
-          amount: amountValueForCreate as number | string,
-          date: cloneDate.toISOString(),
-          originId: existing.originId ?? undefined,
-          debtorId: existing.debtorId ?? undefined,
-          recurring: existing.recurring,
-          recurrenceType: existing.recurrenceType as RecurrenceType,
-          fixed: existing.fixed,
-          installments: existing.installments,
-          sharedWith: existing.sharedWith,
-          sharedAmount: sharedValueForCreate,
-          fingerprint,
-        }),
+      const createPayload = buildCreateData(userId, {
+        description: existing.description,
+        category: existing.category,
+        parcela: existing.parcela,
+        amount: amountValueForCreate as number | string,
+        date: cloneDate.toISOString(),
+        originId: existing.originId ?? undefined,
+        debtorId: existing.debtorId ?? undefined,
+        recurring: existing.recurring,
+        recurrenceType: existing.recurrenceType as RecurrenceType,
+        fixed: existing.fixed,
+        installments: existing.installments,
+        sharedWith: existing.sharedWith,
+        sharedAmount: sharedValueForCreate,
+        fingerprint,
       });
-      await invalidateExpenseCache(userId, monthKey);
+      const billingMonth = await computeBillingMonth(
+        prisma,
+        createPayload.originId ?? null,
+        createPayload.date
+      );
+      const duplicated = await prisma.expense.create({
+        data: { ...createPayload, billingMonth },
+      });
+      await invalidateExpenseCache(
+        userId,
+        buildInvalidationEntries(monthKey, duplicated.billingMonth ?? billingMonth ?? null)
+      );
 
       res.status(201).json(serializeExpense(duplicated));
     } catch (error) {
       console.error('Erro ao duplicar despesa:', error);
+      if (error instanceof BillingConfigurationError) {
+        return res.status(error.statusCode).json({ message: error.message });
+      }
       res.status(500).json({ message: 'Erro interno ao duplicar despesa.' });
     }
   });
@@ -391,19 +509,33 @@ export default function expensesRoutes(prisma: PrismaClient) {
         }
       }
 
+      const adjustedDate = (updateData.date as Date | undefined) ?? new Date(existing.date);
+      const adjustedOriginId =
+        (updateData.originId as string | null | undefined) ?? existing.originId ?? null;
+      const billingMonth = await computeBillingMonth(prisma, adjustedOriginId, adjustedDate);
+      updateData.billingMonth = billingMonth;
+
       const updated = await prisma.expense.update({
         where: { id },
         data: updateData,
       });
-      await invalidateExpenseCache(
-        userId,
-        monthKeyFromInput(existing.date),
-        monthKeyFromInput(updated.date)
-      );
+      await invalidateExpenseCache(userId, [
+        ...buildInvalidationEntries(
+          monthKeyFromInput(existing.date),
+          existing.billingMonth ?? null
+        ),
+        ...buildInvalidationEntries(
+          monthKeyFromInput(updated.date),
+          updated.billingMonth ?? billingMonth ?? null
+        ),
+      ]);
 
       res.json(serializeExpense(updated));
     } catch (error) {
       console.error('Erro ao ajustar despesa:', error);
+      if (error instanceof BillingConfigurationError) {
+        return res.status(error.statusCode).json({ message: error.message });
+      }
       res.status(500).json({ message: 'Erro interno ao ajustar despesa.' });
     }
   });

@@ -10,6 +10,11 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum BillingRolloverPolicy {
+  NEXT_BUSINESS_DAY
+  PREVIOUS_BUSINESS_DAY
+}
+
 model User {
   id            String          @id @default(auto()) @map("_id") @db.ObjectId
   email         String          @unique
@@ -33,6 +38,9 @@ model Origin {
   limit   String?  // Valor decimal armazenado como string para preservar precisão
   status  String?
   active  Boolean  @default(true)
+
+  closingDay            Int?
+  billingRolloverPolicy BillingRolloverPolicy? @default(NEXT_BUSINESS_DAY)
   
   // Relação com User
   userId  String   @db.ObjectId
@@ -91,8 +99,11 @@ model Expense {
   // Relação com Debtor (Opcional)
   debtorId          String?  @db.ObjectId
   debtor            Debtor?  @relation(fields: [debtorId], references: [id])
-  
+
+  billingMonth      String?
+
   @@index([userId, date])
+  @@index([userId, billingMonth])
   @@index([originId])
   @@index([debtorId])
 }

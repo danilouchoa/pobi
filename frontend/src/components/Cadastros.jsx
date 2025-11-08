@@ -41,12 +41,21 @@ export default function Cadastros({
     type: "Cartão",
     dueDay: "",
     limit: "",
+    closingDay: "",
+    billingRolloverPolicy: "NEXT_BUSINESS_DAY",
   });
   const [debtorForm, setDebtorForm] = useState({ name: "" });
   const [originLoading, setOriginLoading] = useState(false);
   const [debtorLoading, setDebtorLoading] = useState(false);
   const [dialogState, setDialogState] = useState({ open: false, type: null, entity: null });
-  const [dialogValues, setDialogValues] = useState({ name: "", status: "", limit: "", active: true });
+  const [dialogValues, setDialogValues] = useState({
+    name: "",
+    status: "",
+    limit: "",
+    active: true,
+    closingDay: "",
+    billingRolloverPolicy: "NEXT_BUSINESS_DAY",
+  });
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
 
   useEffect(() => {
@@ -57,7 +66,15 @@ export default function Cadastros({
   const closeSnackbar = () => setSnackbar((prev) => ({ ...prev, open: false }));
 
   const handleOriginChange = (field) => (event) => {
-    setOriginForm((prev) => ({ ...prev, [field]: event.target.value }));
+    const value = event.target.value;
+    setOriginForm((prev) => {
+      const next = { ...prev, [field]: value };
+      if (field === "type" && value !== "Cartão") {
+        next.closingDay = "";
+        next.billingRolloverPolicy = "NEXT_BUSINESS_DAY";
+      }
+      return next;
+    });
   };
 
   const handleDebtorChange = (event) => {
@@ -66,6 +83,10 @@ export default function Cadastros({
 
   const addOrigin = async () => {
     if (!originForm.name.trim()) return;
+    if (originForm.type === "Cartão" && !originForm.closingDay.trim()) {
+      showSnackbar("Informe o dia de fechamento do cartão.", "error");
+      return;
+    }
     setOriginLoading(true);
     try {
       await createOrigin({
@@ -73,8 +94,23 @@ export default function Cadastros({
         type: originForm.type,
         dueDay: originForm.dueDay.trim(),
         limit: originForm.limit.trim(),
+        closingDay:
+          originForm.type === "Cartão" && originForm.closingDay
+            ? Number(originForm.closingDay)
+            : originForm.type === "Cartão"
+              ? null
+              : undefined,
+        billingRolloverPolicy:
+          originForm.type === "Cartão" ? originForm.billingRolloverPolicy : null,
       });
-      setOriginForm({ name: "", type: "Cartão", dueDay: "", limit: "" });
+      setOriginForm({
+        name: "",
+        type: "Cartão",
+        dueDay: "",
+        limit: "",
+        closingDay: "",
+        billingRolloverPolicy: "NEXT_BUSINESS_DAY",
+      });
       showSnackbar("Origem adicionada!");
     } catch (error) {
       console.error("Erro ao criar origem:", error);
@@ -128,6 +164,8 @@ export default function Cadastros({
       status: entity.status ?? "",
       active: entity.active ?? true,
       limit: entity.limit != null ? String(entity.limit) : "",
+      closingDay: entity.closingDay != null ? String(entity.closingDay) : "",
+      billingRolloverPolicy: entity.billingRolloverPolicy ?? "NEXT_BUSINESS_DAY",
     });
   };
 
@@ -150,6 +188,16 @@ export default function Cadastros({
       };
       if (dialogState.type === "origin") {
         payload.limit = dialogValues.limit === "" ? null : Number(dialogValues.limit);
+        payload.closingDay =
+          dialogState.entity.type === "Cartão"
+            ? dialogValues.closingDay === ""
+              ? null
+              : Number(dialogValues.closingDay)
+            : null;
+        payload.billingRolloverPolicy =
+          dialogState.entity.type === "Cartão"
+            ? dialogValues.billingRolloverPolicy
+            : null;
         await updateOrigin(dialogState.entity.id, payload);
         showSnackbar("Origem atualizada!");
       } else {
@@ -184,6 +232,32 @@ export default function Cadastros({
               <Grid item xs={12}>
                 <TextField label="Limite (R$)" fullWidth value={originForm.limit} onChange={handleOriginChange("limit")} inputProps={{ inputMode: "decimal" }} />
               </Grid>
+              {originForm.type === "Cartão" && (
+                <>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      label="Dia de fechamento"
+                      placeholder="Ex.: 4"
+                      fullWidth
+                      value={originForm.closingDay}
+                      onChange={handleOriginChange("closingDay")}
+                      inputProps={{ inputMode: "numeric", min: 1, max: 31 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      select
+                      label="Política de rollover"
+                      fullWidth
+                      value={originForm.billingRolloverPolicy}
+                      onChange={handleOriginChange("billingRolloverPolicy")}
+                    >
+                      <MenuItem value="NEXT_BUSINESS_DAY">Próximo dia útil</MenuItem>
+                      <MenuItem value="PREVIOUS_BUSINESS_DAY">Dia útil anterior</MenuItem>
+                    </TextField>
+                  </Grid>
+                </>
+              )}
             </Grid>
             <Button onClick={addOrigin} disabled={originLoading} variant="contained">
               {originLoading ? "Salvando..." : "Adicionar Conta/Origem"}
@@ -222,7 +296,9 @@ export default function Cadastros({
                     }
                     secondary={`Status: ${origin.status ?? "-"} • Limite: ${
                       origin.limit ? toBRL(parseNum(origin.limit)) : "N/A"
-                    }`}
+                    }${origin.type === "Cartão"
+                      ? ` • Fechamento: ${origin.closingDay ?? "Configurar"} (${origin.billingRolloverPolicy ?? "NEXT_BUSINESS_DAY"})`
+                      : ""}`}
                   />
                 </ListItem>
               ))}
@@ -308,6 +384,27 @@ export default function Cadastros({
                 fullWidth
                 inputProps={{ inputMode: "decimal" }}
               />
+            )}
+            {dialogState.type === "origin" && dialogState.entity?.type === "Cartão" && (
+              <>
+                <TextField
+                  label="Dia de fechamento"
+                  value={dialogValues.closingDay}
+                  onChange={handleDialogChange("closingDay")}
+                  fullWidth
+                  inputProps={{ inputMode: "numeric", min: 1, max: 31 }}
+                />
+                <TextField
+                  select
+                  label="Política de rollover"
+                  value={dialogValues.billingRolloverPolicy}
+                  onChange={handleDialogChange("billingRolloverPolicy")}
+                  fullWidth
+                >
+                  <MenuItem value="NEXT_BUSINESS_DAY">Próximo dia útil</MenuItem>
+                  <MenuItem value="PREVIOUS_BUSINESS_DAY">Dia útil anterior</MenuItem>
+                </TextField>
+              </>
             )}
             <FormControlLabel
               control={<Checkbox checked={dialogValues.active} onChange={handleDialogChange("active")} />}

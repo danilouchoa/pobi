@@ -18,10 +18,27 @@ const parseMonthParams = (month: string) => {
   return { year, month: monthPart };
 };
 
-export async function getExpenses(month: string): Promise<Expense[]> {
-  const params = parseMonthParams(month);
+const normalizeBillingMonth = (value: string) => {
+  if (/^\d{4}-\d{2}$/.test(value)) return value;
+  const fallback = MONTH_FALLBACK();
+  return `${fallback.year}-${fallback.month}`;
+};
+
+export async function getExpenses(
+  month: string,
+  mode: "calendar" | "billing" = "calendar"
+): Promise<Expense[]> {
+  const params: Record<string, string> = { mode };
+  if (mode === "billing") {
+    params.month = normalizeBillingMonth(month);
+  } else {
+    const calendar = parseMonthParams(month);
+    params.year = calendar.year;
+    params.month = calendar.month;
+  }
+
   const { data } = await api.get<Expense[]>("/api/expenses", {
-    params: { year: params.year, month: params.month },
+    params,
     headers: { "Cache-Control": "no-cache" },
   });
   return ExpensesSchema.parse(data);

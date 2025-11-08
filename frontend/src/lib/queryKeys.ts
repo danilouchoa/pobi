@@ -1,6 +1,7 @@
 export const expensesKeys = {
   all: ["expenses"] as const,
-  month: (month: string) => [...expensesKeys.all, { month }] as const,
+  month: (month: string, mode: "calendar" | "billing" = "calendar") =>
+    [...expensesKeys.all, { month, mode }] as const,
   recurring: ["expenses", "recurring"] as const,
   shared: ["expenses", "shared"] as const,
 };
