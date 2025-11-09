@@ -35,3 +35,38 @@ export const bulkJobSchema = z.object({
 
 export type BulkUpdateData = z.infer<typeof bulkUpdateDataSchema>;
 export type BulkJobPayload = z.infer<typeof bulkJobSchema>;
+
+// ------------------------------
+// Novo schema unificado para /api/expenses/bulk (update | delete)
+// ------------------------------
+
+// Item individual de atualização (permite campos parciais diferentes por id)
+const bulkUpdateItemSchema = z.object({
+  id: z.string().min(1),
+  category: z.string().min(1).optional(),
+  fixed: z.boolean().optional(),
+  recurring: z.boolean().optional(),
+  recurrenceType: recurrenceSchema.nullable().optional(),
+  originId: z.string().min(1).optional(),
+});
+
+export const bulkUnifiedUpdateSchema = z.object({
+  action: z.literal('update'),
+  items: z.array(bulkUpdateItemSchema).min(1),
+});
+
+export const bulkUnifiedDeleteSchema = z.object({
+  action: z.literal('delete'),
+  ids: z.array(z.string().min(1)).min(1),
+});
+
+// Discriminated union pelo campo action
+export const bulkUnifiedActionSchema = z.discriminatedUnion('action', [
+  bulkUnifiedUpdateSchema,
+  bulkUnifiedDeleteSchema,
+]);
+
+export type BulkUnifiedDeletePayload = z.infer<typeof bulkUnifiedDeleteSchema>;
+export type BulkUnifiedUpdateItem = z.infer<typeof bulkUpdateItemSchema>;
+export type BulkUnifiedUpdatePayload = z.infer<typeof bulkUnifiedUpdateSchema>;
+export type BulkUnifiedActionPayload = z.infer<typeof bulkUnifiedActionSchema>;

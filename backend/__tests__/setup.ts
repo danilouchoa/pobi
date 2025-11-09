@@ -25,6 +25,8 @@ const mockPrismaInstance = {
     update: vi.fn(),
     delete: vi.fn(),
     count: vi.fn(),
+    updateMany: vi.fn(),
+    deleteMany: vi.fn(),
   },
   origin: {
     findMany: vi.fn(),
@@ -66,20 +68,28 @@ vi.mock('@prisma/client', () => ({
   },
 }));
 
-// Mock do Redis Client
-vi.mock('../src/lib/redisClient', () => ({
-  redisClient: {
+// Mock do Redis Client (nome da exportação é 'redis')
+vi.mock('../src/lib/redisClient', () => {
+  const redis = {
+    // Métodos básicos usados em cache/health
+    ping: vi.fn().mockResolvedValue('PONG'),
+    get: vi.fn().mockResolvedValue(null),
+    set: vi.fn().mockResolvedValue('OK'),
+    setex: vi.fn().mockResolvedValue('OK'),
+    del: vi.fn().mockResolvedValue(0),
+    // Métodos opcionais usados para invalidação por padrão
+    scan: vi.fn().mockResolvedValue([0, []] as [number, string[]]),
+    keys: vi.fn().mockResolvedValue([] as string[]),
+    // Compat helpers do ambiente
     connect: vi.fn(),
     disconnect: vi.fn(),
-    get: vi.fn(),
-    set: vi.fn(),
-    del: vi.fn(),
     flushDb: vi.fn(),
     quit: vi.fn(),
     on: vi.fn(),
     isReady: true,
-  },
-}));
+  } as any;
+  return { redis };
+});
 
 // Mock do RabbitMQ
 vi.mock('../src/lib/rabbit', () => ({

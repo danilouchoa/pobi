@@ -86,6 +86,7 @@ export default function Lancamentos({
     expensesQuery: paginatedQuery,
     pagination,
     bulkUpdate,
+    bulkDelete,
   } = useExpenses(month, { enabled: true, mode: "calendar", page, limit });
   const toast = useToast();
   const createSectionRef = useRef(null);
@@ -97,7 +98,7 @@ export default function Lancamentos({
     }
   }, []);
   const previousMonthRef = useRef(month);
-  const paginatedExpenses = paginatedQuery.data?.data ?? [];
+  const paginatedExpenses = useMemo(() => paginatedQuery.data?.data ?? [], [paginatedQuery.data]);
   const isPageLoading = paginatedQuery.isLoading;
   const isPageFetching = paginatedQuery.isFetching;
   const expensesError = paginatedQuery.error
@@ -459,6 +460,22 @@ export default function Lancamentos({
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (!selectedIds.size) return;
+    const count = selectedIds.size;
+    if (!window.confirm(`Excluir ${count} lançamento(s) selecionado(s)? Esta ação não pode ser desfeita.`)) return;
+    setBulkSubmitting(true);
+    try {
+      await bulkDelete(Array.from(selectedIds));
+      toast.success(`${count} lançamento(s) excluído(s).`);
+      setSelectedIds(new Set());
+    } catch (error) {
+      toast.error(error);
+    } finally {
+      setBulkSubmitting(false);
+    }
+  };
+
   useEffect(() => {
     if (filterType === "recurring") {
       fetchRecurringExpenses();
@@ -639,6 +656,15 @@ export default function Lancamentos({
               disabled={selectedIds.size === 0 || bulkSubmitting}
             >
               {bulkSubmitting ? "Enviando..." : "Editar selecionados"}
+            </Button>
+            <Button
+              variant="outlined"
+              color="error"
+              size="small"
+              onClick={handleBulkDelete}
+              disabled={selectedIds.size === 0 || bulkSubmitting}
+            >
+              {bulkSubmitting ? "Removendo..." : "Excluir selecionados"}
             </Button>
           </Stack>
         </Stack>
