@@ -37,36 +37,50 @@ jobs:
               return;
             }
 
-            // Conferir se os dois workflows (backend e frontend) deste commit concluíram com sucesso
-            const requiredNames = ['CI Backend', 'CI Frontend'];
-            const runsResp = await github.rest.actions.listWorkflowRunsForRepo({ owner, repo, head_sha: sha, per_page: 50 });
-            const runsByName = new Map();
-            for (const run of runsResp.data.workflow_runs) {
-              if (requiredNames.includes(run.name)) {
-                const prev = runsByName.get(run.name) || [];
-                runsByName.set(run.name, [...prev, run]);
-              }
-            }
-            const allSucceeded = requiredNames.every(name => {
-              const list = (runsByName.get(name) || []).filter(r => r.head_branch === branch);
-              if (!list.length) return false;
-              // pegar o mais recente para este branch/sha
-              const latest = list.sort((a,b) => new Date(b.updated_at) - new Date(a.updated_at))[0];
-              return latest.conclusion === 'success';
-            });
-
-            if (!allSucceeded) {
-              core.info('Nem todos os workflows CI passaram com sucesso para este commit. Ignorando label.');
-              return;
-            }
-
-            // Busca PRs abertos para o branch
+            // Encontrar PR aberto para este branch
             const prs = await github.rest.pulls.list({ owner, repo, state: 'open', head: `${owner}:${branch}` });
             if (!prs.data.length) {
-              console.log(`Nenhum PR aberto para o branch '${branch}'.`);
+              core.info(`Nenhum PR aberto para o branch '${branch}'.`);
               return;
             }
             const pr = prs.data[0];
+
+            // Obter checks obrigatórios da proteção da branch base (ex.: main)
+            let requiredContexts = [];
+            try {
+              const bp = await github.rest.repos.getBranchProtection({ owner, repo, branch: pr.base.ref });
+              const checks = bp.data.required_status_checks?.checks || [];
+              requiredContexts = checks.map(c => c.context).filter(Boolean);
+            } catch (e) {
+              core.info(`Branch protection não acessível ou não configurada. Caindo no fallback dos nomes dos jobs.`);
+            }
+
+            // Fallback: se não houver branch protection configurada, exigir nossos jobs principais no pull_request
+            if (requiredContexts.length === 0) {
+              requiredContexts = [
+                'CI Backend / build-test-backend (pull_request)',
+                'CI Frontend / build-test-frontend (pull_request)'
+              ];
+            }
+
+            // Verificar estado dos checks para este SHA via Checks API
+            const checksResp = await github.rest.checks.listForRef({ owner, repo, ref: sha, per_page: 100 });
+            const byName = new Map();
+            for (const run of checksResp.data.check_runs) {
+              const list = byName.get(run.name) || [];
+              byName.set(run.name, [...list, run]);
+            }
+            const allRequiredGreen = requiredContexts.every(name => {
+              const runs = byName.get(name) || [];
+              if (!runs.length) return false;
+              const latest = runs.sort((a,b) => new Date(b.completed_at || 0) - new Date(a.completed_at || 0))[0];
+              return latest && latest.status === 'completed' && latest.conclusion === 'success';
+            });
+
+            if (!allRequiredGreen) {
+              core.info('Nem todos os status checks obrigatórios estão verdes. Ignorando label por enquanto.');
+              return;
+            }
 
             // Adiciona label 'Ready to Merge'
             await github.rest.issues.addLabels({
