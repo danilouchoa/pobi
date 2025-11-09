@@ -390,30 +390,20 @@
         ]
       }
     ],
-  "last_action": "Sessão 09/11/2025: Milestone #13 (Auth httpOnly Cookies) concluída - Sistema de autenticação completamente refatorado com cookies httpOnly + tokens em memória. Access token (15min) em memória, refresh token (7d) em cookie inacessível via JS. Auto-refresh, logout seguro, validação real de credenciais, logs auditáveis. 100% testado e documentado (1000+ linhas README).\n\nDependabot ativado para /backend e /frontend: PRs automáticos de atualização de dependências (ex: zod, helmet, MUI, date-fns, icons-material, eslint-plugin-react-hooks, x-data-grid). Labeler automatizado para categorizar PRs de dependências.",
-    "session_achievements": [
-      "✅ Milestone #13: Autenticação segura com cookies httpOnly implementada",
-      "✅ Backend: 4 endpoints (login, register, refresh, logout) com bcrypt + JWT",
-      "✅ Access Token: 15min em memória (state) | Refresh Token: 7d em cookie httpOnly",
-      "✅ Cookies: httpOnly (previne XSS), secure (HTTPS prod), sameSite: strict (previne CSRF)",
-      "✅ CORS: credentials: true + withCredentials no axios",
-      "✅ cookie-parser@1.4.6 instalado no backend",
-      "✅ Frontend: Token em memória, auto-refresh em 401, logout com backend",
-      "✅ Validação real: bcrypt.compare() + mensagens genéricas (previne enumeração)",
-      "✅ Logs seguros: Login/logout com email/IP (SEM senha/token)",
-      "✅ Testes: register, login, refresh, logout - TODOS PASSANDO",
-      "✅ Documentação: 1000+ linhas no README com diagramas ASCII e troubleshooting",
-      "✅ Breaking change: localStorage removido (usuários devem fazer login novamente)"
-    ],
-    "next_steps": [
-      "Revisar e atualizar dependências semanalmente via PRs do Dependabot (labels: dependencies, auto-update)",
-      "Implementar Milestone #0 frontend: UI de faturas com mode=billing e agrupamento",
-      "Milestone #14: Dead Letter Queue para jobs falhados (resiliência)",
-      "Milestone #15: Service/Repository Layer (separar lógica de negócio das rotas)",
-      "Milestone #16: Testes automatizados (Jest + Supertest para APIs + RTL para frontend)",
-      "Milestone #17: Storybook para componentes MUI",
-      "Milestone #18: Autenticação avançada (MFA, Google OAuth)"
-    ],
-    "commit_template": "• [Feature/Refactor/Fix] Descrição da mudança.\n• Relacionado ao(s) Milestone(s): #[ID]"
+  "last_action": "Sessão 09/11/2025: Validação CNAE no salário, normalização do payload de despesas e reconfiguração do Dependabot (diário às 14:02 BRT). PRs: #15 (merge), #17 (merge), #19 (aberto).",
+  "session_achievements": [
+    "✅ Validação CNAE no frontend (campo Salário, máx 20, feedback em tempo real)",
+    "✅ Payload de despesas normalizado (amount/sharedAmount como '0.00'; originId/debtorId omitidos quando vazios; weekly→custom)",
+    "✅ Dependabot configurado para executar diariamente às 14:02 BRT (America/Sao_Paulo)",
+    "✅ Build e testes verdes (FE 21/21, BE 54/54) após ajustes",
+    "✅ Branch 'main' protegida; mudanças via PR com checks"
+  ],
+  "next_steps": [
+    "Ajustes de acessibilidade no formulário de despesas (associação label/for, ids nos inputs)",
+    "UI de faturas no frontend (mode=billing) conforme Milestone #0",
+    "Camadas Service/Repository (Milestone #15) e suíte de testes (Milestone #16)",
+    "Convergência de enums de recorrência FE/BE (weekly/custom)"
+  ],
+  "commit_template": "• [Feature/Refactor/Fix] Descrição da mudança.\n• Relacionado ao(s) Milestone(s): #[ID]"
   }
 }

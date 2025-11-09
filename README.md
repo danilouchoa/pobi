@@ -26,6 +26,27 @@ Workflows modulares garantem qualidade antes do merge:
 
 ---
 
+## 🆕 O que mudou recentemente (2025-11-09)
+
+### Frontend
+- fix(Salário): validação de comprimento do campo CNAE (máx. 20) com `maxLength`, contador de caracteres e bloqueio no submit com toast amigável. PR: #15 (mergeado).
+- fix(Despesas): normalização do payload antes do POST/PATCH para compatibilidade total com validação do backend:
+  - `amount`/`sharedAmount` convertidos para string no formato `"0.00"`;
+  - `originId`/`debtorId` omitidos quando vazios (evita 400);
+  - `recurrenceType` `weekly` mapeado para `custom` (alinhado ao schema do backend).
+  - PR: #19 (aberto).
+
+### DevEx / Manutenção
+- chore(Dependabot): agendamento alterado para executar diariamente às **14:02 BRT** (`America/Sao_Paulo`). PR: #17 (mergeado).
+- Proteção de branch `main` mantida; todos os ajustes entram via PR com checks verdes.
+
+### Qualidade
+- Build Vite OK; testes Vitest (FE/BE) 100% passando localmente; cobertura mantida.
+
+---
+
+---
+
 ## ⚙️ Operações em Massa (Bulk Update/Delete)
 
 O backend expõe um endpoint unificado para operações em massa sobre despesas:
