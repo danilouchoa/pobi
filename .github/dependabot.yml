@@ -3,9 +3,9 @@ updates:
   - package-ecosystem: 'npm'
     directory: '/backend'
     schedule:
-      interval: 'weekly'
-      day: 'sunday'
-      time: '09:00'
+      interval: 'daily'
+      time: '17:00'
+      timezone: 'America/Sao_Paulo'
     target-branch: 'main'
     commit-message:
       prefix: 'chore'
@@ -17,9 +17,9 @@ updates:
   - package-ecosystem: 'npm'
     directory: '/frontend'
     schedule:
-      interval: 'weekly'
-      day: 'sunday'
-      time: '09:00'
+      interval: 'daily'
+      time: '17:00'
+      timezone: 'America/Sao_Paulo'
     target-branch: 'main'
     commit-message:
       prefix: 'chore'
