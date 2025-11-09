@@ -1,60 +1,34 @@
 docs:
-  - files:
-      - '**/*.md'
-      - 'README.md'
-      - 'docs/**'
+  - changed-files:
+      any-glob-to-any-file: ['**/*.md','README.md','docs/**']
 
 tests:
-  - files:
-      - '**/*.spec.js'
-      - '**/*.test.js'
-      - '**/*.spec.ts'
-      - '**/*.test.ts'
-      - '**/*.spec.tsx'
-      - '**/*.test.tsx'
+  - changed-files:
+      any-glob-to-any-file: ['**/*.spec.js','**/*.test.js','**/*.spec.ts','**/*.test.ts','**/*.spec.tsx','**/*.test.tsx']
 
 backend:
-  - files:
-      - 'backend/**'
+  - changed-files:
+      any-glob-to-any-file: ['backend/**']
 frontend:
-  - files:
-      - 'frontend/**'
+  - changed-files:
+      any-glob-to-any-file: ['frontend/**']
 
 api:
-  - files:
-      - 'backend/src/routes/**'
-      - 'backend/src/middlewares/**'
-      - 'backend/src/index.ts'
+  - changed-files:
+      any-glob-to-any-file: ['backend/src/routes/**','backend/src/middlewares/**','backend/src/index.ts']
 
 infra:
-  - files:
-      - 'backend/scripts/**'
-      - 'frontend/scripts/**'
-      - 'backend/prisma/**'
-      - 'docker-compose.yaml'
-      - '.env*'
+  - changed-files:
+      any-glob-to-any-file: ['backend/scripts/**','frontend/scripts/**','backend/prisma/**','docker-compose.yaml','.env*']
 
 ci:
-  - files:
-      - '.github/workflows/**'
-      - '.github/actions/**'
-      - '.husky/**'
+  - changed-files:
+      any-glob-to-any-file: ['.github/workflows/**','.github/actions/**','.husky/**']
 
 config:
-  - files:
-      - '.eslintrc*'
-      - '.prettierrc*'
-      - 'tsconfig.json'
-      - 'tailwind.config.*'
-      - 'postcss.config.*'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'pnpm-lock.yaml'
-      - 'yarn.lock'
+  - changed-files:
+      any-glob-to-any-file: ['.eslintrc*','.prettierrc*','tsconfig.json','tailwind.config.*','postcss.config.*','package.json','package-lock.json','pnpm-lock.yaml','yarn.lock']
 
 dependencies:
-  - files:
-      - 'package.json'
-      - 'package-lock.json'
-      - 'pnpm-lock.yaml'
-      - 'yarn.lock'
+  - changed-files:
+      any-glob-to-any-file: ['package.json','package-lock.json','pnpm-lock.yaml','yarn.lock']
