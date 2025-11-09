@@ -1,46 +1,51 @@
 # ============================================
-# Version Control
-# ============================================
-.git/
-.gitignore
-.gitattributes
-
-# ============================================
-# Dependencies (will be installed in container)
+# Dependencies
 # ============================================
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+lerna-debug.log*
+.pnp
+.pnp.js
+package-lock.json
+yarn.lock
 
 # ============================================
-# Build outputs (will be built in container)
+# Build outputs
 # ============================================
 dist/
+dist-ssr/
 build/
-coverage/
+out/
+.next/
+.nuxt/
+.cache/
 
 # ============================================
-# Testing
+# Testing & Coverage
 # ============================================
-__tests__/
-*.test.ts
-*.test.js
-*.spec.ts
-*.spec.js
 coverage/
+*.lcov
 .nyc_output/
+*.test.js.snap
+**/__tests__/coverage/
+**/__tests__/.vitest/
 
 # ============================================
-# Environment files (use docker secrets/env)
+# Environment & Secrets
 # ============================================
 .env
-.env.*
-!.env.example
+.env.local
+.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
 *.pem
 *.key
 *.cert
+secrets/
 cookies.txt
 
 # ============================================
@@ -48,61 +53,82 @@ cookies.txt
 # ============================================
 logs/
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
 combined.log
 error.log
+lerna-debug.log*
+*storybook.log
 
 # ============================================
-# Database files
+# Database
 # ============================================
 *.db
 *.sqlite
 *.sqlite3
 /prisma/dev.db
 /prisma/dev.db-journal
-
-# ============================================
-# Docker files
-# ============================================
-Dockerfile*
-docker-compose*.yml
-.dockerignore
+/prisma/migrations/**/migration.sql.bak
 
 # ============================================
 # IDEs & Editors
 # ============================================
-.vscode/
+# VSCode
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+
+# JetBrains (IntelliJ, WebStorm, etc)
 .idea/
-*.sublime-*
+*.iml
+*.iws
+*.ipr
+.idea_modules/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
 *.swp
 *.swo
-*.sw?
+*~
 
 # ============================================
 # OS Files
 # ============================================
+# macOS
 .DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
 Thumbs.db
-*.local
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.directory
+.Trash-*
 
 # ============================================
-# Documentation
+# Docker
 # ============================================
-README.md
-CHANGELOG.md
-LICENSE
-*.md
-!package.json
-
-# ============================================
-# CI/CD
-# ============================================
-.github/
-.gitlab-ci.yml
-.travis.yml
-.circleci/
+.dockerignore
+docker-compose.override.yml
 
 # ============================================
 # Temporary files
@@ -110,10 +136,24 @@ LICENSE
 *.tmp
 *.temp
 *.bak
-tmp/
-temp/
+*.swp
+*.swo
+*.local
+.cache/
 
 # ============================================
-# Scripts (unless needed in production)
+# Storybook
 # ============================================
-scripts/
+storybook-static/
+
+# ============================================
+# TypeScript
+# ============================================
+*.tsbuildinfo
+
+# ============================================
+# Misc
+# ============================================
+.vercel
+.turbo
+.eslintcache
