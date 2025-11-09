@@ -2,6 +2,56 @@ import api from "./api";
 import { Expense, ExpensePayload, ExpensesResponse, BulkUpdatePayload, BulkUnifiedActionPayload } from "../types";
 import { ExpenseSchema, ExpensesResponseSchema, ExpensesSchema } from "../lib/schemas";
 
+//
+// Normalização de payload para compatibilidade com o backend
+// - Backend espera amount/sharedAmount como string no formato "0.00"
+// - Campos opcionais (originId, debtorId) devem ser omitidos quando vazios
+// - recurrenceType no backend aceita: monthly | yearly | custom (mapear weekly -> custom)
+//
+type BackendExpensePayload = Omit<ExpensePayload, "amount" | "sharedAmount" | "originId" | "debtorId" | "recurrenceType"> & {
+  amount: string;
+  sharedAmount?: string;
+  originId?: string;
+  debtorId?: string;
+  recurrenceType?: "monthly" | "yearly" | "custom" | null;
+};
+
+function toMoneyString(value: unknown): string {
+  const num = typeof value === "number" ? value : Number(value);
+  const safe = Number.isFinite(num) ? num : 0;
+  return safe.toFixed(2);
+}
+
+function normalizeExpensePayload(payload: ExpensePayload): BackendExpensePayload {
+  const normalized: BackendExpensePayload = {
+    ...payload,
+    amount: toMoneyString(payload.amount),
+  } as BackendExpensePayload;
+
+  // sharedAmount é opcional
+  if (payload.sharedAmount != null) {
+    normalized.sharedAmount = toMoneyString(payload.sharedAmount as number);
+  } else {
+    delete (normalized as any).sharedAmount;
+  }
+
+  // originId/debtorId: omite se vazio/null
+  if (payload.originId) normalized.originId = payload.originId || undefined;
+  else delete (normalized as any).originId;
+
+  if (payload.debtorId) normalized.debtorId = payload.debtorId || undefined;
+  else delete (normalized as any).debtorId;
+
+  // recurrenceType: mapear weekly -> custom; manter monthly/yearly; omitir se nulo/undefined
+  if (payload.recurrenceType) {
+    normalized.recurrenceType = payload.recurrenceType === "weekly" ? "custom" : payload.recurrenceType;
+  } else {
+    delete (normalized as any).recurrenceType;
+  }
+
+  return normalized;
+}
+
 const MONTH_FALLBACK = () => {
   const now = new Date();
   return {
@@ -57,7 +107,8 @@ export async function getSharedExpenses(): Promise<Expense[]> {
 }
 
 export async function createExpense(payload: ExpensePayload): Promise<Expense> {
-  const { data } = await api.post<Expense>("/api/expenses", payload);
+  const body = normalizeExpensePayload(payload);
+  const { data } = await api.post<Expense>("/api/expenses", body);
   return ExpenseSchema.parse(data);
 }
 
@@ -65,7 +116,8 @@ export async function updateExpense(
   id: string,
   payload: ExpensePayload
 ): Promise<Expense> {
-  const { data } = await api.patch<Expense>(`/api/expenses/${id}/adjust`, payload);
+  const body = normalizeExpensePayload(payload);
+  const { data } = await api.patch<Expense>(`/api/expenses/${id}/adjust`, body);
   return ExpenseSchema.parse(data);
 }
 
@@ -81,7 +133,8 @@ export async function duplicateExpense(
 }
 
 export async function createRecurringExpense(payload: ExpensePayload) {
-  await api.post("/api/expenses/recurring", payload);
+  const body = normalizeExpensePayload(payload);
+  await api.post("/api/expenses/recurring", body);
 }
 
 export async function bulkUpdateExpenses(payload: BulkUpdatePayload) {
