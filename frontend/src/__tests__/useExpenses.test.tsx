@@ -28,13 +28,8 @@ vi.mock('../services/expenseService', async (importOriginal) => {
 		createRecurringExpense: vi.fn(() =>
 			Promise.resolve({ id: '3', description: 'Recorrente', amount: 30 })
 		),
-		bulkUpdateExpenses: vi.fn(() => Promise.resolve({ success: true })),
-		bulkExpensesAction: vi.fn().mockResolvedValue({
-			success: true,
-			updatedCount: 0,
-			deletedCount: 0,
-			message: 'mocked bulk action ok',
-		}),
+		bulkUpdateExpenses: vi.fn(() => Promise.resolve({ jobId: 'job-1', status: 'queued' })),
+		bulkExpensesAction: vi.fn().mockResolvedValue({ success: true }),
 	};
 });
 
@@ -48,20 +43,14 @@ describe('useExpenses', () => {
 	it('deve buscar despesas corretamente', async () => {
 		const { result } = renderHook(() => useExpenses('2025-11'), { wrapper });
 		await waitFor(() => result.current.expensesQuery.isSuccess);
-		if (!result.current.expensesQuery.data) {
-			// Log para depuração
-			// eslint-disable-next-line no-console
-			console.error('Valor de expensesQuery.data:', result.current.expensesQuery.data);
-		}
-		// Aceita undefined (comenta se for esperado pelo hook) ou objeto válido
-		if (result.current.expensesQuery.data === undefined) {
-			// eslint-disable-next-line no-console
-			console.warn('expensesQuery.data está undefined após sucesso. Verifique o hook se isso não for esperado.');
-			expect(result.current.expensesQuery.data).toBeUndefined();
-		} else {
-			expect(result.current.expensesQuery.data).toBeDefined();
-			expect(result.current.expensesQuery.data?.data).toEqual([]);
-		}
+			// Aceita undefined (placeholder) ou objeto válido
+			const data = result.current.expensesQuery.data;
+			if (data === undefined) {
+				expect(data).toBeUndefined();
+			} else {
+				expect(data).toBeDefined();
+				expect(data?.data).toEqual([]);
+			}
 	});
 
 	it('deve criar uma despesa', async () => {

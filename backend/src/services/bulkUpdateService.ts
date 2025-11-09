@@ -117,17 +117,41 @@ export async function applyBulkUnifiedUpdate(
   userId: string,
   items: BulkUnifiedUpdateItem[]
 ) {
+  // Evita N+1: busca todas as despesas alvo de uma vez
+  const targetIds = items.map(i => i.id);
+  const existingExpenses = await prisma.expense.findMany({
+    where: { id: { in: targetIds }, userId },
+    select: { id: true, date: true, billingMonth: true },
+  });
+
+  const expenseMap = new Map<string, typeof existingExpenses[0]>();
+  existingExpenses.forEach(e => expenseMap.set(e.id, e));
+
+  // Validar ownership de originId quando informado
+  const candidateOriginIds = Array.from(
+    new Set(
+      items
+        .map((i) => i.originId)
+        .filter((v): v is string => typeof v === 'string' && v.length > 0)
+    )
+  );
+  let allowedOriginIds = new Set<string>();
+  if (candidateOriginIds.length) {
+    const rows = await prisma.origin.findMany({
+      where: { id: { in: candidateOriginIds }, userId },
+      select: { id: true },
+    });
+    allowedOriginIds = new Set(rows.map((r) => r.id));
+  }
+
   let updatedCount = 0;
   const invalidationMap = new Map<string, { month: string; mode: 'calendar' | 'billing' }>();
 
   for (const item of items) {
-    const expense = await prisma.expense.findFirst({
-      where: { id: item.id, userId },
-      select: { id: true, date: true, billingMonth: true },
-    });
-    if (!expense) continue;
+    const expense = expenseMap.get(item.id);
+    if (!expense) continue; // ignora ids inválidos / pertencentes a outro usuário
 
-  const updateData: Prisma.ExpenseUpdateInput = {};
+    const updateData: Prisma.ExpenseUpdateInput = {};
     if (item.category !== undefined) updateData.category = item.category;
     if (item.fixed !== undefined) updateData.fixed = item.fixed;
     if (item.recurring !== undefined) {
@@ -136,17 +160,24 @@ export async function applyBulkUnifiedUpdate(
     } else if (item.recurrenceType !== undefined) {
       updateData.recurrenceType = item.recurrenceType;
     }
-  // originId será tratado em operação separada abaixo (algumas versões do client não expõem originId neste tipo)
-
-    if (Object.keys(updateData).length) {
-      await prisma.expense.update({ where: { id: expense.id }, data: updateData });
-      updatedCount += 1;
-    }
-
     if (item.originId !== undefined) {
-      await prisma.expense.update({ where: { id: expense.id }, data: { originId: item.originId } as any });
-      updatedCount += 1;
+      if (item.originId === null) {
+        updateData.origin = { disconnect: true };
+      } else {
+        if (!allowedOriginIds.has(item.originId)) {
+          throw new Error('Origem inválida para o usuário.');
+        }
+        updateData.origin = { connect: { id: item.originId } };
+      }
     }
+
+    if (Object.keys(updateData).length === 0) {
+      // Nada para atualizar neste item
+      continue;
+    }
+
+    await prisma.expense.update({ where: { id: expense.id }, data: updateData });
+    updatedCount += 1; // Conta exatamente uma vez por item atualizado
 
     const calendarMonth = monthKeyFromInput(expense.date);
     const entries = buildInvalidationEntries(calendarMonth, expense.billingMonth ?? null);

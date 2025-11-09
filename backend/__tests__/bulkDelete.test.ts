@@ -1,9 +1,7 @@
 import request from 'supertest';
 import app from '../src';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getPrismaMock, loginTestUser, getAuthorizedHeaders, ensureExpenseExists } from './helpers/expenseTestUtils';
-
-const prisma = getPrismaMock();
+import { loginTestUser, getAuthorizedHeaders, ensureExpenseExists } from './helpers/expenseTestUtils';
 
 describe('Bulk delete endpoint', () => {
   beforeEach(() => {

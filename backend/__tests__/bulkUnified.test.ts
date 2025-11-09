@@ -1,9 +1,7 @@
 import request from 'supertest';
 import app from '../src';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { loginTestUser, getAuthorizedHeaders, ensureExpenseExists, getPrismaMock } from './helpers/expenseTestUtils';
-
-const prisma = getPrismaMock();
+import { loginTestUser, getAuthorizedHeaders, ensureExpenseExists } from './helpers/expenseTestUtils';
 
 describe('Bulk unified endpoint', () => {
   beforeEach(() => vi.clearAllMocks());
