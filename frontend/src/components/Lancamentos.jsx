@@ -34,6 +34,7 @@ import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
+// eslint-disable-next-line no-unused-vars
 import { AnimatePresence, motion } from "framer-motion";
 import Section from "./ui/Section";
 import ExpenseBulkModal from "./ExpenseBulkModal";
