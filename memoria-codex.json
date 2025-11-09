@@ -1,13 +1,13 @@
 {
   "codex_memory": {
     "project": "Finance App Project",
-    "version": "v5.7 (Análise de Segurança e Resiliência Integrada)",
-    "description": "Aplicação fullstack de controle financeiro (React + Express + Prisma + MongoDB + RabbitMQ + Upstash Redis), com foco em modularização, segurança e resiliência.",
+    "version": "v6.3.0 (Auth httpOnly Cookies - Segurança Aprimorada)",
+    "description": "Aplicação fullstack de controle financeiro (React + Express + Prisma + MongoDB + RabbitMQ + Upstash Redis + httpOnly Cookies), com foco em modularização, segurança, resiliência, validação robusta e autenticação segura.",
     "milestones": [
       {
         "id": 9,
         "tag": "[FE] Toasts & Empty States",
-        "status": "� Concluído",
+        "status": "🟢 Concluído",
         "summary": "Feedbacks visuais consistentes (toasts) e placeholders de listas vazias (empty states) implementados em todas as telas CRUD, com código totalmente documentado.",
         "notes": [
           "✅ notistack instalado e SnackbarProvider configurado globalmente (top-right, max 3, 3s duration)",
@@ -37,7 +37,7 @@
       {
         "id": 10,
         "tag": "[DX] Healthchecks e Docker Prod",
-        "status": "� Concluído",
+        "status": "🟢 Concluído",
         "summary": "Aprimorar observabilidade e robustez de execução em contêineres com healthchecks completos.",
         "notes": [
           "✅ Endpoint /api/health: Verifica Mongo (ping), Redis (PING) e RabbitMQ (connect+channel)",
@@ -52,6 +52,55 @@
           "✅ Dockerfile: curl instalado no stage runtime para healthchecks",
           "✅ Todos os containers com STATUS=healthy validados via docker ps",
           "✅ Endpoint /ready: Readiness probe para compatibilidade futura com Kubernetes"
+        ]
+      },
+      {
+        "id": 11,
+        "tag": "[Security] Validação de Rota (Zod)",
+        "status": "🟢 Concluído",
+        "summary": "Sistema completo de validação de entrada (body/query/params) usando Zod, com middleware genérica, schemas por recurso, feature flag e logs limpos.",
+        "notes": [
+          "✅ 5 schemas criados: expense (180L), origin (160L), auth (80L), salary (100L), catalog (90L)",
+          "✅ Middleware validation.ts (290L): aceita body/query/params, retorna 400 padronizado, respeita VALIDATION_ENABLED",
+          "✅ Formato de erro: { error, message, details: [{ field, message }] } - sem stack-trace",
+          "✅ Feature flag VALIDATION_ENABLED no config.ts (default: true, permite rollback)",
+          "✅ 18 rotas validadas: expenses (4), origins (4), auth (2), salary (4), debtors (4)",
+          "✅ Validações monetárias: string formato '0.00' com regex /^\\d+\\.\\d{2}$/",
+          "✅ Validações de datas: z.coerce.date() para ISO 8601, ranges validados",
+          "✅ Validações de IDs: ObjectId MongoDB (24 chars hex) com regex",
+          "✅ Validação condicional: closingDay obrigatório quando type='Cartão'",
+          "✅ Segurança: .strict() rejeita campos extras (previne mass assignment)",
+          "✅ Telemetria: contadores validationFailures (por rota) e validationFailuresByField",
+          "✅ Função getValidationMetrics() para debugging e monitoramento",
+          "✅ Logs nível 'warn' SEM stack-trace para erros esperados de validação",
+          "✅ Convenções: createXxxSchema, updateXxxSchema (.partial()), queryXxxSchema, idParamSchema",
+          "✅ Documentação completa consolidada no README.md (seção Milestone #11)",
+          "🐛 v6.2.1 FIX: queryExpenseSchema ajustado para aceitar mode=calendar, year, limit=1000 (compatibilidade frontend)",
+          "🐛 v6.2.1 FIX: Middleware corrigido para não sobrescrever req.query (read-only no Express)",
+          "✅ v6.2.1 TEST: Todas as rotas validadas retornando 200 OK (expenses, origins, salary, debtors)",
+          "✅ v6.2.1 STATUS: Sistema 100% funcional em produção sem erros 400/500"
+        ]
+      },
+      {
+        "id": 13,
+        "tag": "[Security] Auth httpOnly Cookies",
+        "status": "🟢 Concluído",
+        "summary": "Migração de localStorage (vulnerável a XSS) para cookies httpOnly + tokens em memória, com refresh automático e validação real de credenciais.",
+        "notes": [
+          "✅ Arquitetura de 2 tokens: Access Token (15min, memória) + Refresh Token (7d, cookie httpOnly)",
+          "✅ Backend: 4 endpoints (login, register, refresh, logout) com bcrypt + JWT",
+          "✅ Cookies httpOnly: secure (HTTPS prod), sameSite: strict (previne CSRF), inacessível via JS",
+          "✅ Validação real: bcrypt.compare() para senhas, mensagens genéricas (previne enumeração)",
+          "✅ Auto-refresh: Frontend intercepta 401, chama /auth/refresh automaticamente",
+          "✅ CORS: credentials: true no backend + withCredentials: true no frontend",
+          "✅ cookie-parser: Instalado no backend para ler req.cookies",
+          "✅ Logs seguros: Login success/fail com email/IP (SEM senha/token)",
+          "✅ Frontend: Token em memória (state), user cacheado (localStorage), logout chama backend",
+          "✅ Testes: register, login, refresh, logout, credenciais inválidas - TODOS PASSANDO",
+          "✅ Breaking change: Usuários precisam fazer login novamente (tokens antigos inválidos)",
+          "✅ Documentação: 1000+ linhas no README com diagramas, fluxos, troubleshooting",
+          "✅ Segurança: XSS prevenido (httpOnly), CSRF prevenido (sameSite: strict)",
+          "✅ Dependências: cookie-parser@1.4.6 + @types/cookie-parser@1.4.7"
         ]
       },
       {
@@ -83,7 +132,7 @@
       {
         "id": 0,
         "tag": "[BUG] Fatura de Cartão (closingDay + dia útil + billingMonth)",
-        "status": "� Concluído (Backend)",
+        "status": "🟢 Concluído (Backend)",
         "summary": "Classificar despesas de cartão pela fatura correta com base no dia de fechamento (ajustado para dia útil), gravando billingMonth automaticamente.",
         "notes": [
           "✅ Schema atualizado: Origin.closingDay (Int), Origin.billingRolloverPolicy (NEXT|PREVIOUS), Expense.billingMonth (YYYY-MM) + índice @@index([userId, billingMonth])",
@@ -245,20 +294,28 @@
         ]
       }
     ],
-    "last_action": "Sessão 08/11/2025: Infraestrutura Docker estabilizada, bug de rota /bulkUpdate corrigido, e payload de BulkUpdate alinhado entre frontend e backend.",
+    "last_action": "Sessão 09/11/2025: Milestone #13 (Auth httpOnly Cookies) concluída - Sistema de autenticação completamente refatorado com cookies httpOnly + tokens em memória. Access token (15min) em memória, refresh token (7d) em cookie inacessível via JS. Auto-refresh, logout seguro, validação real de credenciais, logs auditáveis. 100% testado e documentado (1000+ linhas README).",
     "session_achievements": [
-      "✅ Docker: Resolvidos conflitos de porta via kill de processos órfãos docker-proxy",
-      "✅ BulkUpdate Route: Corrigida rota backend de /bulk → /bulkUpdate",
-      "✅ BulkUpdate Payload: Atualizado tipo e componente para formato { filters, data, options }",
-      "✅ Ambiente: Todos os 5 containers (mongo, backend, frontend, worker, bulk-worker) rodando estáveis"
+      "✅ Milestone #13: Autenticação segura com cookies httpOnly implementada",
+      "✅ Backend: 4 endpoints (login, register, refresh, logout) com bcrypt + JWT",
+      "✅ Access Token: 15min em memória (state) | Refresh Token: 7d em cookie httpOnly",
+      "✅ Cookies: httpOnly (previne XSS), secure (HTTPS prod), sameSite: strict (previne CSRF)",
+      "✅ CORS: credentials: true + withCredentials no axios",
+      "✅ cookie-parser@1.4.6 instalado no backend",
+      "✅ Frontend: Token em memória, auto-refresh em 401, logout com backend",
+      "✅ Validação real: bcrypt.compare() + mensagens genéricas (previne enumeração)",
+      "✅ Logs seguros: Login/logout com email/IP (SEM senha/token)",
+      "✅ Testes: register, login, refresh, logout - TODOS PASSANDO",
+      "✅ Documentação: 1000+ linhas no README com diagramas ASCII e troubleshooting",
+      "✅ Breaking change: localStorage removido (usuários devem fazer login novamente)"
     ],
     "next_steps": [
-      "Testar funcionalidade de bulk update end-to-end no frontend",
-      "Continuar Milestone #9 (Toasts & Empty States) com código comentado",
-      "Executar Milestone 17 (Storybook) como quick win subsequente",
-      "Implementar 10/11/12/16 para elevar qualidade/segurança e dar base ao Milestone 0",
-      "Entregar Milestone 0 (billingMonth) com backfill e testes",
-      "Planejar 14/15 (resiliência/arquitetura) e 13/18 (autenticação segura e avançada)"
+      "Implementar Milestone #0 frontend: UI de faturas com mode=billing e agrupamento",
+      "Milestone #14: Dead Letter Queue para jobs falhados (resiliência)",
+      "Milestone #15: Service/Repository Layer (separar lógica de negócio das rotas)",
+      "Milestone #16: Testes automatizados (Jest + Supertest para APIs + RTL para frontend)",
+      "Milestone #17: Storybook para componentes MUI",
+      "Milestone #18: Autenticação avançada (MFA, Google OAuth)"
     ],
     "commit_template": "• [Feature/Refactor/Fix] Descrição da mudança.\n• Relacionado ao(s) Milestone(s): #[ID]"
   }

@@ -2,6 +2,13 @@ import { Router, Request } from 'express';
 import { PrismaClient } from '@prisma/client';
 import type { $Enums } from '@prisma/client';
 import { parseDecimal, toDecimalString, toDecimalStringOrNull } from '../utils/formatters';
+import { validate } from '../middlewares/validation';
+import {
+  createOriginSchema,
+  updateOriginSchema,
+  queryOriginSchema,
+  idParamSchema,
+} from '../schemas/origin.schema';
 
 interface AuthenticatedRequest extends Request {
   userId?: string;
@@ -76,7 +83,7 @@ const parseBillingPolicy = (
 export default function originsRoutes(prisma: PrismaClient) {
   const router = Router();
 
-  router.get('/', async (req: AuthenticatedRequest, res) => {
+  router.get('/', validate({ query: queryOriginSchema }), async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.userId;
       if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
@@ -89,7 +96,7 @@ export default function originsRoutes(prisma: PrismaClient) {
     }
   });
 
-  router.post('/', async (req: AuthenticatedRequest, res) => {
+  router.post('/', validate({ body: createOriginSchema }), async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.userId;
       if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
@@ -127,7 +134,7 @@ export default function originsRoutes(prisma: PrismaClient) {
     }
   });
 
-  router.put('/:id', async (req: AuthenticatedRequest, res) => {
+  router.put('/:id', validate({ params: idParamSchema, body: updateOriginSchema }), async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.userId;
       if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
@@ -216,7 +223,7 @@ export default function originsRoutes(prisma: PrismaClient) {
     }
   });
 
-  router.delete('/:id', async (req: AuthenticatedRequest, res) => {
+  router.delete('/:id', validate({ params: idParamSchema }), async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.userId;
       if (!userId) return res.status(401).json({ message: 'Não autorizado.' });

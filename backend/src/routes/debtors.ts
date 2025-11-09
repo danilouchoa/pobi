@@ -1,5 +1,12 @@
 import { Router, Request } from 'express';
 import { PrismaClient } from '@prisma/client';
+import { validate } from '../middlewares/validation';
+import {
+  createDebtorSchema,
+  updateDebtorSchema,
+  queryDebtorSchema,
+  idParamSchema,
+} from '../schemas/catalog.schema';
 
 interface AuthenticatedRequest extends Request {
   userId?: string;
@@ -15,7 +22,7 @@ const serializeDebtor = (debtor: { id: string; name: string; status: string | nu
 export default function debtorsRoutes(prisma: PrismaClient) {
   const router = Router();
 
-  router.get('/', async (req: AuthenticatedRequest, res) => {
+  router.get('/', validate({ query: queryDebtorSchema }), async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.userId;
       if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
@@ -28,7 +35,7 @@ export default function debtorsRoutes(prisma: PrismaClient) {
     }
   });
 
-  router.post('/', async (req: AuthenticatedRequest, res) => {
+  router.post('/', validate({ body: createDebtorSchema }), async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.userId;
       if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
@@ -44,7 +51,7 @@ export default function debtorsRoutes(prisma: PrismaClient) {
     }
   });
 
-  router.put('/:id', async (req: AuthenticatedRequest, res) => {
+  router.put('/:id', validate({ params: idParamSchema, body: updateDebtorSchema }), async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.userId;
       if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
@@ -92,7 +99,7 @@ export default function debtorsRoutes(prisma: PrismaClient) {
     }
   });
 
-  router.delete('/:id', async (req: AuthenticatedRequest, res) => {
+  router.delete('/:id', validate({ params: idParamSchema }), async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.userId;
       if (!userId) return res.status(401).json({ message: 'Não autorizado.' });

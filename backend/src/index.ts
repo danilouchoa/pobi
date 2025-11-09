@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import { PrismaClient } from '@prisma/client';
 import authRoutes from './routes/auth';
 import { authenticate } from './middlewares/auth';
@@ -20,18 +21,46 @@ const prisma = new PrismaClient();
 
 // Middlewares
 app.use(helmet());
+
+/**
+ * CORS Configuration - Milestone #13
+ * 
+ * Segurança:
+ * - credentials: true → permite envio de cookies entre domínios
+ * - origin callback → allowlist de origens permitidas (dev + prod)
+ * - Rejeita requisições de origens desconhecidas
+ * 
+ * Origens permitidas:
+ * - Dev: http://localhost:5173 (Vite)
+ * - Prod: definido via ALLOWED_ORIGINS env var
+ * 
+ * IMPORTANTE: Nunca usar origin: '*' com credentials: true (erro CORS)
+ */
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (isCorsAllowed(origin || undefined)) {
+      // Permitir requests sem origin (ex: mobile apps, Postman)
+      if (!origin) return callback(null, true);
+      
+      if (isCorsAllowed(origin)) {
         callback(null, true);
       } else {
+        console.warn(`[CORS] Blocked request from unauthorized origin: ${origin}`);
         callback(new Error('Not allowed by CORS'));
       }
     },
-    credentials: true,
+    credentials: true, // Permite envio de cookies
   })
 );
+
+/**
+ * Cookie Parser - Milestone #13
+ * 
+ * Permite ler cookies do request (req.cookies)
+ * Necessário para refresh token armazenado em cookie httpOnly
+ */
+app.use(cookieParser());
+
 app.use(requestLogger);
 app.use(express.json()); // Habilita o parsing de JSON
 app.use(invalidJsonHandler);

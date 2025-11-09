@@ -24,6 +24,13 @@ import {
 } from '../utils/expenseCache';
 import { bulkJobSchema } from '../schemas/bulkUpdate.schema';
 import { ZodError } from 'zod';
+import { validate } from '../middlewares/validation';
+import {
+  createExpenseSchema,
+  updateExpenseSchema,
+  queryExpenseSchema,
+  idParamSchema,
+} from '../schemas/expense.schema';
 
 interface AuthenticatedRequest extends Request {
   userId?: string;
@@ -132,7 +139,7 @@ const serializeExpense = (expense: any) => ({
 export default function expensesRoutes(prisma: PrismaClient) {
   const router = Router();
 
-  router.get('/', async (req: AuthenticatedRequest, res) => {
+  router.get('/', validate({ query: queryExpenseSchema }), async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.userId;
 
@@ -371,7 +378,7 @@ export default function expensesRoutes(prisma: PrismaClient) {
     }
   });
 
-  router.post('/', async (req: AuthenticatedRequest, res) => {
+  router.post('/', validate({ body: createExpenseSchema }), async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.userId;
 
@@ -410,7 +417,7 @@ export default function expensesRoutes(prisma: PrismaClient) {
     }
   });
 
-  router.put('/:id', async (req: AuthenticatedRequest, res) => {
+  router.put('/:id', validate({ params: idParamSchema, body: updateExpenseSchema }), async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.userId;
 
@@ -471,7 +478,7 @@ export default function expensesRoutes(prisma: PrismaClient) {
     }
   });
 
-  router.delete('/:id', async (req: AuthenticatedRequest, res) => {
+  router.delete('/:id', validate({ params: idParamSchema }), async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.userId;
 

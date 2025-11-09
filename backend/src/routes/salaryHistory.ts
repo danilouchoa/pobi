@@ -3,6 +3,13 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { getOrSetCache } from '../lib/redisCache';
 import { redis } from '../lib/redisClient';
+import { validate } from '../middlewares/validation';
+import {
+  createSalarySchema,
+  updateSalarySchema,
+  querySalarySchema,
+  idParamSchema,
+} from '../schemas/salary.schema';
 
 interface AuthenticatedRequest extends Request {
   userId?: string;
@@ -67,7 +74,7 @@ const invalidateSalaryCache = async (userId: string, ...months: Array<string | n
 export default function salaryHistoryRoutes(prisma: PrismaClient) {
   const router = Router();
 
-  router.get('/', async (req: AuthenticatedRequest, res) => {
+  router.get('/', validate({ query: querySalarySchema }), async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.userId;
       if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
@@ -93,7 +100,7 @@ export default function salaryHistoryRoutes(prisma: PrismaClient) {
     }
   });
 
-  router.post('/', async (req: AuthenticatedRequest, res) => {
+  router.post('/', validate({ body: createSalarySchema }), async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.userId;
       if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
@@ -122,7 +129,7 @@ export default function salaryHistoryRoutes(prisma: PrismaClient) {
     }
   });
 
-  router.put('/:id', async (req: AuthenticatedRequest, res) => {
+  router.put('/:id', validate({ params: idParamSchema, body: updateSalarySchema }), async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.userId;
       if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
@@ -154,7 +161,7 @@ export default function salaryHistoryRoutes(prisma: PrismaClient) {
     }
   });
 
-  router.delete('/:id', async (req: AuthenticatedRequest, res) => {
+  router.delete('/:id', validate({ params: idParamSchema }), async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.userId;
       if (!userId) return res.status(401).json({ message: 'Não autorizado.' });

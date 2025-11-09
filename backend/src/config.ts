@@ -20,6 +20,30 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(1, 'JWT_SECRET is required'),
   RABBIT_URL: z.string().min(1).default('amqps://USER:PASSWORD@gorilla.lmq.cloudamqp.com/nokwohlm'),
   CORS_ORIGINS: z.string().optional(),
+  /**
+   * Feature Flag: Validação de Entrada (Milestone #11)
+   * 
+   * Controla se a validação Zod de entrada (body/query/params) está ativa.
+   * 
+   * Comportamento:
+   * - true (default): Valida todas as requisições, retorna 400 para payloads inválidos
+   * - false: Desativa validação (útil para rollback rápido em caso de falso positivo)
+   * 
+   * Quando desativar:
+   * - Emergências: falso positivo bloqueando operação crítica
+   * - Smoke tests: validar funcionalidade sem restrições
+   * - Debug: isolar se problema é da validação ou da lógica de negócio
+   * 
+   * Riscos de desativar:
+   * - Perde proteção contra payloads malformados
+   * - Permite mass assignment attacks
+   * - Reduz observabilidade de erros de input
+   * 
+   * Recomendação: manter ativado em produção, monitorar métricas de falhas
+   */
+  VALIDATION_ENABLED: z.enum(['true', 'false']).optional()
+    .transform(val => val !== 'false') // true por default
+    .default('true' as any),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
@@ -42,6 +66,7 @@ export const config = {
   jwtSecret: parsedEnv.data.JWT_SECRET,
   rabbitUrl: parsedEnv.data.RABBIT_URL,
   corsOrigins,
+  validationEnabled: parsedEnv.data.VALIDATION_ENABLED,
 };
 
 export const isCorsAllowed = (origin?: string): boolean => {
