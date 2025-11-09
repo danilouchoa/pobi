@@ -3,7 +3,7 @@ import { useExpenses } from "./useExpenses";
 import { useCatalogs } from "./useCatalogs";
 import { useSalary } from "./useSalary";
 import { readLS, saveLS, parseNum } from "../utils/helpers";
-import { useAuth } from "../context/AuthProvider";
+import { useAuth } from "../context/useAuth";
 import { ExpensePayload, OriginPayload, DebtorPayload } from "../types";
 import { useCategories } from "./useCategories";
 

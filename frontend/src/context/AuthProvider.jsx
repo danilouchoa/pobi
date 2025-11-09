@@ -23,7 +23,7 @@ const USER_KEY = "finance_user";
 
 const AuthContext = createContext(null);
 
-export const AuthProvider = ({ children }) => {
+export function AuthProvider({ children }) {
   // Access token APENAS em memória (não persiste entre reloads)
   const [token, setToken] = useState(null);
   
@@ -171,8 +171,8 @@ export const AuthProvider = ({ children }) => {
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-};
+}
 
 // useAuth extraído para arquivo separado para evitar conflito com Fast Refresh
+// Named export of context only; hook lives in separate file for Fast Refresh compliance.
 export { AuthContext };
-export { useAuth } from './useAuth';
