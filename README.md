@@ -85,7 +85,7 @@ E a tela de lançamentos possui um botão “Excluir selecionados”.
 
 ## 📋 Índice de Milestones
 
-### ✅ **Concluídas (14)**
+### ✅ **Concluídas (16)**
 1. [Milestone #0 - Fatura de Cartão (billingMonth)](#milestone-0---fatura-de-cartão-billingmonth)
 2. [Milestone #1 - Replicação e Idempotência](#milestone-1---replicação-e-idempotência)
 3. [Milestone #2 - Precisão Monetária (Float → String)](#milestone-2---precisão-monetária-float--string)
@@ -102,6 +102,8 @@ E a tela de lançamentos possui um botão “Excluir selecionados”.
 13. [Milestone #13 - Auth httpOnly Cookies](#milestone-13---auth-httponly-cookies)
 14. [Milestone #14 - Dead Letter Queue (DLQ)](#milestone-14---dead-letter-queue-dlq) 🆕
 15. [Milestone #17 - Storybook](#milestone-17---storybook) 🆕
+ 16. [Milestone #19 - Atualização Automática de Dependências](#milestone-19---atualização-automática-de-dependências)
+ 17. [Milestone #20 - CI Pipeline (Backend & Frontend)](#milestone-20---ci-pipeline-backend--frontend)
 
 ### 🟡 **Planejadas (3)**
 - Milestone #15 - Service/Repository Layer
@@ -134,6 +136,71 @@ Adicionar resiliência ao processamento assíncrono com RabbitMQ, roteando mensa
 - [x] Retry/backoff configurável
 - [x] Testes manuais: stats, purge, reprocess
 - [x] Documentação e código comentado
+
+---
+
+# Milestone #19 - Atualização Automática de Dependências
+
+### 📋 Status: ✅ **Concluído (DevEx)**
+
+### 🎯 Objetivo
+Manter o projeto seguro e atualizado com Dependabot, PRs automáticos e auto-merge condicional quando CI estiver verde.
+
+### ✅ Implementação
+
+- `/.github/dependabot.yml` configurado para `/backend` e `/frontend` (ecosistema `npm`).
+- Agendamento: **diariamente às 14:02 BRT** (`America/Sao_Paulo`).
+- Labels automáticas: `dependencies`, `auto-update`.
+- Workflow `dependabot-auto-merge.yml`: auto-approve/auto-merge quando status checks verdes.
+
+### 🔎 Como funciona
+- Dependabot abre PRs com bumps de versões seguras.
+- CI roda (frontend/backend). Se verde, auto-merge aplica.
+- Branch `main` protegida: merges só via PR com checks verificados.
+
+### 📊 Critérios de Aceite
+- [x] PRs de dependências abrindo diariamente.
+- [x] Auto-merge habilitado condicionado aos checks.
+- [x] Documentação no README + codex.
+
+---
+
+# Milestone #20 - CI Pipeline (Backend & Frontend)
+
+### 📋 Status: ✅ **Concluído (DevEx)**
+
+### 🎯 Objetivo
+Garantir qualidade contínua com build, lint, testes e cobertura em PRs e pushes para `main`.
+
+### ✅ Implementação
+
+- Workflows:
+  - `.github/workflows/ci-backend.yml` (Node 20, npm ci, lint, `tsc --noEmit`, vitest + cobertura, artifacts).
+  - `.github/workflows/ci-frontend.yml` (Node 20, npm ci, lint, build Vite, vitest + cobertura, artifacts).
+- Proteção de branch: status checks obrigatórios antes de merge.
+- Cache de dependências (`actions/setup-node@v4`).
+
+### 🧪 Execução local (opcional)
+```bash
+# Backend
+cd backend
+npm ci
+npm run lint || true
+npx tsc --noEmit
+npm run test || npm run coverage
+
+# Frontend
+cd ../frontend
+npm ci || npm install
+npm run lint || true
+npm run build
+npm run test:unit || npm run coverage
+```
+
+### 📊 Critérios de Aceite
+- [x] Workflows executam em push/PR para main.
+- [x] Upload de cobertura como artifact.
+- [x] Falha em lint/build/test bloqueia merge.
 
 ---
 

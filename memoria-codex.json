@@ -4,6 +4,38 @@
     "version": "v6.3.0 (Auth httpOnly Cookies - Segurança Aprimorada)",
     "description": "Aplicação fullstack de controle financeiro (React + Express + Prisma + MongoDB + RabbitMQ + Upstash Redis + httpOnly Cookies), com foco em modularização, segurança, resiliência, validação robusta e autenticação segura.",
     "milestones": [
+          {
+            "id": 20,
+            "tag": "[DX] CI Pipeline (Backend & Frontend)",
+            "status": "🟢 Concluído",
+            "summary": "Pipelines GitHub Actions para backend e frontend garantindo lint, build, testes, cobertura e proteção de branch.",
+            "notes": [
+              "✅ Workflows ci-backend.yml e ci-frontend.yml ativos (push e PR para main)",
+              "✅ Node 20 + cache npm (setup-node)",
+              "✅ Etapas: install, lint, build/tsc, vitest + cobertura, upload artifacts",
+              "✅ Status checks requeridos antes de merge em main",
+              "✅ Auto-merge de Dependabot depende dos checks verdes",
+              "📊 Métrica alvo: execução <5min total cada pipeline",
+              "🧪 Cobertura publicada como artifact para inspeção",
+              "🔒 Branch protection configurada (GH006 aplicado em push direto)"
+            ]
+          },
+          {
+            "id": 19,
+            "tag": "[DX] Atualização Automática de Dependências",
+            "status": "🟢 Concluído",
+            "summary": "Dependabot diário para backend e frontend com auto-label e auto-merge condicional.",
+            "notes": [
+              "✅ Arquivo dependabot.yml configurado (interval daily 14:02 BRT, timezone America/Sao_Paulo)",
+              "✅ Labels automáticas: dependencies, auto-update",
+              "✅ Workflow dependabot-auto-merge.yml para fusão automática com CI verde",
+              "✅ PRs recentes: bump express-rate-limit 8.2.1",
+              "✅ Branch main protegida - merges apenas via PR",
+              "📌 Objetivo: nenhuma dependência crítica >1 versão minor atrasada",
+              "🛡️ Segurança: patches aplicados em <24h",
+              "🗂️ Documentação no README (seção Milestone #19)"
+            ]
+          },
         {
           "id": 19,
           "tag": "[DX] Atualização Automática de Dependências",
