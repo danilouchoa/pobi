@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, useCallback } from "react";
+import { createContext, useEffect, useMemo, useState, useCallback } from "react";
 import api, { registerUnauthorizedHandler, setAuthToken } from "../services/api";
 
 /**
@@ -66,7 +66,7 @@ export const AuthProvider = ({ children }) => {
       const { data } = await api.post("/api/auth/refresh");
       setToken(data.accessToken);
       return data.accessToken;
-    } catch (error) {
+    } catch {
       console.warn("[Auth] Refresh token expired or invalid, redirecting to login");
       setToken(null);
       setUser(null);
@@ -110,7 +110,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     restoreSession();
-  }, []); // Executar apenas na montagem
+  }, [token, user, refreshAccessToken]); // Executar quando mudar sessão/refresh
 
   /**
    * Login com email e senha
@@ -173,8 +173,6 @@ export const AuthProvider = ({ children }) => {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-export const useAuth = () => {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth deve ser usado dentro de AuthProvider");
-  return ctx;
-};
+// useAuth extraído para arquivo separado para evitar conflito com Fast Refresh
+export { AuthContext };
+export { useAuth } from './useAuth';
