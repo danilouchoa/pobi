@@ -4,7 +4,7 @@ updates:
     directory: '/backend'
     schedule:
       interval: 'daily'
-      time: '17:00'
+      time: '14:02'
       timezone: 'America/Sao_Paulo'
     target-branch: 'main'
     commit-message:
@@ -18,7 +18,7 @@ updates:
     directory: '/frontend'
     schedule:
       interval: 'daily'
-      time: '17:00'
+      time: '14:02'
       timezone: 'America/Sao_Paulo'
     target-branch: 'main'
     commit-message:
