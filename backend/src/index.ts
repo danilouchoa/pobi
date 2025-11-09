@@ -15,6 +15,7 @@ import dlqRoutes from './routes/dlq';
 import { requestLogger } from './middlewares/logger';
 import { globalErrorHandler, invalidJsonHandler } from './middlewares/errorHandler';
 import { config, isCorsAllowed } from './config';
+import { apiLimiter } from './middlewares/rateLimiter';
 
 import csurf from 'csurf';
 
@@ -93,6 +94,8 @@ app.use(
     ignoreMethods: ['GET', 'HEAD', 'OPTIONS'],
   })
 );
+
+app.use('/api', apiLimiter);
 
 // Expor o token CSRF em uma rota pública para o frontend buscar
 app.get('/api/csrf-token', (req: Request, res) => {

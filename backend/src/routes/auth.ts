@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import { publishRecurringJob } from '../lib/rabbit';
 import { validate } from '../middlewares/validation';
 import { registerSchema, loginSchema } from '../schemas/auth.schema';
+import { authLimiter, authSensitiveLimiter } from '../middlewares/rateLimiter';
 
 const SALT_ROUNDS = 10;
 
@@ -79,7 +80,7 @@ export default function authRoutes(prisma: PrismaClient) {
    * - Refresh token apenas em cookie (inacessível por JS)
    * - Access token apenas em memória no frontend
    */
-  router.post('/register', validate({ body: registerSchema }), async (req: Request, res: Response) => {
+  router.post('/register', authSensitiveLimiter, validate({ body: registerSchema }), async (req: Request, res: Response) => {
     try {
       const { email, password, name } = req.body;
 
@@ -155,7 +156,7 @@ export default function authRoutes(prisma: PrismaClient) {
    * - Refresh token em cookie httpOnly (inacessível por XSS)
    * - Sem rate limiting aqui (será feito em Milestone futura)
    */
-  router.post('/login', validate({ body: loginSchema }), async (req: Request, res: Response) => {
+  router.post('/login', authSensitiveLimiter, validate({ body: loginSchema }), async (req: Request, res: Response) => {
     const { email, password } = req.body;
     const clientIp = req.ip || req.connection.remoteAddress || 'unknown';
 
@@ -248,7 +249,7 @@ export default function authRoutes(prisma: PrismaClient) {
    * - Frontend chama quando access token expira (15min)
    * - Axios interceptor detecta 401 e tenta refresh automaticamente
    */
-  router.post('/refresh', async (req: Request, res: Response) => {
+  router.post('/refresh', authLimiter, async (req: Request, res: Response) => {
     try {
       // Ler refresh token do cookie
       const refreshToken = req.cookies.refreshToken;
@@ -319,7 +320,7 @@ export default function authRoutes(prisma: PrismaClient) {
    * - clearCookie deve usar as mesmas opções de criação (path, domain)
    * - Mesmo sem refresh token, endpoint retorna 200 (idempotente)
    */
-  router.post('/logout', async (req: Request, res: Response) => {
+  router.post('/logout', authLimiter, async (req: Request, res: Response) => {
     try {
       // Remover cookie com as mesmas opções usadas na criação
       res.clearCookie('refreshToken', {

@@ -1,3 +1,4 @@
+import * as React from "react";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { ThemeProvider, CssBaseline } from "@mui/material";
@@ -18,6 +19,11 @@ import { ToastProvider } from "./ui/feedback";
 
 const queryClient = new QueryClient();
 const isDev = import.meta.env.DEV;
+
+// Safeguard for libraries expecting a global React reference (legacy bundles, widgets).
+if (typeof window !== "undefined") {
+  window.React = window.React || React;
+}
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>

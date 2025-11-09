@@ -47,10 +47,48 @@ const api = axios.create({
   withCredentials: true,
 });
 
+let csrfToken: string | null = null;
+let csrfPromise: Promise<string | null> | null = null;
+
+const needsCsrf = (method?: string) => {
+  if (!method) return false;
+  const normalized = method.toLowerCase();
+  return ["post", "put", "patch", "delete"].includes(normalized);
+};
+
+const fetchCsrfToken = async (): Promise<string | null> => {
+  const { data } = await api.get("/api/csrf-token");
+  return data?.csrfToken ?? null;
+};
+
+const ensureCsrfToken = async (): Promise<string | null> => {
+  if (csrfToken) return csrfToken;
+
+  if (!csrfPromise) {
+    csrfPromise = fetchCsrfToken()
+      .then((token) => {
+        csrfToken = token;
+        return token;
+      })
+      .finally(() => {
+        csrfPromise = null;
+      });
+  }
+
+  return csrfPromise;
+};
+
 // Interceptor: Adiciona Authorization header com access token
-api.interceptors.request.use((config) => {
+api.interceptors.request.use(async (config) => {
+  config.headers = config.headers ?? {};
   if (authToken) {
     config.headers.Authorization = `Bearer ${authToken}`;
+  }
+  if (needsCsrf(config.method)) {
+    const token = await ensureCsrfToken();
+    if (token) {
+      config.headers["X-CSRF-Token"] = token;
+    }
   }
   return config;
 });
@@ -59,6 +97,9 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
+    if (error.response?.status === 403) {
+      csrfToken = null;
+    }
     if (error.response?.status === 401) {
       // Access token expirado → handler tentará refresh
       unauthorizedHandler?.();

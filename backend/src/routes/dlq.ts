@@ -14,6 +14,7 @@
 import { Router } from 'express';
 import { getDLQStats, peekDLQMessages, reprocessDLQMessage, purgeDLQ } from '../lib/rabbit';
 import { authenticate } from '../middlewares/auth';
+import { adminLimiter } from '../middlewares/rateLimiter';
 
 const router = Router();
 
@@ -28,7 +29,7 @@ const router = Router();
  *   "consumerCount": 0
  * }
  */
-router.get('/stats', authenticate, async (req, res, next) => {
+router.get('/stats', authenticate, adminLimiter, async (req, res, next) => {
   try {
     const stats = await getDLQStats();
     res.json(stats);
@@ -70,7 +71,7 @@ router.get('/stats', authenticate, async (req, res, next) => {
  *   "count": 1
  * }
  */
-router.get('/messages', authenticate, async (req, res, next) => {
+router.get('/messages', authenticate, adminLimiter, async (req, res, next) => {
   try {
     const limit = Math.min(parseInt(req.query.limit as string) || 10, 100);
     const messages = await peekDLQMessages(limit);
@@ -108,7 +109,7 @@ router.get('/messages', authenticate, async (req, res, next) => {
  *   "message": "Mensagem não encontrada na DLQ"
  * }
  */
-router.post('/reprocess/:deliveryTag', authenticate, async (req, res, next) => {
+router.post('/reprocess/:deliveryTag', authenticate, adminLimiter, async (req, res, next) => {
   try {
     const deliveryTag = parseInt(req.params.deliveryTag);
     const { targetQueue } = req.body;
@@ -150,7 +151,7 @@ router.post('/reprocess/:deliveryTag', authenticate, async (req, res, next) => {
  *   "message": "15 mensagens removidas da DLQ"
  * }
  */
-router.delete('/purge', authenticate, async (req, res, next) => {
+router.delete('/purge', authenticate, adminLimiter, async (req, res, next) => {
   try {
     const purgedCount = await purgeDLQ();
     res.json({
