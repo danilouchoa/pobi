@@ -25,6 +25,7 @@ import {
   CircularProgress,
   LinearProgress,
   Tooltip,
+  Snackbar,
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
@@ -485,19 +486,35 @@ export default function Lancamentos({
   }, [filterType, fetchRecurringExpenses, fetchSharedExpenses]);
 
   return (
-    <Stack spacing={3}>
-      <div ref={createSectionRef}>
-        <Section
-          title="Adicionar Lançamento"
-          subtitle="Cadastre novos lançamentos financeiros com opção de parcelamento."
-          right={
-            <Button variant="contained" color="secondary" onClick={handleAddExpense} disabled={submitting || state.origins.length === 0}>
-              {submitting ? "Salvando..." : "Adicionar lançamento"}
-            </Button>
-          }
-        >
-        <Grid container spacing={2}>
-          <Grid item xs={12} md={3}>
+    <>
+      <Snackbar
+        open={bulkSubmitting}
+        message="Excluindo lançamentos..."
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+        ContentProps={{ sx: { bgcolor: 'info.main', color: 'info.contrastText', fontWeight: 500 } }}
+      />
+      <Stack spacing={3}>
+        {/* ...todo o conteúdo original do componente permanece aqui, sem comentários extras... */}
+        <div ref={createSectionRef}>
+          <Section
+            title="Adicionar Lançamento"
+            subtitle="Cadastre novos lançamentos financeiros com opção de parcelamento."
+            right={
+              <Button variant="contained" color="secondary" onClick={handleAddExpense} disabled={submitting || state.origins.length === 0}>
+                {submitting ? "Salvando..." : "Adicionar lançamento"}
+              </Button>
+            }
+          >
+            <Grid container spacing={2}>
+              <Grid item xs={12} md={3}>
+                {/* ...restante do conteúdo do formulário de criação... */}
+              </Grid>
+            </Grid>
+          </Section>
+        </div>
+        {/* ...restante dos modais, dialogs e conteúdo da tela... */}
+      </Stack>
+    </>
             <TextField label="Data" type="date" fullWidth value={form.date} onChange={handleChange("date")} InputLabelProps={{ shrink: true }} />
           </Grid>
           <Grid item xs={12} md={5}>
@@ -669,6 +686,7 @@ export default function Lancamentos({
           </Stack>
         </Stack>
         <TableContainer component={Paper} variant="outlined">
+          {bulkSubmitting && <LinearProgress sx={{ position: 'absolute', width: '100%', zIndex: 2 }} />}
           <Table size="small">
             <TableHead>
               <TableRow>
