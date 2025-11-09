@@ -42,6 +42,13 @@ export default function Salario({ month, salary, saveSalary }) {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    
+    // Validação do CNAE antes de enviar
+    if (form.cnae && form.cnae.length > 20) {
+      toast.error({ message: "CNAE muito longo (máximo 20 caracteres)" });
+      return;
+    }
+    
     setSaving(true);
     try {
       await saveSalary(month, form);
@@ -99,7 +106,15 @@ export default function Salario({ month, salary, saveSalary }) {
               />
             </Grid>
             <Grid item xs={12} md={3}>
-              <TextField label="CNAE" fullWidth value={form.cnae} onChange={handleChange("cnae")} />
+              <TextField 
+                label="CNAE" 
+                fullWidth 
+                value={form.cnae} 
+                onChange={handleChange("cnae")}
+                inputProps={{ maxLength: 20 }}
+                helperText={`${(form.cnae || '').length}/20 caracteres`}
+                error={(form.cnae || '').length > 20}
+              />
             </Grid>
           </Grid>
           <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems="center">
