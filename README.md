@@ -102,12 +102,12 @@ E a tela de lançamentos possui um botão “Excluir selecionados”.
 13. [Milestone #13 - Auth httpOnly Cookies](#milestone-13---auth-httponly-cookies)
 14. [Milestone #14 - Dead Letter Queue (DLQ)](#milestone-14---dead-letter-queue-dlq) 🆕
 15. [Milestone #17 - Storybook](#milestone-17---storybook) 🆕
- 16. [Milestone #19 - Atualização Automática de Dependências](#milestone-19---atualização-automática-de-dependências)
- 17. [Milestone #20 - CI Pipeline (Backend & Frontend)](#milestone-20---ci-pipeline-backend--frontend)
+ 16. [Milestone #16 - Testes Automatizados](#milestone-16---testes-automatizados)
+ 17. [Milestone #19 - Atualização Automática de Dependências](#milestone-19---atualização-automática-de-dependências)
+ 18. [Milestone #20 - CI Pipeline (Backend & Frontend)](#milestone-20---ci-pipeline-backend--frontend)
 
 ### 🟡 **Planejadas (3)**
 - Milestone #15 - Service/Repository Layer
-- Milestone #16 - Testes Automatizados
 - Milestone #18 - Autenticação Avançada (MFA + Google)
 #
 # Milestone #14 - Dead Letter Queue (DLQ)
@@ -3315,11 +3315,63 @@ npm run dev
 ### **Testes**
 
 ```bash
-# Backend (futura Milestone #16)
+
+# Milestone #16 - Testes Automatizados
+
+### 📋 Status: ✅ **Concluído (Fullstack)**
+
+### 🎯 Objetivo
+Cobertura de testes automatizados (unitários e integração) para backend (Vitest + Supertest) e frontend (RTL), garantindo estabilidade, confiança e CI/CD robusta.
+
+### ✅ Implementação
+
+- **Backend:**
+  - Vitest + Supertest para rotas, services, workers, helpers (auth, expenses, billing, validation)
+  - Testes de integração: /auth/login, /auth/refresh, /auth/logout (cookies), CRUD /expenses, filtros UTC, billingMonth
+  - Testes unitários: deriveBillingMonth(), adjustToBusinessDay(), workers (ACK/NACK, reconexão)
+  - Mock global de clock (UTC fixo)
+  - Seeds determinísticos (seed=42), banco in-memory/mocks, sem tocar produção
+  - Mocks centralizados (__mocks__/), reset antes de cada teste
+  - Rodar via `npm run test:backend`, logs enxutos (--silent)
+
+- **Frontend:**
+  - React Testing Library (RTL) + Vitest
+  - Testes de componentes: MonthNavigator (troca mês, labels, animação), EmptyState (renderização, CTA)
+  - Testes de hooks: useExpenses (fetch/mutation, toasts), useToast (debounce/chave única)
+  - Testes de contexto: AuthContext (login/logout, mock cookies)
+  - Providers mockados: QueryClient, Theme, Toast
+  - Mocks de API: MSW ou axios-mock-adapter
+  - Rodar via `npm run test:frontend`, cobertura >80% em /hooks e /components/ui
+
+- **Cobertura e CI:**
+  - Cobertura mínima 80% linhas/branches backend (src/services, src/routes, src/utils) e frontend (src/hooks, src/components/ui)
+  - CI executa `npm run test:backend` e `npm run test:frontend`, falha se cobertura <80%
+  - Relatório HTML (coverage/index.html)
+
+- **Boas práticas:**
+  - Nomes descritivos, mocks centralizados, clock global, seeds fixos, testes idempotentes
+  - Nenhum teste depende de latência real, logs silenciosos, scripts package.json comentados
+
+- **Documentação:**
+  - TESTING_GUIDE.md: estrutura, comandos, troubleshooting, tabela módulos↔testes, boas práticas
+
+### 📊 Critérios de Aceite
+- [x] Tudo acima implementado
+- [x] Sem flakiness
+- [x] Cobertura >80% em backend e frontend
+- [x] Documentação completa
+
+### 🧪 Comandos
+
+```bash
+# Backend
+cd backend
 npm run test
 
-# Frontend (futura Milestone #16)
+# Frontend
+cd ../frontend
 npm run test
+```
 ```
 
 ---
