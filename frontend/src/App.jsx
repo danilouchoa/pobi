@@ -23,7 +23,7 @@ import Salario from "./components/Salario";
 import Cadastros from "./components/Cadastros";
 import Exportacao from "./components/Exportacao";
 import Login from "./components/Login";
-import { useAuth } from "./context/AuthProvider";
+import { useAuth } from "./context/useAuth";
 
 const TABS = [
   { id: "dashboard", label: "Resumo Mensal" },

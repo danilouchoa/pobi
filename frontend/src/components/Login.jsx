@@ -9,7 +9,7 @@ import {
   Button,
   Alert,
 } from "@mui/material";
-import { useAuth } from "../context/AuthProvider";
+import { useAuth } from "../context/useAuth";
 
 export default function Login() {
   const { login, authError, loading } = useAuth();
