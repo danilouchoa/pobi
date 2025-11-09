@@ -1,6 +1,6 @@
 import api from "./api";
-import { Expense, ExpensePayload, ExpensesResponse, BulkUpdatePayload } from "../types";
-import { ExpenseSchema, ExpensesResponseSchema } from "../lib/schemas";
+import { Expense, ExpensePayload, ExpensesResponse, BulkUpdatePayload, BulkUnifiedActionPayload } from "../types";
+import { ExpenseSchema, ExpensesResponseSchema, ExpensesSchema } from "../lib/schemas";
 
 const MONTH_FALLBACK = () => {
   const now = new Date();
@@ -86,5 +86,13 @@ export async function createRecurringExpense(payload: ExpensePayload) {
 
 export async function bulkUpdateExpenses(payload: BulkUpdatePayload) {
   const { data } = await api.post<{ jobId: string; status: string }>("/api/expenses/bulkUpdate", payload);
+  return data;
+}
+
+export async function bulkExpensesAction(payload: BulkUnifiedActionPayload) {
+  const { data } = await api.post<{ deletedCount: number; updatedCount: number; status: string }>(
+    "/api/expenses/bulk",
+    payload
+  );
   return data;
 }

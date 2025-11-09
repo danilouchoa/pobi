@@ -13,6 +13,7 @@ import {
 } from '../utils/expenseHelpers';
 import { parseDecimal, toDecimalString } from '../utils/formatters';
 import { publishRecurringJob, publishBulkUpdateJob } from '../lib/rabbit';
+import { applyBulkUnifiedUpdate, applyBulkDelete } from '../services/bulkUpdateService';
 import { getOrSetCache } from '../lib/redisCache';
 import { deriveBillingMonth, BillingRolloverPolicy } from '../lib/billing';
 import {
@@ -22,7 +23,7 @@ import {
   buildInvalidationEntries,
   invalidateExpenseCache,
 } from '../utils/expenseCache';
-import { bulkJobSchema } from '../schemas/bulkUpdate.schema';
+import { bulkJobSchema, bulkUnifiedActionSchema, type BulkUnifiedActionPayload } from '../schemas/bulkUpdate.schema';
 import { ZodError } from 'zod';
 import { validate } from '../middlewares/validation';
 import {
@@ -307,6 +308,33 @@ export default function expensesRoutes(prisma: PrismaClient) {
     }
   });
 
+  // Endpoint unificado /bulk para update/delete (síncrono)
+  router.post('/bulk', async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.userId;
+      if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
+
+  const parsed = bulkUnifiedActionSchema.parse(req.body) as BulkUnifiedActionPayload;
+
+      if (parsed.action === 'delete') {
+        const uniqueIds = Array.from(new Set(parsed.ids));
+        const { deletedCount } = await applyBulkDelete(prisma, userId, uniqueIds);
+        console.info(`[bulk] delete user=${userId} ids=${uniqueIds.length} deleted=${deletedCount}`);
+        return res.json({ deletedCount, updatedCount: 0, status: 'ok' });
+      } else if (parsed.action === 'update') {
+        const items = parsed.items;
+        const { updatedCount } = await applyBulkUnifiedUpdate(prisma, userId, items);
+        console.info(`[bulk] update user=${userId} items=${items.length} updated=${updatedCount}`);
+        return res.json({ deletedCount: 0, updatedCount, status: 'ok' });
+      }
+    } catch (error) {
+      if (error instanceof ZodError) {
+        return res.status(400).json({ message: error.errors.map(e => e.message).join(', ') });
+      }
+      console.error('Erro em /bulk:', error);
+      return res.status(500).json({ message: 'Erro interno na operação em massa.' });
+    }
+  });
   router.get('/recurring', async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.userId;

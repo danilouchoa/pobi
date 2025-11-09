@@ -63,6 +63,28 @@ export type BulkUpdatePayload = {
   };
 };
 
+// Novo payload unificado (frontend) para endpoint /bulk
+export type BulkDeletePayload = {
+  action: 'delete';
+  ids: string[];
+};
+
+export type BulkUpdateActionItem = {
+  id: string;
+  category?: string;
+  originId?: string;
+  fixed?: boolean;
+  recurring?: boolean;
+  recurrenceType?: "monthly" | "weekly" | "yearly" | null;
+};
+
+export type BulkUpdateActionPayload = {
+  action: 'update';
+  items: BulkUpdateActionItem[];
+};
+
+export type BulkUnifiedActionPayload = BulkDeletePayload | BulkUpdateActionPayload;
+
 export type Origin = {
   id: string;
   name: string;

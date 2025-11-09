@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-query";
 import {
   bulkUpdateExpenses,
+  bulkExpensesAction,
   createExpense,
   createRecurringExpense,
   deleteExpense,
@@ -95,7 +96,6 @@ export function useExpenses(month: string, options: Options = {}) {
     enabled,
     staleTime: 60_000,
     placeholderData: keepPreviousData,
-    keepPreviousData: true,
   });
 
   const recurringQuery = useQuery({
@@ -219,6 +219,11 @@ export function useExpenses(month: string, options: Options = {}) {
     onSuccess: invalidateAll,
   });
 
+  const bulkActionMutation = useMutation({
+    mutationFn: bulkExpensesAction,
+    onSuccess: invalidateAll,
+  });
+
   const pagination: Pagination =
     expensesQuery.data?.pagination ?? {
       page,
@@ -241,6 +246,9 @@ export function useExpenses(month: string, options: Options = {}) {
     createRecurringExpense: createRecurringMutation.mutateAsync,
     fetchRecurringExpenses: recurringQuery.refetch,
     fetchSharedExpenses: sharedQuery.refetch,
-    bulkUpdate: bulkUpdateMutation.mutateAsync,
+    bulkUpdate: bulkUpdateMutation.mutateAsync, // legado fila async
+    bulkDelete: (ids: string[]) => bulkActionMutation.mutateAsync({ action: 'delete', ids }),
+    bulkUpdateInline: (items: { id: string; category?: string; originId?: string; fixed?: boolean; recurring?: boolean; recurrenceType?: "monthly" | "weekly" | "yearly" | null }[]) =>
+      bulkActionMutation.mutateAsync({ action: 'update', items }),
   };
 }

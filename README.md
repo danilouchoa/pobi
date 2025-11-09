@@ -26,6 +26,42 @@ Workflows modulares garantem qualidade antes do merge:
 
 ---
 
+## ⚙️ Operações em Massa (Bulk Update/Delete)
+
+O backend expõe um endpoint unificado para operações em massa sobre despesas:
+
+- POST `/api/expenses/bulk` (update/delete síncronos)
+- POST `/api/expenses/bulkUpdate` (legado – enfileira job para update)
+
+Payloads suportados:
+
+- Delete em massa
+
+```json
+{ "action": "delete", "ids": ["abc123", "def456"] }
+```
+
+- Update item‑a‑item
+
+```json
+{ "action": "update", "items": [ { "id": "abc123", "category": "Food" }, { "id": "def456", "fixed": true } ] }
+```
+
+Resposta padronizada:
+
+```json
+{ "deletedCount": 2, "updatedCount": 0, "status": "ok" }
+```
+
+No frontend, o hook `useExpenses` expõe:
+
+- `bulkDelete(ids: string[])`
+- `bulkUpdateInline(items: { id: string; category?; originId?; fixed?; recurring?; recurrenceType? }[])`
+
+E a tela de lançamentos possui um botão “Excluir selecionados”.
+
+---
+
 ## 📋 Índice de Milestones
 
 ### ✅ **Concluídas (14)**

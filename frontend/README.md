@@ -1,3 +1,28 @@
+### Bulk actions (update/delete)
+
+O frontend agora suporta ações em massa usando o mesmo endpoint unificado no backend (`POST /api/expenses/bulk`).
+
+Exemplos de payload:
+
+- Delete em massa
+
+```
+{ "action": "delete", "ids": ["abc123", "def456"] }
+```
+
+- Update item-a-item
+
+```
+{ "action": "update", "items": [ { "id": "abc123", "category": "Food" }, { "id": "def456", "fixed": true } ] }
+```
+
+No hook `useExpenses` foram adicionadas as funções:
+
+- `bulkDelete(ids: string[])`
+- `bulkUpdateInline(items: { id: string; category?; originId?; fixed?; recurring?; recurrenceType? }[])`
+
+E na tela `Lancamentos` foi adicionado o botão “Excluir selecionados”.
+
 # Finance App Frontend
 
 This frontend consumes the REST API exposed by `VITE_API_URL` (default `http://localhost:4000`). React Query v5 orchestrates all remote state, with runtime validation and optimistic flows tuned for month-to-month navigation.
