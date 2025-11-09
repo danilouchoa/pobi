@@ -1,8 +1,25 @@
 import request from 'supertest';
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
+import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs';
 import app from '../src/index';
+
+const prisma = new PrismaClient() as any;
 let refreshTokenCookie: string;
+
 beforeAll(async () => {
+  // Mockar usuário existente no banco
+  const mockUser = {
+    id: 'user-123',
+    email: 'danilo.uchoa@finance.app',
+    name: 'Danilo Uchoa',
+    passwordHash: await bcrypt.hash('finance123', 10),
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  prisma.user.findUnique.mockResolvedValue(mockUser);
+
   // Realiza login para obter refreshToken válido
   const res = await request(app)
     .post('/api/auth/login')

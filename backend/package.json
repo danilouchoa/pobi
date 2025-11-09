@@ -16,7 +16,8 @@
     "health:db": "tsx scripts/check-db.ts",
     "seed": "ts-node prisma/seed.ts",
     "lint": "eslint . --ext .ts",
-    "clean": "rimraf dist"
+    "clean": "rimraf dist",
+    "coverage": "vitest run --coverage"
   },
   "keywords": [],
   "author": "",
@@ -47,11 +48,15 @@
     "@types/helmet": "^4.0.0",
     "@types/jsonwebtoken": "^9.0.6",
     "@types/node": "^24.10.0",
+    "@types/supertest": "^6.0.3",
+    "@vitest/coverage-v8": "^4.0.8",
     "nodemon": "^3.1.2",
     "prisma": "^6.19.0",
+    "supertest": "^7.1.4",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "tsx": "^4.20.6",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.8"
   }
 }

@@ -152,7 +152,10 @@ const connectWithRetry = async () => {
   }
 };
 
-connectWithRetry().catch((error) => {
-  console.error('[Worker] Fatal error during startup:', error);
-  process.exit(1);
-});
+// Só iniciar o worker se não estiver em ambiente de teste
+if (process.env.NODE_ENV !== 'test') {
+  connectWithRetry().catch((error) => {
+    console.error('[Worker] Fatal error during startup:', error);
+    process.exit(1);
+  });
+}

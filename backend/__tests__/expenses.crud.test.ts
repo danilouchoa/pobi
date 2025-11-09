@@ -1,7 +1,11 @@
 import request from 'supertest';
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs';
 import app from '../src/index';
-import prisma from './__mocks__/prisma';
+
+const prisma = new PrismaClient() as any;
+
 let accessToken: string;
 let createdExpenseId: string;
 const testUser = {
@@ -19,6 +23,18 @@ const expensePayload = {
 
 describe('/expenses CRUD & filtros', () => {
   beforeAll(async () => {
+    // Mockar usuário existente no banco
+    const mockUser = {
+      id: 'user-123',
+      email: 'danilo.uchoa@finance.app',
+      name: 'Danilo Uchoa',
+      passwordHash: await bcrypt.hash('finance123', 10),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    prisma.user.findUnique.mockResolvedValue(mockUser);
+
     // Login para obter token
     const res = await request(app)
       .post('/api/auth/login')

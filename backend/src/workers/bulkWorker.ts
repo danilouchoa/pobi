@@ -228,8 +228,11 @@ async function startBulkWorker() {
   }, { noAck: false });
 }
 
-startBulkWorker().catch(async (error) => {
-  console.error('[BulkWorker] Fatal error during startup:', formatError(error));
-  await prisma.$disconnect();
-  process.exit(1);
-});
+// Só iniciar o worker se não estiver em ambiente de teste
+if (process.env.NODE_ENV !== 'test') {
+  startBulkWorker().catch(async (error) => {
+    console.error('[BulkWorker] Fatal error during startup:', formatError(error));
+    await prisma.$disconnect();
+    process.exit(1);
+  });
+}
