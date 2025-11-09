@@ -1,0 +1,53 @@
+name: Label - Ready to Merge
+
+on:
+  workflow_run:
+    workflows: ['CI/CD']
+    types: [completed]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  add-label-if-all-jobs-passed:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validar jobs da pipeline e etiquetar PR
+        uses: actions/github-script@v7
+        env:
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const branch = process.env.HEAD_BRANCH;
+            const runId = process.env.WORKFLOW_RUN_ID;
+
+            const allowedPrefixes = ['dependabot/', 'hotfix/', 'release/', 'bugfix/', 'feature/', 'chore/'];
+            const isAllowed = allowedPrefixes.some(prefix => branch.startsWith(prefix));
+
+            if (!isAllowed) {
+              console.log(`Branch '${branch}' não tem prefixo permitido. Ignorando.`);
+              return;
+            }
+
+            // Busca PRs abertos para o branch
+            const prs = await github.rest.pulls.list({ owner, repo, state: 'open', head: `${owner}:${branch}` });
+            if (!prs.data.length) {
+              console.log(`Nenhum PR aberto para o branch '${branch}'.`);
+              return;
+            }
+            const pr = prs.data[0];
+
+            // Adiciona label 'Ready to Merge'
+            await github.rest.issues.addLabels({
+              owner,
+              repo,
+              issue_number: pr.number,
+              labels: ['Ready to Merge']
+            });
+            console.log(`Label 'Ready to Merge' adicionada ao PR #${pr.number}`);

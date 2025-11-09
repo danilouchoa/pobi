@@ -1,0 +1,51 @@
+docs:
+  - '**/*.md'
+  - 'README.md'
+  - 'docs/**'
+
+tests:
+  - '**/*.spec.js'
+  - '**/*.test.js'
+  - '**/*.spec.ts'
+  - '**/*.test.ts'
+  - '**/*.spec.tsx'
+  - '**/*.test.tsx'
+
+backend:
+  - 'backend/**'
+frontend:
+  - 'frontend/**'
+
+api:
+  - 'backend/src/routes/**'
+  - 'backend/src/middlewares/**'
+  - 'backend/src/index.ts'
+
+infra:
+  - 'backend/scripts/**'
+  - 'frontend/scripts/**'
+  - 'backend/prisma/**'
+  - 'docker-compose.yaml'
+  - '.env*'
+
+ci:
+  - '.github/workflows/**'
+  - '.github/actions/**'
+  - '.husky/**'
+
+config:
+  - '.eslintrc*'
+  - '.prettierrc*'
+  - 'tsconfig.json'
+  - 'tailwind.config.*'
+  - 'postcss.config.*'
+  - 'package.json'
+  - 'package-lock.json'
+  - 'pnpm-lock.yaml'
+  - 'yarn.lock'
+
+dependencies:
+  - 'package.json'
+  - 'package-lock.json'
+  - 'pnpm-lock.yaml'
+  - 'yarn.lock'

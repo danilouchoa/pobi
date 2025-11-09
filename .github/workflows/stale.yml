@@ -1,0 +1,22 @@
+name: Mark stale issues and pull requests
+
+on:
+  schedule:
+    - cron: '0 9 * * *' # Every day at 09:00 UTC
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/stale@v5
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          stale-issue-message: 'Esta issue está inativa há um tempo. Se não houver atividade, será fechada automaticamente.'
+          stale-pr-message: 'Este PR está inativo há um tempo. Se não houver atividade, será fechado automaticamente.'
+          stale-issue-label: 'no-issue-activity'
+          stale-pr-label: 'no-pr-activity'
+          days-before-stale: 30
+          days-before-close: 7
