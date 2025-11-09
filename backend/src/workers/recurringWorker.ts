@@ -12,6 +12,7 @@ const RABBIT_URL =
 const QUEUE_NAME = 'recurring-jobs';
 const BASE_DELAY_MS = 1000;
 const MAX_DELAY_MS = 30000;
+const MAX_RETRY_ATTEMPTS = 3; // Número máximo de tentativas antes de enviar para DLQ
 
 let connection: ConfirmConnection | undefined;
 let channel: amqp.ConfirmChannel | undefined;
@@ -77,7 +78,20 @@ const setupConsumer = async () => {
 
   const confirmChannel = (await connection.createConfirmChannel()) as unknown as amqp.ConfirmChannel;
   channel = confirmChannel;
-  await confirmChannel.assertQueue(QUEUE_NAME, { durable: true });
+  
+  // Configurar DLX (Dead Letter Exchange) para mensagens que falharam
+  await confirmChannel.assertExchange('dlx-exchange', 'direct', { durable: true });
+  await confirmChannel.assertQueue('dead-letter-queue', { durable: true });
+  await confirmChannel.bindQueue('dead-letter-queue', 'dlx-exchange', '');
+  
+  // Fila principal com DLX configurado
+  await confirmChannel.assertQueue(QUEUE_NAME, { 
+    durable: true,
+    arguments: {
+      'x-dead-letter-exchange': 'dlx-exchange'
+    }
+  });
+  
   await confirmChannel.prefetch(10);
 
   console.log('[Worker] Waiting for jobs in recurring-jobs queue...');
@@ -86,15 +100,55 @@ const setupConsumer = async () => {
     if (!msg) return;
     const activeChannel = channel;
     if (!activeChannel) return;
+    
     try {
       const data = JSON.parse(msg.content.toString());
       console.log('[Worker] Received job:', data);
+      
       const result = await processRecurringExpenses(prisma);
       console.log('[Worker] Completed:', result);
+      
+      // Sucesso: ACK para remover da fila
       activeChannel.ack(msg);
+      
     } catch (error) {
       console.error('[Worker] Job failed:', error);
-      activeChannel.nack(msg, false, true);
+      
+      // Verificar número de tentativas via headers
+      const retryCount = (msg.properties.headers?.['x-retry-count'] as number) || 0;
+      
+      if (retryCount >= MAX_RETRY_ATTEMPTS) {
+        // Máximo de tentativas atingido: NACK sem requeue (vai para DLQ)
+        console.error(`[Worker] Max retries (${MAX_RETRY_ATTEMPTS}) reached. Sending to DLQ.`);
+        activeChannel.nack(msg, false, false);
+      } else {
+        // Retry com backoff exponencial
+        const delayMs = Math.min(BASE_DELAY_MS * (2 ** retryCount), MAX_DELAY_MS);
+        console.warn(`[Worker] Retry ${retryCount + 1}/${MAX_RETRY_ATTEMPTS} in ${delayMs}ms`);
+        
+        // Aguardar antes de NACK com requeue
+        setTimeout(() => {
+          // Republicar com contador incrementado
+          const newHeaders = {
+            ...(msg.properties.headers || {}),
+            'x-retry-count': retryCount + 1,
+            'x-first-death-queue': QUEUE_NAME,
+            'x-last-error': error instanceof Error ? error.message : String(error),
+          };
+          
+          activeChannel.sendToQueue(
+            QUEUE_NAME,
+            msg.content,
+            {
+              ...msg.properties,
+              headers: newHeaders,
+            }
+          );
+          
+          // ACK original para remover
+          activeChannel.ack(msg);
+        }, delayMs);
+      }
     }
   });
 };

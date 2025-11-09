@@ -11,6 +11,7 @@ import debtorsRoutes from './routes/debtors';
 import salaryHistoryRoutes from './routes/salaryHistory';
 import jobsRoutes from './routes/jobs';
 import healthRoutes from './routes/health';
+import dlqRoutes from './routes/dlq';
 import { requestLogger } from './middlewares/logger';
 import { globalErrorHandler, invalidJsonHandler } from './middlewares/errorHandler';
 import { config, isCorsAllowed } from './config';
@@ -75,6 +76,7 @@ app.use('/api/origins', authenticate, originsRoutes(prisma));
 app.use('/api/debtors', authenticate, debtorsRoutes(prisma));
 app.use('/api/salaryHistory', authenticate, salaryHistoryRoutes(prisma));
 app.use('/api/jobs', authenticate, jobsRoutes(prisma));
+app.use('/api/dlq', authenticate, dlqRoutes); // Dead Letter Queue admin
 
 // Rota de Teste "Hello World"
 app.get('/api/status', (req, res) => {

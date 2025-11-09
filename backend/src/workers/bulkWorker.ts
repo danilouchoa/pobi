@@ -188,6 +188,7 @@ async function startBulkWorker() {
 
       const attempts = job.attempts;
       if (attempts >= MAX_ATTEMPTS) {
+        console.error(`[Job:${jobId}] Max retries (${MAX_ATTEMPTS}) reached. Sending to DLQ.`);
         await prisma.job.update({
           where: { id: jobId },
           data: {
@@ -197,8 +198,9 @@ async function startBulkWorker() {
             resultSummary: job.resultSummary ?? buildEmptySummary(),
           },
         });
-        drop();
+        drop(); // NACK sem requeue → vai para DLQ
       } else {
+        console.warn(`[Job:${jobId}] Retry ${attempts + 1}/${MAX_ATTEMPTS}`);
         await prisma.job.update({
           where: { id: jobId },
           data: {
@@ -206,7 +208,7 @@ async function startBulkWorker() {
             error: formatError(error),
           },
         });
-        requeue();
+        requeue(); // NACK com requeue
       }
     }
   }, { noAck: false });

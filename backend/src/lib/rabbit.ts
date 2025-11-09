@@ -64,8 +64,26 @@ const ensureSharedChannel = async (): Promise<ConfirmChannel> => {
   attachChannelHandlers(channel, () => {
     sharedChannel = null;
   });
-  await channel.assertQueue('recurring-jobs', { durable: true });
-  await channel.assertQueue('bulkUpdateQueue', { durable: true });
+  
+  // Dead Letter Exchange (DLX) para mensagens que falharam múltiplas vezes
+  await channel.assertExchange('dlx-exchange', 'direct', { durable: true });
+  await channel.assertQueue('dead-letter-queue', { durable: true });
+  await channel.bindQueue('dead-letter-queue', 'dlx-exchange', '');
+  
+  // Filas principais com DLX configurado
+  await channel.assertQueue('recurring-jobs', { 
+    durable: true,
+    arguments: {
+      'x-dead-letter-exchange': 'dlx-exchange'
+    }
+  });
+  await channel.assertQueue('bulkUpdateQueue', { 
+    durable: true,
+    arguments: {
+      'x-dead-letter-exchange': 'dlx-exchange'
+    }
+  });
+  
   logConnected();
   return channel;
 };
@@ -86,7 +104,19 @@ async function openContext(options: {
   if (prefetch > 0) {
     await channel.prefetch(prefetch);
   }
-  await channel.assertQueue(options.queue, { durable: true });
+  
+  // Configurar DLX para workers
+  await channel.assertExchange('dlx-exchange', 'direct', { durable: true });
+  await channel.assertQueue('dead-letter-queue', { durable: true });
+  await channel.bindQueue('dead-letter-queue', 'dlx-exchange', '');
+  
+  await channel.assertQueue(options.queue, { 
+    durable: true,
+    arguments: {
+      'x-dead-letter-exchange': 'dlx-exchange'
+    }
+  });
+  
   logConnected();
   return { connection, channel };
 }
@@ -160,4 +190,134 @@ type BulkUpdateMessage = {
 
 export async function publishBulkUpdateJob(message: BulkUpdateMessage) {
   await publishToQueue('bulkUpdateQueue', message.payload ?? message, message.jobId);
+}
+
+/**
+ * DLQ Management Functions
+ */
+
+/**
+ * Obtém estatísticas da Dead Letter Queue
+ * @returns Objeto com messageCount e consumerCount
+ */
+export async function getDLQStats(): Promise<{ messageCount: number; consumerCount: number }> {
+  const channel = await ensureSharedChannel();
+  const info = await channel.checkQueue('dead-letter-queue');
+  return {
+    messageCount: info.messageCount,
+    consumerCount: info.consumerCount,
+  };
+}
+
+/**
+ * Lista mensagens da DLQ (peek sem remover)
+ * @param limit Número máximo de mensagens a retornar
+ * @returns Array de mensagens com metadata
+ */
+export async function peekDLQMessages(limit = 10): Promise<Array<{
+  content: unknown;
+  fields: {
+    deliveryTag: number;
+    redelivered: boolean;
+    routingKey: string;
+  };
+  properties: {
+    correlationId?: string;
+    messageId?: string;
+    timestamp?: number;
+    headers?: Record<string, unknown>;
+  };
+}>> {
+  const channel = await ensureSharedChannel();
+  const messages: Array<{
+    content: unknown;
+    fields: { deliveryTag: number; redelivered: boolean; routingKey: string };
+    properties: {
+      correlationId?: string;
+      messageId?: string;
+      timestamp?: number;
+      headers?: Record<string, unknown>;
+    };
+  }> = [];
+
+  for (let i = 0; i < limit; i++) {
+    const msg = await channel.get('dead-letter-queue', { noAck: false });
+    if (!msg) break;
+    
+    try {
+      const content = JSON.parse(msg.content.toString());
+      messages.push({
+        content,
+        fields: {
+          deliveryTag: msg.fields.deliveryTag,
+          redelivered: msg.fields.redelivered,
+          routingKey: msg.fields.routingKey,
+        },
+        properties: {
+          correlationId: msg.properties.correlationId,
+          messageId: msg.properties.messageId,
+          timestamp: msg.properties.timestamp,
+          headers: msg.properties.headers,
+        },
+      });
+      // Nack para devolver a mensagem à fila (peek)
+      channel.nack(msg, false, true);
+    } catch (error) {
+      console.error('[DLQ] Error parsing message:', error);
+      // Nack mesmo em caso de erro para não perder a mensagem
+      channel.nack(msg, false, true);
+    }
+  }
+
+  return messages;
+}
+
+/**
+ * Reprocessa uma mensagem específica da DLQ enviando para a fila original
+ * @param deliveryTag Tag da mensagem a reprocessar
+ * @param targetQueue Fila de destino (recurring-jobs ou bulkUpdateQueue)
+ * @returns true se sucesso, false se mensagem não encontrada
+ */
+export async function reprocessDLQMessage(
+  deliveryTag: number,
+  targetQueue: 'recurring-jobs' | 'bulkUpdateQueue'
+): Promise<boolean> {
+  const channel = await ensureSharedChannel();
+  const msg = await channel.get('dead-letter-queue', { noAck: false });
+  
+  if (!msg || msg.fields.deliveryTag !== deliveryTag) {
+    if (msg) {
+      // Devolver mensagem se não for a procurada
+      channel.nack(msg, false, true);
+    }
+    return false;
+  }
+
+  try {
+    const content = JSON.parse(msg.content.toString());
+    
+    // Republicar na fila original
+    await publishToQueue(targetQueue, content, msg.properties.correlationId);
+    
+    // Ack para remover da DLQ
+    channel.ack(msg);
+    console.log(`[DLQ] Message ${deliveryTag} reprocessed to ${targetQueue}`);
+    return true;
+  } catch (error) {
+    console.error('[DLQ] Error reprocessing message:', error);
+    // Nack para devolver à DLQ em caso de erro
+    channel.nack(msg, false, true);
+    return false;
+  }
+}
+
+/**
+ * Purga todas as mensagens da DLQ (uso com cautela!)
+ * @returns Número de mensagens removidas
+ */
+export async function purgeDLQ(): Promise<number> {
+  const channel = await ensureSharedChannel();
+  const result = await channel.purgeQueue('dead-letter-queue');
+  console.log(`[DLQ] Purged ${result.messageCount} messages`);
+  return result.messageCount;
 }

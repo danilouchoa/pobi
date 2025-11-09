@@ -8,7 +8,7 @@
 
 ## 📋 Índice de Milestones
 
-### ✅ **Concluídas (12)**
+### ✅ **Concluídas (14)**
 1. [Milestone #0 - Fatura de Cartão (billingMonth)](#milestone-0---fatura-de-cartão-billingmonth)
 2. [Milestone #1 - Replicação e Idempotência](#milestone-1---replicação-e-idempotência)
 3. [Milestone #2 - Precisão Monetária (Float → String)](#milestone-2---precisão-monetária-float--string)
@@ -21,14 +21,71 @@
 10. [Milestone #9 - Toasts & Empty States](#milestone-9---toasts--empty-states)
 11. [Milestone #10 - Healthchecks e Docker Prod](#milestone-10---healthchecks-e-docker-prod)
 12. [Milestone #11 - Validação de Rota (Zod)](#milestone-11---validação-de-rota-zod)
-13. [Milestone #13 - Auth httpOnly Cookies](#milestone-13---auth-httponly-cookies) 🆕
 
-### 🟡 **Planejadas (5)**
-- Milestone #14 - Dead Letter Queue (DLQ)
+13. [Milestone #13 - Auth httpOnly Cookies](#milestone-13---auth-httponly-cookies)
+14. [Milestone #14 - Dead Letter Queue (DLQ)](#milestone-14---dead-letter-queue-dlq) 🆕
+15. [Milestone #17 - Storybook](#milestone-17---storybook) 🆕
+
+### 🟡 **Planejadas (3)**
 - Milestone #15 - Service/Repository Layer
 - Milestone #16 - Testes Automatizados
-- Milestone #17 - Storybook
 - Milestone #18 - Autenticação Avançada (MFA + Google)
+#
+# Milestone #14 - Dead Letter Queue (DLQ)
+
+### 📋 Status: ✅ **Concluído (Backend)**
+
+### 🎯 Objetivo
+Adicionar resiliência ao processamento assíncrono com RabbitMQ, roteando mensagens "venenosas" (que falham após múltiplas tentativas) para uma Dead Letter Queue (DLQ), com monitoramento e reprocessamento via API.
+
+### ✅ Implementação
+
+- **DLQ configurada** via dead-letter-exchange e argumentos de fila no RabbitMQ
+- **Retry automático** com backoff exponencial e limite de tentativas
+- **Admin endpoints**:
+  - `/api/dlq/stats`: status da DLQ (contagem de mensagens)
+  - `/api/dlq/messages`: listar mensagens na DLQ
+  - `/api/dlq/reprocess/:id`: reprocessar mensagem específica
+  - `/api/dlq/purge`: limpar DLQ
+- **Proteção**: endpoints autenticados (JWT)
+- **Logs detalhados** de falhas e reprocessamentos
+- **Workers** (bulk/recurring) integrados com DLQ
+
+### 📊 Critérios de Aceite
+- [x] Mensagens que excedem tentativas vão para DLQ
+- [x] Endpoints admin funcionais e protegidos
+- [x] Retry/backoff configurável
+- [x] Testes manuais: stats, purge, reprocess
+- [x] Documentação e código comentado
+
+---
+
+# Milestone #17 - Storybook
+
+### 📋 Status: ✅ **Concluído (Frontend)**
+
+### 🎯 Objetivo
+Documentar e isolar componentes principais da UI (MUI) para acelerar desenvolvimento, QA e onboarding.
+
+### ✅ Implementação
+
+- **Storybook 10.x** configurado com Vite e tema MUI
+- **Stories reais** para:
+  - `MonthNavigator` (navegação mensal)
+  - `KPI` (indicadores)
+  - `EmptyState` (placeholder de listas)
+- **Remoção de exemplos quebrados** (stories de exemplo)
+- **Preview global** com ThemeProvider e CssBaseline
+- **Zero warnings/erros** no build
+
+### 📊 Critérios de Aceite
+- [x] Storybook inicia sem erros
+- [x] Stories reais e funcionais
+- [x] Tema MUI aplicado globalmente
+- [x] Sem exemplos quebrados
+- [x] Documentação e código limpo
+
+---
 
 ---
 
@@ -3137,4 +3194,4 @@ Este projeto é privado e de propriedade de **danilouchoa**.
 
 **🎉 Finance App Project v5.7 - Building with Excellence! 🎉**
 
-_Última atualização: 08/11/2025_
+_Última atualização: 09/11/2025_

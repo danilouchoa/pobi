@@ -24,14 +24,29 @@
       {
         "id": 17,
         "tag": "[DX] Storybook",
-        "status": "🟡 Planejado (NOVO)",
-        "summary": "Documentar componentes MUI e cenários de UI isolados para acelerar desenvolvimento e QA.",
+        "status": "� Concluído",
+        "summary": "Storybook configurado com tema MUI, stories reais para MonthNavigator, KPI e EmptyState, sem exemplos quebrados.",
         "notes": [
-          "Configurar Storybook com suporte ao tema MUI e mocks de dados.",
-          "Criar stories para MonthNavigator, cards/KPIs e formulários base.",
-          "Adicionar controles (args) e docs automáticas.",
-          "Critérios de aceite: stories executando via npm run storybook sem warnings.",
-          "Riscos: drift com produção; mitigar com stories atômicos e knobs."
+          "✅ Storybook 10.x com Vite e ThemeProvider global",
+          "✅ Stories reais: MonthNavigator, KPI, EmptyState",
+          "✅ Remoção de exemplos quebrados",
+          "✅ Zero warnings/erros no build",
+          "✅ Critérios de aceite: stories reais, tema aplicado, sem exemplos quebrados"
+        ]
+      },
+      {
+        "id": 14,
+        "tag": "[BE] Dead Letter Queue (DLQ)",
+        "status": "🟢 Concluído",
+        "summary": "DLQ implementada no RabbitMQ com retry, backoff, endpoints admin e integração nos workers.",
+        "notes": [
+          "✅ DLQ via dead-letter-exchange e argumentos de fila",
+          "✅ Retry automático com backoff exponencial",
+          "✅ Endpoints admin: /api/dlq/stats, /api/dlq/messages, /api/dlq/reprocess/:id, /api/dlq/purge",
+          "✅ Proteção JWT nos endpoints",
+          "✅ Logs detalhados de falhas e reprocessamentos",
+          "✅ Workers bulk/recurring integrados com DLQ",
+          "✅ Critérios de aceite: mensagens na DLQ após retries, admin funcional, testes manuais"
         ]
       },
       {
