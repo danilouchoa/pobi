@@ -1,12 +1,11 @@
+
 import request from 'supertest';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
-
-// Importar o app DEPOIS dos mocks do setup.ts
 import app from '../src/index';
+import { getCsrfToken } from './utils/csrf';
 
-// Obter instância mockada do Prisma
 const prisma = new PrismaClient() as any;
 
 describe('POST /api/auth/login', () => {
@@ -27,8 +26,11 @@ describe('POST /api/auth/login', () => {
 
     prisma.user.findUnique.mockResolvedValue(mockUser);
 
+    const { csrfToken, csrfCookie } = await getCsrfToken();
     const res = await request(app)
       .post('/api/auth/login')
+      .set('Cookie', csrfCookie)
+      .set('X-CSRF-Token', csrfToken)
       .send({ email: 'danilo.uchoa@finance.app', password: 'finance123' });
 
     expect(res.status).toBe(200);
@@ -42,8 +44,11 @@ describe('POST /api/auth/login', () => {
     // Mockar usuário não encontrado
     prisma.user.findUnique.mockResolvedValue(null);
 
+    const { csrfToken, csrfCookie } = await getCsrfToken();
     const res = await request(app)
       .post('/api/auth/login')
+      .set('Cookie', csrfCookie)
+      .set('X-CSRF-Token', csrfToken)
       .send({ email: 'danilo.uchoa@finance.app', password: 'senhaErrada' });
 
     expect(res.status).toBe(401);

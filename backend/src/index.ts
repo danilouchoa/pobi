@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
@@ -15,6 +15,8 @@ import dlqRoutes from './routes/dlq';
 import { requestLogger } from './middlewares/logger';
 import { globalErrorHandler, invalidJsonHandler } from './middlewares/errorHandler';
 import { config, isCorsAllowed } from './config';
+
+import csurf from 'csurf';
 
 const app = express();
 const port = config.port;
@@ -65,6 +67,24 @@ app.use(cookieParser());
 app.use(requestLogger);
 app.use(express.json()); // Habilita o parsing de JSON
 app.use(invalidJsonHandler);
+
+// Middleware CSRF - protege rotas autenticadas
+// Usa cookie para armazenar o token CSRF
+app.use(
+  csurf({
+    cookie: {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+    },
+    ignoreMethods: ['GET', 'HEAD', 'OPTIONS'],
+  })
+);
+
+// Expor o token CSRF em uma rota pública para o frontend buscar
+app.get('/api/csrf-token', (req: Request, res) => {
+  res.json({ csrfToken: req.csrfToken ? req.csrfToken() : null });
+});
 
 // Rotas públicas (sem autenticação)
 app.use('/api/auth', authRoutes(prisma));

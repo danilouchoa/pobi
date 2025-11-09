@@ -1,11 +1,19 @@
 import request from 'supertest';
 import { describe, it, expect, beforeAll } from 'vitest';
 import app from '../src/index';
+import { getCsrfToken } from './utils/csrf';
 let refreshTokenCookie: string;
+let csrfToken: string;
+let csrfCookie: string;
 beforeAll(async () => {
   // Realiza login para obter refreshToken válido
+  const csrf = await getCsrfToken();
+  csrfToken = csrf.csrfToken;
+  csrfCookie = csrf.csrfCookie;
   const res = await request(app)
     .post('/api/auth/login')
+    .set('Cookie', csrfCookie)
+    .set('X-CSRF-Token', csrfToken)
     .send({ email: 'danilo.uchoa@finance.app', password: 'finance123' });
   const cookies = res.headers['set-cookie'];
   if (Array.isArray(cookies)) {
@@ -21,7 +29,8 @@ describe('POST /api/auth/logout', () => {
   it('deve remover o cookie refreshToken e encerrar sessão', async () => {
     const res = await request(app)
       .post('/api/auth/logout')
-      .set('Cookie', refreshTokenCookie)
+      .set('Cookie', [refreshTokenCookie, csrfCookie].filter(Boolean).join('; '))
+      .set('X-CSRF-Token', csrfToken)
       .send();
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty('message');
@@ -38,8 +47,11 @@ describe('POST /api/auth/logout', () => {
   });
 
   it('deve ser idempotente mesmo sem refreshToken', async () => {
+    const csrf = await getCsrfToken();
     const res = await request(app)
       .post('/api/auth/logout')
+      .set('Cookie', csrf.csrfCookie)
+      .set('X-CSRF-Token', csrf.csrfToken)
       .send();
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty('message');
