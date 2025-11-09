@@ -4,8 +4,37 @@
     "version": "v6.3.0 (Auth httpOnly Cookies - Segurança Aprimorada)",
     "description": "Aplicação fullstack de controle financeiro (React + Express + Prisma + MongoDB + RabbitMQ + Upstash Redis + httpOnly Cookies), com foco em modularização, segurança, resiliência, validação robusta e autenticação segura.",
     "milestones": [
-      {
-        "id": 9,
+        {
+          "id": 19,
+          "tag": "[DX] Atualização Automática de Dependências",
+          "status": "🟡 Planejado",
+          "summary": "Implementar e manter fluxo contínuo de atualização segura de dependências via Dependabot + labeler + auto-merge condicional.",
+          "notes": [
+            "🎯 Dependabot ativo em /backend e /frontend (ecosistema npm)",
+            "🎯 PRs automáticos focando pacotes críticos: zod, helmet, MUI, date-fns, @mui/icons-material, eslint-plugin-react-hooks, @mui/x-data-grid",
+            "🎯 Labeler aplica tags: dependencies, auto-update",
+            "🎯 Job opcional de auto-approve + auto-merge quando CI verde e sem mudanças em lockfiles sensíveis",
+            "🎯 Critérios de aceite: revisão semanal, nenhuma dependência crítica defasada >1 versão minor, merges <24h para patches",
+            "🎯 Documentação: README.md (seção Dependabot) descrevendo fluxo e boas práticas"
+          ]
+        },
+        {
+          "id": 20,
+          "tag": "[DX] CI Pipeline (GitHub Actions)",
+          "status": "🟡 Planejado",
+          "summary": "Criar pipelines modulares de CI (backend e frontend) com build, lint, testes e cobertura, bloqueando merge se falhar.",
+          "notes": [
+            "🎯 Workflows separados: ci-backend.yml e ci-frontend.yml",
+            "🎯 Etapas: checkout, setup Node cache, install, lint, build, test (unit + integração), cobertura",
+            "🎯 Gatilhos: push e pull_request para main + feature/*",
+            "🎯 Status checks protegendo branch main (merge só com CI verde)",
+            "🎯 Artefatos: upload cobertura (coverage) para depuração",
+            "🎯 Critérios de aceite: execução <5min por pipeline, falha visível em PR, documentação no README.md (seção CI Pipeline)",
+            "⚠️ CD (deploy) ficará para milestone futura" 
+          ]
+        },
+  {
+  "id": 9,
         "tag": "[FE] Toasts & Empty States",
         "status": "🟢 Concluído",
         "summary": "Feedbacks visuais consistentes (toasts) e placeholders de listas vazias (empty states) implementados em todas as telas CRUD, com código totalmente documentado.",
@@ -361,7 +390,7 @@
         ]
       }
     ],
-    "last_action": "Sessão 09/11/2025: Milestone #13 (Auth httpOnly Cookies) concluída - Sistema de autenticação completamente refatorado com cookies httpOnly + tokens em memória. Access token (15min) em memória, refresh token (7d) em cookie inacessível via JS. Auto-refresh, logout seguro, validação real de credenciais, logs auditáveis. 100% testado e documentado (1000+ linhas README).",
+  "last_action": "Sessão 09/11/2025: Milestone #13 (Auth httpOnly Cookies) concluída - Sistema de autenticação completamente refatorado com cookies httpOnly + tokens em memória. Access token (15min) em memória, refresh token (7d) em cookie inacessível via JS. Auto-refresh, logout seguro, validação real de credenciais, logs auditáveis. 100% testado e documentado (1000+ linhas README).\n\nDependabot ativado para /backend e /frontend: PRs automáticos de atualização de dependências (ex: zod, helmet, MUI, date-fns, icons-material, eslint-plugin-react-hooks, x-data-grid). Labeler automatizado para categorizar PRs de dependências.",
     "session_achievements": [
       "✅ Milestone #13: Autenticação segura com cookies httpOnly implementada",
       "✅ Backend: 4 endpoints (login, register, refresh, logout) com bcrypt + JWT",
@@ -377,6 +406,7 @@
       "✅ Breaking change: localStorage removido (usuários devem fazer login novamente)"
     ],
     "next_steps": [
+      "Revisar e atualizar dependências semanalmente via PRs do Dependabot (labels: dependencies, auto-update)",
       "Implementar Milestone #0 frontend: UI de faturas com mode=billing e agrupamento",
       "Milestone #14: Dead Letter Queue para jobs falhados (resiliência)",
       "Milestone #15: Service/Repository Layer (separar lógica de negócio das rotas)",

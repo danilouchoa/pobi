@@ -1,5 +1,25 @@
 # 💰 Finance App Project - Documentação Completa
 
+## 🔄 Atualização de Dependências (Dependabot)
+
+O projeto utiliza o [Dependabot](https://github.com/dependabot) para monitorar e atualizar automaticamente dependências do backend (`/backend`) e frontend (`/frontend`).
+
+- PRs automáticos são abertos semanalmente para pacotes como zod, helmet, MUI, date-fns, icons-material, eslint-plugin-react-hooks, x-data-grid, entre outros.
+- Labels automáticas: `dependencies`, `auto-update` (via labeler).
+- Recomenda-se revisar e aprovar/mergear PRs do Dependabot semanalmente para manter a segurança e estabilidade do projeto.
+ - Auto-approve + auto-merge condicional via workflow `dependabot-auto-merge.yml` (somente quando CI verde).
+
+## ✅ CI Pipeline (GitHub Actions)
+
+Workflows modulares garantem qualidade antes do merge:
+
+- `ci-backend.yml`: Node 20, instalação, lint, verificação TypeScript (`tsc --noEmit`), testes (Vitest) e artifact de cobertura.
+- `ci-frontend.yml`: Node 20, instalação, lint, build Vite, testes (Vitest + RTL) e artifact de cobertura.
+- Proteção: status checks devem estar verdes para aplicar label `Ready to Merge` e permitir merge.
+- Estratégia: caches de dependências (setup-node) aceleram builds; cobertura publicada como artifact para inspeção.
+- Futuro: CD (deploy) será adicionado em milestone dedicada.
+
+
 > **Versão:** v6.3.0 - Milestone #13: Auth httpOnly Cookies - Segurança Aprimorada  
 > **Stack:** React 18 + Express + Prisma + MongoDB + RabbitMQ + Redis + Docker + Zod + httpOnly Cookies  
 > **Última atualização:** 09/11/2025
