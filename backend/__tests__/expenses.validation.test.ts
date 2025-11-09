@@ -1,3 +1,5 @@
+import './helpers/registerExpenseMocks';
+
 import request from 'supertest';
 import { describe, it, beforeAll, beforeEach, expect } from 'vitest';
 
@@ -10,7 +12,6 @@ import {
   getBaseExpense,
 } from './helpers/expenseTestUtils';
 import { getCsrfToken } from './utils/csrf';
-import './helpers/registerExpenseMocks';
 
 let accessToken: string;
 const mockExpense = getBaseExpense();

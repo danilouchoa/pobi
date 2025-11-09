@@ -1,6 +1,6 @@
 import express, { Request } from 'express';
 import cors from 'cors';
-import helmet from 'helmet';
+import helmet, { type HelmetOptions } from 'helmet';
 import cookieParser from 'cookie-parser';
 import { PrismaClient } from '@prisma/client';
 import authRoutes from './routes/auth';
@@ -23,7 +23,20 @@ const port = config.port;
 const prisma = new PrismaClient();
 
 // Middlewares
-app.use(helmet());
+const helmetOptions: HelmetOptions = {};
+
+if (process.env.NODE_ENV !== 'production') {
+  const defaultDirectives = helmet.contentSecurityPolicy.getDefaultDirectives();
+  helmetOptions.contentSecurityPolicy = {
+    useDefaults: true,
+    directives: {
+      ...defaultDirectives,
+      "script-src": ["'self'", "'unsafe-eval'"],
+    },
+  };
+}
+
+app.use(helmet(helmetOptions));
 
 /**
  * CORS Configuration - Milestone #13

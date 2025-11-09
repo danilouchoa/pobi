@@ -1,3 +1,5 @@
+import './helpers/registerExpenseMocks';
+
 import request from 'supertest';
 import { describe, it, beforeAll, beforeEach, expect } from 'vitest';
 
@@ -8,7 +10,6 @@ import {
   ensureExpenseExists,
   loginTestUser,
 } from './helpers/expenseTestUtils';
-import './helpers/registerExpenseMocks';
 
 let accessToken: string;
 
