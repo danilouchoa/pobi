@@ -223,6 +223,7 @@ function App() {
                 createRecurringExpense={createRecurringExpense}
                 fetchRecurringExpenses={fetchRecurringExpenses}
                 fetchSharedExpenses={fetchSharedExpenses}
+                // Passamos as categorias dinâmicas para o formulário e para o modal de edição em massa
                 categories={categories}
               />
             )}
@@ -244,6 +245,7 @@ function App() {
                 deleteDebtor={deleteDebtor}
                 updateDebtor={updateDebtor}
                 categories={categories}
+                // Cadastros é o ponto onde o usuário pode criar novas categorias locais
                 addCategory={addCategory}
               />
             )}

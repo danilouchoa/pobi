@@ -23,8 +23,16 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import Section from "./ui/Section";
 import { parseNum, toBRL } from "../utils/helpers";
-import { useToast } from "../ui/feedback";
+import { useToast } from "../hooks/useToast";
 import EmptyState from "./ui/EmptyState";
+
+/**
+ * Cadastros
+ *
+ * Tela responsável por CRUDs auxiliares (origens, devedores e agora categorias personalizadas).
+ * Cada handler dispara toasts documentados abaixo para comunicar o status das operações.
+ * Empty states explicam quando não há registros e incentivam a criação via CTA.
+ */
 
 export default function Cadastros({
   origins,
@@ -44,7 +52,7 @@ export default function Cadastros({
     dueDay: "",
     limit: "",
     closingDay: "",
-    billingRolloverPolicy: "NEXT_BUSINESS_DAY",
+    billingRolloverPolicy: "PREVIOUS",
   });
   const [debtorForm, setDebtorForm] = useState({ name: "" });
   const [originLoading, setOriginLoading] = useState(false);
@@ -56,7 +64,7 @@ export default function Cadastros({
     limit: "",
     active: true,
     closingDay: "",
-    billingRolloverPolicy: "NEXT_BUSINESS_DAY",
+    billingRolloverPolicy: "PREVIOUS",
   });
   const toast = useToast();
   const originNameRef = useRef(null);
@@ -73,7 +81,7 @@ export default function Cadastros({
       const next = { ...prev, [field]: value };
       if (field === "type" && value !== "Cartão") {
         next.closingDay = "";
-        next.billingRolloverPolicy = "NEXT_BUSINESS_DAY";
+        next.billingRolloverPolicy = "PREVIOUS";
       }
       return next;
     });
@@ -89,6 +97,7 @@ export default function Cadastros({
 
   const handleAddCategory = () => {
     if (!categoryName.trim()) {
+      // Feedback imediato para inputs inválidos sem chamar o backend.
       toast.warning("Informe o nome da categoria.");
       focusCategoryForm();
       return;
@@ -96,14 +105,17 @@ export default function Cadastros({
     try {
       addCategory(categoryName);
       setCategoryName("");
+      // Indica conclusão local (não há chamada HTTP para categorias customizadas).
       toast.success();
     } catch (error) {
+      // Quaisquer exceções (ex.: categoria duplicada) são propagadas pelo hook.
       toast.error(error);
     }
   };
 
   const addOrigin = async () => {
     if (!originForm.name.trim()) {
+      // Validação preventiva antes de enviar para a API.
       toast.warning("Informe o nome da origem.");
       focusOriginForm();
       return;
@@ -134,8 +146,9 @@ export default function Cadastros({
         dueDay: "",
         limit: "",
         closingDay: "",
-        billingRolloverPolicy: "NEXT_BUSINESS_DAY",
+        billingRolloverPolicy: "PREVIOUS",
       });
+      // Confirmação visual após o backend persistir a origem.
       toast.success();
     } catch (error) {
       toast.error(error);
@@ -148,6 +161,7 @@ export default function Cadastros({
     if (!window.confirm("Deseja remover esta origem?")) return;
     try {
       await deleteOrigin(id);
+      // Mesmo workflow para exclusões: confirmação -> toast -> refresh via React Query.
       toast.success();
     } catch (error) {
       toast.error(error);
@@ -190,7 +204,7 @@ export default function Cadastros({
       active: entity.active ?? true,
       limit: entity.limit != null ? String(entity.limit) : "",
       closingDay: entity.closingDay != null ? String(entity.closingDay) : "",
-      billingRolloverPolicy: entity.billingRolloverPolicy ?? "NEXT_BUSINESS_DAY",
+      billingRolloverPolicy: entity.billingRolloverPolicy ?? "PREVIOUS",
     });
   };
 
@@ -282,8 +296,8 @@ export default function Cadastros({
                       value={originForm.billingRolloverPolicy}
                       onChange={handleOriginChange("billingRolloverPolicy")}
                     >
-                      <MenuItem value="NEXT_BUSINESS_DAY">Próximo dia útil</MenuItem>
-                      <MenuItem value="PREVIOUS_BUSINESS_DAY">Dia útil anterior</MenuItem>
+                      <MenuItem value="NEXT">Próximo dia útil (segunda-feira)</MenuItem>
+                      <MenuItem value="PREVIOUS">Dia útil anterior (sexta-feira)</MenuItem>
                     </TextField>
                   </Grid>
                 </>
@@ -328,13 +342,14 @@ export default function Cadastros({
                       secondary={`Status: ${origin.status ?? "-"} • Limite: ${
                         origin.limit ? toBRL(parseNum(origin.limit)) : "N/A"
                       }${origin.type === "Cartão"
-                        ? ` • Fechamento: ${origin.closingDay ?? "Configurar"} (${origin.billingRolloverPolicy ?? "NEXT_BUSINESS_DAY"})`
+                        ? ` • Fechamento: ${origin.closingDay ?? "Configurar"} (${origin.billingRolloverPolicy ?? "PREVIOUS"})`
                         : ""}`}
                     />
                   </ListItem>
                 ))}
               </List>
             ) : (
+              // Quando não há origens cadastradas, exibimos o EmptyState com CTA focando o formulário.
               <EmptyState
                 title="Nenhuma conta cadastrada"
                 description="Cadastre suas contas e cartões para começar a lançar despesas."
@@ -398,6 +413,7 @@ export default function Cadastros({
                 ))}
               </List>
             ) : (
+              // Mesmo comportamento para o cadastro de devedores.
               <EmptyState
                 title="Nenhum devedor cadastrado"
                 description="Cadastre as pessoas com quem compartilha despesas."
@@ -410,7 +426,10 @@ export default function Cadastros({
       </Grid>
 
       <Grid item xs={12}>
-        <Section title="Categorias" subtitle="Personalize as categorias usadas nos lançamentos e edições em massa.">
+        <Section
+          title="Categorias"
+          subtitle="Personalize as categorias usadas nos lançamentos e edições em massa."
+        >
           <Stack spacing={3}>
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
               <TextField
@@ -438,6 +457,7 @@ export default function Cadastros({
                 ))}
               </Stack>
             ) : (
+              // Placeholder padronizado indicando ausência de categorias personalizadas.
               <EmptyState
                 title="Nenhuma categoria disponível"
                 description="As categorias cadastradas serão exibidas aqui."
@@ -480,8 +500,8 @@ export default function Cadastros({
                   onChange={handleDialogChange("billingRolloverPolicy")}
                   fullWidth
                 >
-                  <MenuItem value="NEXT_BUSINESS_DAY">Próximo dia útil</MenuItem>
-                  <MenuItem value="PREVIOUS_BUSINESS_DAY">Dia útil anterior</MenuItem>
+                  <MenuItem value="NEXT">Próximo dia útil (segunda-feira)</MenuItem>
+                  <MenuItem value="PREVIOUS">Dia útil anterior (sexta-feira)</MenuItem>
                 </TextField>
               </>
             )}

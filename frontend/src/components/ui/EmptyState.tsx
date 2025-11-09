@@ -4,6 +4,15 @@ import type { SvgIconProps } from "@mui/material/SvgIcon";
 import type { OverridableComponent } from "@mui/material/OverridableComponent";
 import type { SvgIconTypeMap } from "@mui/material/SvgIcon";
 
+/**
+ * EmptyState
+ *
+ * Componente reutilizável usado em telas de CRUD quando não há registros.
+ * Ajuda o usuário a entender o contexto (ex.: “Nenhuma categoria cadastrada”)
+ * e oferece um CTA que navega para a ação apropriada (abrir modal, foco em formulário, etc.).
+ * A abordagem visual consistente evita que cada lista precise reinventar o placeholder.
+ */
+
 type IconComponent = OverridableComponent<SvgIconTypeMap<unknown, "svg">> & {
   muiName?: string;
 };
@@ -62,6 +71,10 @@ export default function EmptyState({
             ) : null}
           </Stack>
           {ctaLabel ? (
+            /**
+             * O CTA é opcional porque algumas listas apenas informam o estado vazio.
+             * Quando presente, direciona o usuário para iniciar o fluxo de criação correspondente.
+             */
             <Button variant="contained" color="primary" onClick={onCtaClick}>
               {ctaLabel}
             </Button>

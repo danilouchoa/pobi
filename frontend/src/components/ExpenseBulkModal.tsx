@@ -13,6 +13,14 @@ import {
 } from "@mui/material";
 import type { BulkUpdatePayload, Origin } from "../types";
 
+/**
+ * ExpenseBulkModal
+ *
+ * Modal de edição em massa que agora recebe a lista de categorias personalizadas
+ * para manter paridade com o formulário principal. Não exibimos toasts aqui porque
+ * o feedback é centralizado no handler que invoca o modal.
+ */
+
 type BulkFormState = {
   category: string;
   originId: string;
@@ -95,6 +103,7 @@ export default function ExpenseBulkModal({ open, onClose, onSubmit, origins, cat
           >
             <MenuItem value="">Manter</MenuItem>
             {categories.map((category) => (
+              // Replica as categorias mantidas pela tela de Cadastros para facilitar a aplicação em massa.
               <MenuItem key={category} value={category}>
                 {category}
               </MenuItem>

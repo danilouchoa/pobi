@@ -4,7 +4,14 @@ import Section from "./ui/Section";
 import KPI from "./ui/KPI";
 import { parseNum, toBRL } from "../utils/helpers";
 import { DEFAULT_SALARY_TEMPLATE } from "../hooks/useFinanceApp";
-import { useToast } from "../ui/feedback";
+import { useToast } from "../hooks/useToast";
+
+/**
+ * Salario.jsx
+ *
+ * Fornece feedback visual assim que o usuário salva o histórico de salários, já que a mudança
+ * afeta KPIs mas não exibe uma lista tradicional de registros.
+ */
 
 export default function Salario({ month, salary, saveSalary }) {
   const [form, setForm] = useState(() => ({
@@ -38,8 +45,10 @@ export default function Salario({ month, salary, saveSalary }) {
     setSaving(true);
     try {
       await saveSalary(month, form);
+      // Toast informa que o backend gravou o registro e evita silêncio visual após submit.
       toast.success();
     } catch (error) {
+      // Erros de validação ou falhas HTTP chegam aqui e são traduzidos pelo hook.
       toast.error(error);
     } finally {
       setSaving(false);

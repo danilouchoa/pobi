@@ -10,9 +10,17 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+/**
+ * Política de rollover para fechamento de fatura em fim de semana
+ * 
+ * - NEXT: Adiar fechamento para próxima segunda-feira (compras do FDS entram na fatura atual)
+ * - PREVIOUS: Antecipar fechamento para sexta-feira anterior (compras do FDS vão para próxima fatura)
+ * 
+ * A política PREVIOUS é mais comum em bancos brasileiros.
+ */
 enum BillingRolloverPolicy {
-  NEXT_BUSINESS_DAY
-  PREVIOUS_BUSINESS_DAY
+  NEXT
+  PREVIOUS
 }
 
 model User {
@@ -31,6 +39,19 @@ model User {
 }
 
 // v5.2 state.origins
+/**
+ * Model Origin - Representa origens de pagamento (Cartões e Contas)
+ * 
+ * Campos específicos para Cartões de Crédito:
+ * - closingDay: Dia de fechamento da fatura (1-31)
+ * - billingRolloverPolicy: Como tratar fechamentos em fim de semana
+ * 
+ * Exemplo de uso:
+ * - Cartão com fechamento dia 09 (sábado)
+ * - Policy PREVIOUS → ajusta para dia 07 (sexta)
+ * - Compras até 07: fatura do mês corrente
+ * - Compras após 07: fatura do próximo mês
+ */
 model Origin {
   id      String    @id @default(auto()) @map("_id") @db.ObjectId
   name    String
@@ -40,8 +61,9 @@ model Origin {
   status  String?
   active  Boolean  @default(true)
 
-  closingDay            Int?
-  billingRolloverPolicy BillingRolloverPolicy? @default(NEXT_BUSINESS_DAY)
+  // Campos para cálculo de fatura de cartão
+  closingDay            Int?                    // Dia de fechamento (1-31), obrigatório para type="Cartão"
+  billingRolloverPolicy BillingRolloverPolicy?  @default(PREVIOUS) // Padrão: antecipar para sexta
   
   // Relação com User
   userId  String   @db.ObjectId
@@ -71,6 +93,19 @@ model Debtor {
 }
 
 // v5.2 state.expenses
+/**
+ * Model Expense - Despesas do usuário
+ * 
+ * Campo billingMonth:
+ * - String no formato 'YYYY-MM' (ex: "2025-11")
+ * - Calculado automaticamente para despesas de cartão
+ * - Baseado na data da transação + closingDay da origin
+ * - Permite agrupar/filtrar despesas por fatura
+ * 
+ * Índice [userId, billingMonth]:
+ * - Otimiza queries por fatura: GET /api/expenses?mode=billing&month=2025-11
+ * - Usado na UI para exibir "Fatura de Novembro/2025"
+ */
 model Expense {
   id                String    @id @default(auto()) @map("_id") @db.ObjectId
   date              DateTime  // Data do lançamento
@@ -101,10 +136,13 @@ model Expense {
   debtorId          String?  @db.ObjectId
   debtor            Debtor?  @relation(fields: [debtorId], references: [id])
 
+  // Mês de faturamento para cartões de crédito (formato 'YYYY-MM')
+  // Calculado via deriveBillingMonth() ao criar/editar despesa
+  // Permite filtrar despesas por fatura: ?mode=billing&billingMonth=2025-11
   billingMonth      String?
 
-  @@index([userId, date])
-  @@index([userId, billingMonth])
+  @@index([userId, date])          // Queries mensais por data de transação
+  @@index([userId, billingMonth])  // Queries por fatura de cartão
   @@index([originId])
   @@index([debtorId])
 }

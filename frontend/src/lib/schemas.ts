@@ -4,8 +4,8 @@ const nullableString = z.union([z.string(), z.null(), z.undefined()]);
 const nullableNumber = z.union([z.number(), z.null(), z.undefined()]);
 const billingPolicySchema = z
   .union([
-    z.literal("NEXT_BUSINESS_DAY"),
-    z.literal("PREVIOUS_BUSINESS_DAY"),
+    z.literal("NEXT"),
+    z.literal("PREVIOUS"),
     z.null(),
     z.undefined(),
   ])

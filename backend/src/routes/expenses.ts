@@ -43,22 +43,68 @@ const normalizeOriginType = (value?: string | null) =>
 const shouldApplyBillingLogic = (originType?: string | null) =>
   normalizeOriginType(originType) === 'cartao';
 
+/**
+ * Calcula o mês de faturamento (billingMonth) para uma despesa de cartão
+ * 
+ * Este função é chamada automaticamente ao criar ou editar despesas de cartão,
+ * determinando em qual fatura (mês) a despesa deve aparecer.
+ * 
+ * Fluxo de cálculo:
+ * 1. Verifica se a despesa tem uma origin associada
+ * 2. Busca dados da origin (tipo, closingDay, policy)
+ * 3. Se for tipo "Cartão", valida closingDay e calcula billingMonth
+ * 4. Retorna string 'YYYY-MM' ou null (se não for cartão)
+ * 
+ * @param prisma - Cliente Prisma para queries no banco
+ * @param originId - ID da origin (cartão/conta) da despesa
+ * @param date - Data da transação/compra
+ * @returns billingMonth ('YYYY-MM') ou null
+ * @throws BillingConfigurationError se cartão não tem closingDay configurado
+ * 
+ * @example
+ * // Despesa de cartão com fechamento configurado
+ * const billingMonth = await computeBillingMonth(prisma, 'origin123', new Date('2025-11-08'));
+ * // Retorna: "2025-12" (se compra foi após fechamento)
+ * 
+ * @example
+ * // Despesa de conta corrente (não é cartão)
+ * const billingMonth = await computeBillingMonth(prisma, 'origin456', new Date('2025-11-08'));
+ * // Retorna: null (contas não têm fatura)
+ */
 const computeBillingMonth = async (
   prisma: PrismaClient,
   originId: string | null | undefined,
   date: Date
 ): Promise<string | null> => {
+  // Se despesa não tem origin, não pode ter billingMonth
   if (!originId) return null;
+
+  // Buscar dados da origin (cartão/conta)
   const origin = await prisma.origin.findUnique({ where: { id: originId } });
+
+  // Se origin não existe ou não é cartão, retorna null
   if (!origin || !shouldApplyBillingLogic(origin.type)) {
     return null;
   }
+
+  // Validar closingDay (dia de fechamento da fatura)
   const closingDay = origin.closingDay ?? null;
   const normalizedClosingDay = closingDay != null ? Math.trunc(closingDay) : null;
+
+  // VALIDAÇÃO CRÍTICA: Cartões DEVEM ter closingDay configurado
+  // Se não tiver, retorna erro 422 (Unprocessable Entity)
   if (!normalizedClosingDay || normalizedClosingDay < 1 || normalizedClosingDay > 31) {
-    throw new BillingConfigurationError('Configurar fechamento do cartão.');
+    throw new BillingConfigurationError(
+      'Cartão de crédito deve ter dia de fechamento configurado (1-31).'
+    );
   }
-  const policy = (origin.billingRolloverPolicy ?? 'NEXT_BUSINESS_DAY') as BillingRolloverPolicy;
+
+  // Obter política de rollover (padrão: PREVIOUS se não configurado)
+  // PREVIOUS = antecipar para sexta se fechamento cair em fim de semana
+  // NEXT = adiar para segunda se fechamento cair em fim de semana
+  const policy = (origin.billingRolloverPolicy ?? 'PREVIOUS') as BillingRolloverPolicy;
+
+  // Calcular e retornar billingMonth ('YYYY-MM')
   return deriveBillingMonth(date, normalizedClosingDay, policy);
 };
 

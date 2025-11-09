@@ -9,6 +9,7 @@ import originsRoutes from './routes/origins';
 import debtorsRoutes from './routes/debtors';
 import salaryHistoryRoutes from './routes/salaryHistory';
 import jobsRoutes from './routes/jobs';
+import healthRoutes from './routes/health';
 import { requestLogger } from './middlewares/logger';
 import { globalErrorHandler, invalidJsonHandler } from './middlewares/errorHandler';
 import { config, isCorsAllowed } from './config';
@@ -35,8 +36,11 @@ app.use(requestLogger);
 app.use(express.json()); // Habilita o parsing de JSON
 app.use(invalidJsonHandler);
 
-// Rotas
+// Rotas públicas (sem autenticação)
 app.use('/api/auth', authRoutes(prisma));
+app.use('/api/health', healthRoutes); // Health check para Docker e monitoramento
+
+// Rotas autenticadas
 app.use('/api/expenses', authenticate, expensesRoutes(prisma));
 app.use('/api/origins', authenticate, originsRoutes(prisma));
 app.use('/api/debtors', authenticate, debtorsRoutes(prisma));

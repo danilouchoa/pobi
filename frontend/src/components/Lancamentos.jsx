@@ -39,8 +39,17 @@ import HandshakeIcon from "@mui/icons-material/Handshake";
 import { AnimatePresence, motion } from "framer-motion";
 import ExpenseBulkModal from "./ExpenseBulkModal";
 import { useExpenses } from "../hooks/useExpenses";
-import { useToast } from "../ui/feedback";
+import { useToast } from "../hooks/useToast";
 import EmptyState from "./ui/EmptyState";
+
+/**
+ * Lancamentos
+ *
+ * Tela principal de controle de despesas. Foi atualizada para:
+ * - Reutilizar o hook useToast e garantir feedback nas operações CRUD.
+ * - Exibir EmptyState quando filtros retornam listas vazias.
+ * - Propagar categorias dinâmicas para formulários e para o modal de edição em lote.
+ */
 
 export default function Lancamentos({
   state,
@@ -55,6 +64,7 @@ export default function Lancamentos({
   fetchSharedExpenses,
   categories,
 }) {
+  // A lista dinâmica depende dos cadastros criados na aba anterior; mantemos um fallback para "Outros".
   const resolvedCategories = useMemo(
     () => (categories && categories.length ? categories : ["Outros"]),
     [categories]
@@ -191,6 +201,7 @@ export default function Lancamentos({
     const totalAmount = parseNum(form.amount);
     const description = form.description.trim();
     if (!description || !form.originId || totalAmount <= 0) {
+      // Mensagem preventiva evita requisições desnecessárias.
       toast.warning("Informe descrição, origem e valor válidos.");
       return;
     }
@@ -199,6 +210,7 @@ export default function Lancamentos({
     if (form.sharedEnabled) {
       const sharedValue = parseNum(form.sharedAmount);
       if (!form.sharedWith.trim() || sharedValue <= 0 || sharedValue > totalAmount) {
+        // Fornece feedback contextual para compartilhamento inválido.
         toast.warning("Dados de divisão compartilhada inválidos.");
         return;
       }
@@ -261,6 +273,10 @@ export default function Lancamentos({
         sharedWith: "",
         sharedAmount: "",
       }));
+      // Confirma ao usuário que o fluxo de criação (único ou parcelado) foi finalizado.
+      // Delete não possui retorno visual imediato, então usamos o toast para reforçar o status.
+      // Indica que o patch na API foi aplicado e o modal será fechado em seguida.
+      // Assegura o usuário de que o job foi enfileirado; info extra mostra o ID.
       toast.success();
     } catch (error) {
       toast.error(error);
@@ -285,6 +301,7 @@ export default function Lancamentos({
       await duplicateExpense(expense.id, { incrementMonth: true });
       toast.success();
       if (expense.recurring) {
+        // Mensagem adicional explica o efeito específico sobre recorrências.
         toast.info("Despesa recorrente duplicada para o próximo período.");
       }
     } catch (error) {
@@ -330,11 +347,13 @@ export default function Lancamentos({
     if (!editingExpense) return;
     const amountNumber = parseNum(dialogValues.amount);
     if (Number.isNaN(amountNumber) || amountNumber <= 0) {
+      // Reaproveitamos o toast para validar o modal antes do patch.
       toast.warning("Informe um valor válido para o lançamento.");
       return;
     }
     const sharedAmountNumber = dialogValues.sharedEnabled ? parseNum(dialogValues.sharedAmount) : null;
     if (dialogValues.sharedEnabled && (sharedAmountNumber <= 0 || sharedAmountNumber > amountNumber)) {
+      // Evita enviar payload inválido ao backend.
       toast.warning("Valor compartilhado inválido.");
       return;
     }
@@ -711,6 +730,7 @@ export default function Lancamentos({
               {!isPageLoading && filteredExpenses.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={10}>
+                    {/* EmptyState orienta o usuário e oferece CTA para voltar ao formulário de criação. */}
                     <EmptyState
                       title="Nenhum lançamento encontrado"
                       description="Os lançamentos que você criar aparecerão aqui."

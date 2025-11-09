@@ -39,14 +39,28 @@ const parseClosingDayInput = (value: unknown) => {
   return Math.trunc(parsed);
 };
 
+/**
+ * Converte string para enum BillingRolloverPolicy
+ * Aceita valores 'PREVIOUS' ou 'NEXT' (novos) e também os antigos para retrocompatibilidade
+ */
 const toRolloverPolicy = (
   value?: string | null
 ): $Enums.BillingRolloverPolicy | null => {
-  if (value === 'PREVIOUS_BUSINESS_DAY') return 'PREVIOUS_BUSINESS_DAY';
-  if (value === 'NEXT_BUSINESS_DAY') return 'NEXT_BUSINESS_DAY';
+  // Novos valores (schema atualizado)
+  if (value === 'PREVIOUS') return 'PREVIOUS';
+  if (value === 'NEXT') return 'NEXT';
+  
+  // Valores antigos (retrocompatibilidade durante migração)
+  if (value === 'PREVIOUS_BUSINESS_DAY') return 'PREVIOUS';
+  if (value === 'NEXT_BUSINESS_DAY') return 'NEXT';
+  
   return null;
 };
 
+/**
+ * Valida e parseia política de rollover de billingMonth
+ * Usado na criação/edição de origins (cartões)
+ */
 const parseBillingPolicy = (
   value: unknown
 ): $Enums.BillingRolloverPolicy | null | undefined => {
@@ -56,7 +70,7 @@ const parseBillingPolicy = (
     const policy = toRolloverPolicy(value);
     if (policy) return policy;
   }
-  throw new Error('billingRolloverPolicy inválida.');
+  throw new Error('billingRolloverPolicy inválida. Use "PREVIOUS" ou "NEXT".');
 };
 
 export default function originsRoutes(prisma: PrismaClient) {

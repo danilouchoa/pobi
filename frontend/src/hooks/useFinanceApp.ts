@@ -41,6 +41,7 @@ export function useFinanceApp() {
   });
   const catalogs = useCatalogs({ enabled: isEnabled });
   const salary = useSalary(month, { enabled: isEnabled });
+  // Garante que categorias customizadas (persistidas localmente) estejam disponíveis globalmente.
   const { categories, addCategory } = useCategories();
 
   const state = useMemo(
@@ -221,6 +222,7 @@ export function useFinanceApp() {
     createRecurringExpense,
     fetchRecurringExpenses: expenses.fetchRecurringExpenses,
     fetchSharedExpenses: expenses.fetchSharedExpenses,
+    // Expondo categories/addCategory para que as telas de Cadastros e Lançamentos compartilhem o mesmo estado.
     categories,
     addCategory,
   };

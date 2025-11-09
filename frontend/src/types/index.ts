@@ -72,7 +72,7 @@ export type Origin = {
   status?: string | null;
   active?: boolean;
   closingDay?: number | null;
-  billingRolloverPolicy?: "NEXT_BUSINESS_DAY" | "PREVIOUS_BUSINESS_DAY" | null;
+  billingRolloverPolicy?: "NEXT" | "PREVIOUS" | null;
 };
 
 export type OriginPayload = {
@@ -83,7 +83,7 @@ export type OriginPayload = {
   status?: string | null;
   active?: boolean;
   closingDay?: number | null;
-  billingRolloverPolicy?: "NEXT_BUSINESS_DAY" | "PREVIOUS_BUSINESS_DAY" | null;
+  billingRolloverPolicy?: "NEXT" | "PREVIOUS" | null;
 };
 
 export type Debtor = {
