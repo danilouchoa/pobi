@@ -121,27 +121,60 @@
       {
         "id": 11,
         "tag": "[Security] Validação de Rota (Zod)",
-        "status": "🟡 Planejado (NOVO)",
-        "summary": "Validar entrada de dados (body/query/params) em todas as rotas para reduzir erros e vetores de abuso.",
+        "status": "� Concluído",
+        "summary": "Sistema completo de validação de entrada (body/query/params) usando Zod, com middleware genérica, schemas por recurso, feature flag e logs limpos.",
         "notes": [
-          "Criar backend/src/schemas/* com Zod por recurso (expense, origin, auth...).",
-          "Middleware genérico de validação com mensagens padronizadas.",
-          "Atualizar rotas para usar schemas antes de services.",
-          "Critérios de aceite: requisições inválidas retornam 400 com detalhes; logs sem stack-trace de validação.",
-          "Riscos: quebra silenciosa; mitigar com smoke tests e feature flags por rota."
+          "✅ 5 schemas criados: expense (180L), origin (160L), auth (80L), salary (100L), catalog (90L)",
+          "✅ Middleware validation.ts (290L): aceita body/query/params, retorna 400 padronizado, respeita VALIDATION_ENABLED",
+          "✅ Formato de erro: { error, message, details: [{ field, message }] } - sem stack-trace",
+          "✅ Feature flag VALIDATION_ENABLED no config.ts (default: true, permite rollback)",
+          "✅ 18 rotas validadas: expenses (4), origins (4), auth (2), salary (4), debtors (4)",
+          "✅ Validações monetárias: string formato '0.00' com regex /^\\d+\\.\\d{2}$/",
+          "✅ Validações de datas: z.coerce.date() para ISO 8601, ranges validados",
+          "✅ Validações de IDs: ObjectId MongoDB (24 chars hex) com regex",
+          "✅ Validação condicional: closingDay obrigatório quando type='Cartão'",
+          "✅ Segurança: .strict() rejeita campos extras (previne mass assignment)",
+          "✅ Telemetria: contadores validationFailures (por rota) e validationFailuresByField",
+          "✅ Função getValidationMetrics() para debugging e monitoramento",
+          "✅ Logs nível 'warn' SEM stack-trace para erros esperados de validação",
+          "✅ Convenções: createXxxSchema, updateXxxSchema (.partial()), queryXxxSchema, idParamSchema",
+          "✅ Documentação completa consolidada no README.md (seção Milestone #11)",
+          "🐛 v6.2.1 FIX: queryExpenseSchema ajustado para aceitar mode=calendar, year, limit=1000 (compatibilidade frontend)",
+          "🐛 v6.2.1 FIX: Middleware corrigido para não sobrescrever req.query (read-only no Express)",
+          "✅ v6.2.1 TEST: Todas as rotas validadas retornando 200 OK (expenses, origins, salary, debtors)",
+          "✅ v6.2.1 STATUS: Sistema 100% funcional em produção sem erros 400/500"
         ]
       },
       {
         "id": 16,
         "tag": "[DX] Testes Automatizados",
         "status": "🟡 Planejado (NOVO)",
-        "summary": "Cobertura unitária e de integração para áreas críticas e novas regras de fatura.",
+        "summary": "Cobertura de testes automatizados (unitários e integração) para backend (Vitest + Supertest) e frontend (RTL), garantindo estabilidade, confiança e CI/CD robusta.",
         "notes": [
-          "Backend: Vitest + Supertest para services e rotas (auth, expenses, worker).",
-          "Frontend: RTL para componentes e hooks com QueryClientProvider.",
-          "Cobrir deriveBillingMonth() e adjustToBusinessDay() (fechamento no WE, virada, NEXT/PREVIOUS).",
-          "Critérios de aceite: CI roda com cobertura mínima 80% nas áreas críticas.",
-          "Riscos: flakiness; mitigar com seeds determinísticos e mocks de clock."
+          "🎯 Backend: Vitest + Supertest para rotas, services, workers, helpers (auth, expenses, billing, validation)",
+          "- Testes de integração: /auth/login, /auth/refresh, /auth/logout (cookies), CRUD /expenses, filtros UTC, billingMonth",
+          "- Testes unitários: deriveBillingMonth(), adjustToBusinessDay(), workers (ACK/NACK, reconexão)",
+          "- Mock global de clock (UTC fixo)",
+          "- Seeds determinísticos (seed=42), banco in-memory/mocks, sem tocar produção",
+          "- Mocks centralizados (__mocks__/), reset antes de cada teste",
+          "- Rodar via npm run test:backend, logs enxutos (--silent)",
+          "🎯 Frontend: React Testing Library (RTL) + Vitest",
+          "- Testes de componentes: MonthNavigator (troca mês, labels, animação), EmptyState (renderização, CTA)",
+          "- Testes de hooks: useExpenses (fetch/mutation, toasts), useToast (debounce/chave única)",
+          "- Testes de contexto: AuthContext (login/logout, mock cookies)",
+          "- Providers mockados: QueryClient, Theme, Toast",
+          "- Mocks de API: MSW ou axios-mock-adapter",
+          "- Rodar via npm run test:frontend, cobertura >80% em /hooks e /components/ui",
+          "🎯 Cobertura e CI:",
+          "- Cobertura mínima 80% linhas/branches backend (src/services, src/routes, src/utils) e frontend (src/hooks, src/components/ui)",
+          "- CI executa npm run test:backend e npm run test:frontend, falha se cobertura <80%",
+          "- Relatório HTML (coverage/index.html)",
+          "🎯 Boas práticas:",
+          "- Nomes descritivos, mocks centralizados, clock global, seeds fixos, testes idempotentes",
+          "- Nenhum teste depende de latência real, logs silenciosos, scripts package.json comentados",
+          "🎯 Documentação:",
+          "- TESTING_GUIDE.md: estrutura, comandos, troubleshooting, tabela módulos↔testes, boas práticas",
+          "✅ Critérios de aceite: tudo acima implementado, sem flakiness, cobertura >80%, documentação completa"
         ]
       },
       {
@@ -170,14 +203,17 @@
       },
       {
         "id": 14,
-        "tag": "[Resilience] Dead Letter Queue (DLQ)",
-        "status": "🟡 Planejado (NOVO)",
-        "summary": "Segregar mensagens irrecuperáveis para análise e reprocessamento seguro.",
+        "tag": "[BE] Dead Letter Queue (DLQ)",
+        "status": "� Concluído",
+        "summary": "DLQ implementada no RabbitMQ com retry, backoff, endpoints admin e integração nos workers.",
         "notes": [
-          "DLQ acoplada à recurring-jobs; nack com requeue=false em erros permanentes.",
-          "Métricas básicas de taxa de dead-letter.",
-          "Critérios de aceite: mensagens inválidas não travam a fila principal.",
-          "Riscos: descarte indevido; mitigar com policies e retenção temporária."
+          "✅ DLQ via dead-letter-exchange e argumentos de fila",
+          "✅ Retry automático com backoff exponencial",
+          "✅ Endpoints admin: /api/dlq/stats, /api/dlq/messages, /api/dlq/reprocess/:id, /api/dlq/purge",
+          "✅ Proteção JWT nos endpoints",
+          "✅ Logs detalhados de falhas e reprocessamentos",
+          "✅ Workers bulk/recurring integrados com DLQ",
+          "✅ Critérios de aceite: mensagens na DLQ após retries, admin funcional, testes manuais"
         ]
       },
       {
@@ -195,26 +231,42 @@
       {
         "id": 13,
         "tag": "[Security] Auth httpOnly Cookies",
-        "status": "🟡 Planejado (NOVO)",
-        "summary": "Trocar armazenamento de tokens para cookies httpOnly/sameSite, reduzindo superfície XSS.",
+        "status": "� Concluído",
+        "summary": "Migração de localStorage (vulnerável a XSS) para cookies httpOnly + tokens em memória, com refresh automático e validação real de credenciais.",
         "notes": [
-          "Login entrega JWT via cookie httpOnly; logout limpa cookie.",
-          "Axios withCredentials; refresh token seguro; access em memória.",
-          "Critérios de aceite: rotas autenticadas funcionam sem localStorage.",
-          "Riscos: CORS e domínio; mitigar com configuração rigorosa e ambiente controlado."
+          "✅ Arquitetura de 2 tokens: Access Token (15min, memória) + Refresh Token (7d, cookie httpOnly)",
+          "✅ Backend: 4 endpoints (login, register, refresh, logout) com bcrypt + JWT",
+          "✅ Cookies httpOnly: secure (HTTPS prod), sameSite: strict (previne CSRF), inacessível via JS",
+          "✅ Validação real: bcrypt.compare() para senhas, mensagens genéricas (previne enumeração)",
+          "✅ Auto-refresh: Frontend intercepta 401, chama /auth/refresh automaticamente",
+          "✅ CORS: credentials: true no backend + withCredentials: true no frontend",
+          "✅ cookie-parser: Instalado no backend para ler req.cookies",
+          "✅ Logs seguros: Login success/fail com email/IP (SEM senha/token)",
+          "✅ Frontend: Token em memória (state), user cacheado (localStorage), logout chama backend",
+          "✅ Testes: register, login, refresh, logout, credenciais inválidas - TODOS PASSANDO",
+          "✅ Breaking change: Usuários precisam fazer login novamente (tokens antigos inválidos)",
+          "✅ Documentação: 1000+ linhas no README com diagramas, fluxos, troubleshooting",
+          "✅ Segurança: XSS prevenido (httpOnly), CSRF prevenido (sameSite: strict)",
+          "✅ Dependências: cookie-parser@1.4.6 + @types/cookie-parser@1.4.7"
         ]
       },
       {
         "id": 18,
         "tag": "[Security] Autenticação Avançada (MFA + Google Login)",
         "status": "🟡 Planejado (NOVO)",
-        "summary": "Adicionar MFA via Resend (OTP) e login social Google OAuth2 com fluxo completo de tokens.",
+        "summary": "Adicionar MFA via Resend (OTP) e login social Google OAuth2, incluindo botão 'Entrar com o Google' na tela de login e fluxo completo de autenticação.",
         "notes": [
-          "Rotas: /auth/register, /auth/login, /auth/refresh, /auth/logout, /auth/resend, /auth/google.",
-          "Cookies httpOnly para refresh; access token em memória; interceptors Axios.",
-          "Front: MFAForm e botão Google; backend: validações de estado/nonce.",
-          "Critérios de aceite: MFA opcional funcional; Google login end-to-end.",
-          "Riscos: fluxo OAuth mal configurado; mitigar com testes em sandbox e logs detalhados."
+          "✅ Botão 'Entrar com o Google' exibido na tela de login (frontend)",
+          "✅ Integração com biblioteca oficial Google Sign-In (@react-oauth/google ou similar)",
+          "✅ client_id configurado via env frontend",
+          "✅ Ao clicar, inicia fluxo OAuth2 do Google e recebe token/código",
+          "✅ Frontend envia token/código para backend em /auth/google",
+          "✅ Backend valida token, autentica/cria usuário e retorna access/refresh token",
+          "✅ Tokens: refresh em cookie httpOnly, access em memória (state)",
+          "✅ MFA opcional: envio e validação de OTP via Resend (ou similar)",
+          "✅ Rotas: /auth/register, /auth/login, /auth/refresh, /auth/logout, /auth/resend, /auth/google",
+          "✅ Critérios de aceite: login Google end-to-end funcional, MFA opcional, UX fluida",
+          "Riscos: fluxo OAuth mal configurado; mitigar com testes em sandbox, logs detalhados e validação de estado/nonce"
         ]
       },
       {

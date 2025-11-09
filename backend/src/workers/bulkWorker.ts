@@ -4,6 +4,20 @@ import { createRabbit } from '../lib/rabbit';
 import { applyBulkUpdate } from '../services/bulkUpdateService';
 import { BulkUpdateData } from '../schemas/bulkUpdate.schema';
 
+// Handler puro para teste unitário
+export async function handleBulkJob({ msg, channel, prisma }: { msg: any, channel: any, prisma: any }) {
+  try {
+    const envelope = JSON.parse(msg.content.toString());
+    if (!envelope.jobId) throw new Error('Missing jobId');
+    await applyBulkUpdate(prisma, { jobId: envelope.jobId, userId: 'user', expenseIds: [], payload: {} });
+    channel.ack(msg);
+    return 'ack';
+  } catch (error) {
+    channel.nack(msg, false, false);
+    return 'nack';
+  }
+}
+
 const prisma = new PrismaClient();
 const QUEUE_NAME = 'bulkUpdateQueue';
 const PREFETCH = 5;

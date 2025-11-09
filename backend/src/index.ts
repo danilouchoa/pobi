@@ -93,8 +93,13 @@ app.get('/api/status', (req, res) => {
 // Middleware global de erros
 app.use(globalErrorHandler);
 
-// Inicia o servidor
-app.listen(port, () => {
-  console.log(`🚀 Backend server pronto e rodando na porta ${port}`);
-  console.log(`🔗 Teste em: http://localhost:${port}/api/status`);
-});
+
+// Só inicia o servidor se não estiver em ambiente de teste
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(port, () => {
+    console.log(`🚀 Backend server pronto e rodando na porta ${port}`);
+    console.log(`🔗 Teste em: http://localhost:${port}/api/status`);
+  });
+}
+
+export default app;

@@ -2,10 +2,18 @@ import amqp from 'amqplib';
 import { PrismaClient } from '@prisma/client';
 import { processRecurringExpenses } from '../services/recurringService';
 
-type ConfirmConnection = amqp.Connection & {
-  createConfirmChannel: () => Promise<amqp.ConfirmChannel>;
-};
-
+// Handler puro para teste unitário
+export async function handleRecurringJob({ msg, channel, prisma }: { msg: any, channel: any, prisma: any }) {
+  try {
+    const data = JSON.parse(msg.content.toString());
+    await processRecurringExpenses(prisma);
+    channel.ack(msg);
+    return 'ack';
+  } catch (error) {
+    channel.nack(msg, false, false);
+    return 'nack';
+  }
+}
 const prisma = new PrismaClient();
 const RABBIT_URL =
   process.env.RABBIT_URL || 'amqps://USER:PASSWORD@gorilla.lmq.cloudamqp.com/nokwohlm';
@@ -14,7 +22,7 @@ const BASE_DELAY_MS = 1000;
 const MAX_DELAY_MS = 30000;
 const MAX_RETRY_ATTEMPTS = 3; // Número máximo de tentativas antes de enviar para DLQ
 
-let connection: ConfirmConnection | undefined;
+let connection: any;
 let channel: amqp.ConfirmChannel | undefined;
 let reconnectAttempts = 0;
 let reconnectTimer: NodeJS.Timeout | undefined;
@@ -31,8 +39,7 @@ const cleanupConnection = async () => {
   }
   if (connection) {
     try {
-      const conn = connection as unknown as { close: () => Promise<void> };
-      await conn.close();
+      await connection.close();
     } catch (err) {
       console.warn('[Worker] Error closing connection:', err);
     }
@@ -40,43 +47,19 @@ const cleanupConnection = async () => {
   }
 };
 
-const gracefullyExit = async (signal: NodeJS.Signals) => {
-  if (shuttingDown) return;
-  shuttingDown = true;
-  console.log(`[Worker] Received ${signal}. Shutting down gracefully...`);
-  if (reconnectTimer) {
-    clearTimeout(reconnectTimer);
-    reconnectTimer = undefined;
-  }
-  await cleanupConnection();
-  await prisma.$disconnect();
-  process.exit(0);
-};
-
-process.on('SIGINT', gracefullyExit);
-process.on('SIGTERM', gracefullyExit);
-
-const scheduleReconnect = () => {
-  if (shuttingDown) return;
-  const delay = Math.min(BASE_DELAY_MS * 2 ** reconnectAttempts, MAX_DELAY_MS);
-  reconnectAttempts += 1;
-  console.warn(`[Worker] Reconnecting in ${delay}ms...`);
-  reconnectTimer = setTimeout(connectWithRetry, delay);
-};
-
-const handleConnectionClose = () => {
-  if (shuttingDown) return;
-  console.warn('[Worker] Connection closed. Scheduling reconnect...');
-  cleanupConnection().catch((err) => console.error('[Worker] Cleanup error:', err));
-  scheduleReconnect();
-};
-
 const setupConsumer = async () => {
-  connection = (await amqp.connect(RABBIT_URL)) as unknown as ConfirmConnection;
-  connection.on('close', handleConnectionClose);
-  connection.on('error', (err) => console.error('[Worker] Connection error:', err));
+  const conn = await amqp.connect(RABBIT_URL);
+  connection = conn;
+  conn.on('close', () => {
+    if (shuttingDown) return;
+    console.warn('[Worker] Connection closed. Scheduling reconnect...');
+    cleanupConnection().catch((err) => console.error('[Worker] Cleanup error:', err));
+    setTimeout(connectWithRetry, 1000 * Math.min(2 ** reconnectAttempts, 30));
+    reconnectAttempts++;
+  });
+  conn.on('error', (err) => console.error('[Worker] Connection error:', err));
 
-  const confirmChannel = (await connection.createConfirmChannel()) as unknown as amqp.ConfirmChannel;
+  const confirmChannel = await conn.createConfirmChannel();
   channel = confirmChannel;
   
   // Configurar DLX (Dead Letter Exchange) para mensagens que falharam
@@ -164,7 +147,8 @@ const connectWithRetry = async () => {
     reconnectAttempts = 0;
   } catch (error) {
     console.error('[Worker] Failed to establish connection:', error);
-    scheduleReconnect();
+    setTimeout(connectWithRetry, 1000 * Math.min(2 ** reconnectAttempts, 30));
+    reconnectAttempts++;
   }
 };
 
