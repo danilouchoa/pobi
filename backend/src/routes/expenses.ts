@@ -314,7 +314,7 @@ export default function expensesRoutes(prisma: PrismaClient) {
       const userId = req.userId;
       if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
 
-  const parsed = bulkUnifiedActionSchema.parse(req.body) as BulkUnifiedActionPayload;
+    const parsed = bulkUnifiedActionSchema.parse(req.body) as BulkUnifiedActionPayload;
 
       if (parsed.action === 'delete') {
         const uniqueIds = Array.from(new Set(parsed.ids));
