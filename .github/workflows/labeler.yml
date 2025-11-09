@@ -1,7 +1,10 @@
 name: 'Pull Request Labeler'
 
+# Usar pull_request para ler o arquivo de configuração da própria branch do PR.
+# pull_request_target leria sempre o conteúdo da base (main) e por isso mantinha o formato antigo.
 on:
-  pull_request_target:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, edited]
 
 jobs:
   labeler:
@@ -12,6 +15,6 @@ jobs:
     steps:
       - uses: actions/labeler@v5
         with:
-          repo-token: '${{ secrets.GITHUB_TOKEN }}'
+          repo-token: '${{ secrets.SECRET_GITHUB_TOKEN }}'
           configuration-path: .github/labeler.yml
           sync-labels: false
