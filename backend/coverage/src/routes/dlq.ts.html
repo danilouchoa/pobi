@@ -229,7 +229,8 @@
 <a name='L164'></a><a href='#L164'>164</a>
 <a name='L165'></a><a href='#L165'>165</a>
 <a name='L166'></a><a href='#L166'>166</a>
-<a name='L167'></a><a href='#L167'>167</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L167'></a><a href='#L167'>167</a>
+<a name='L168'></a><a href='#L168'>168</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -246,7 +247,8 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">9x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">11x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -259,7 +261,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">9x</span>
+<span class="cline-any cline-yes">11x</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -301,7 +303,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">9x</span>
+<span class="cline-any cline-yes">11x</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -339,7 +341,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">9x</span>
+<span class="cline-any cline-yes">11x</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -381,7 +383,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">9x</span>
+<span class="cline-any cline-yes">11x</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -411,6 +413,7 @@
 import { Router } from 'express';
 import { getDLQStats, peekDLQMessages, reprocessDLQMessage, purgeDLQ } from '../lib/rabbit';
 import { authenticate } from '../middlewares/auth';
+import { adminLimiter } from '../middlewares/rateLimiter';
 &nbsp;
 const router = Router();
 &nbsp;
@@ -425,7 +428,7 @@ const router = Router();
  *   "consumerCount": 0
  * }
  */
-router.get('/stats', authenticate, <span class="fstat-no" title="function not covered" >async (r</span>eq, res, next) =&gt; {
+router.get('/stats', authenticate, adminLimiter, <span class="fstat-no" title="function not covered" >async (r</span>eq, res, next) =&gt; {
 <span class="cstat-no" title="statement not covered" >  try {</span>
     const stats = <span class="cstat-no" title="statement not covered" >await getDLQStats();</span>
 <span class="cstat-no" title="statement not covered" >    res.json(stats);</span>
@@ -467,7 +470,7 @@ router.get('/stats', authenticate, <span class="fstat-no" title="function not co
  *   "count": 1
  * }
  */
-router.get('/messages', authenticate, <span class="fstat-no" title="function not covered" >async (r</span>eq, res, next) =&gt; {
+router.get('/messages', authenticate, adminLimiter, <span class="fstat-no" title="function not covered" >async (r</span>eq, res, next) =&gt; {
 <span class="cstat-no" title="statement not covered" >  try {</span>
     const limit = <span class="cstat-no" title="statement not covered" >Math.min(parseInt(req.query.limit as string) || 10, 100);</span>
     const messages = <span class="cstat-no" title="statement not covered" >await peekDLQMessages(limit);</span>
@@ -505,7 +508,7 @@ router.get('/messages', authenticate, <span class="fstat-no" title="function not
  *   "message": "Mensagem não encontrada na DLQ"
  * }
  */
-router.post('/reprocess/:deliveryTag', authenticate, <span class="fstat-no" title="function not covered" >async (r</span>eq, res, next) =&gt; {
+router.post('/reprocess/:deliveryTag', authenticate, adminLimiter, <span class="fstat-no" title="function not covered" >async (r</span>eq, res, next) =&gt; {
 <span class="cstat-no" title="statement not covered" >  try {</span>
     const deliveryTag = <span class="cstat-no" title="statement not covered" >parseInt(req.params.deliveryTag);</span>
     const { targetQueue } = <span class="cstat-no" title="statement not covered" >req.body;</span>
@@ -547,7 +550,7 @@ router.post('/reprocess/:deliveryTag', authenticate, <span class="fstat-no" titl
  *   "message": "15 mensagens removidas da DLQ"
  * }
  */
-router.delete('/purge', authenticate, <span class="fstat-no" title="function not covered" >async (r</span>eq, res, next) =&gt; {
+router.delete('/purge', authenticate, adminLimiter, <span class="fstat-no" title="function not covered" >async (r</span>eq, res, next) =&gt; {
 <span class="cstat-no" title="statement not covered" >  try {</span>
     const purgedCount = <span class="cstat-no" title="statement not covered" >await purgeDLQ();</span>
 <span class="cstat-no" title="statement not covered" >    res.json({</span>
@@ -568,7 +571,7 @@ export default router;
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-11-09T08:04:38.204Z
+                at 2025-11-09T14:56:10.793Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

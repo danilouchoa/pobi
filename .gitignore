@@ -12,6 +12,10 @@ lerna-debug.log*
 package-lock.json
 yarn.lock
 
+
+#QUODANA
+.qodana-report.json
+
 # ============================================
 # Build outputs
 # ============================================
