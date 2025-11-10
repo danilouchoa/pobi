@@ -1,0 +1,33 @@
+# Responsáveis por áreas do código
+* @danilouchoa
+
+# Backend
+/backend/ @danilouchoa
+/backend/src/ @danilouchoa
+/backend/prisma/ @danilouchoa
+/backend/scripts/ @danilouchoa
+
+# Frontend
+/frontend/ @danilouchoa
+/frontend/src/ @danilouchoa
+/frontend/scripts/ @danilouchoa
+
+# Workflows e automações
+.github/workflows/ @danilouchoa
+.github/actions/ @danilouchoa
+
+# Documentação
+/docs/ @danilouchoa
+README.md @danilouchoa
+SECURITY.md @danilouchoa
+CONTRIBUTING.md @danilouchoa
+
+# Configurações
+package.json @danilouchoa
+package-lock.json @danilouchoa
+tsconfig.json @danilouchoa
+tailwind.config.* @danilouchoa
+postcss.config.* @danilouchoa
+
+# Coverage e relatórios
+coverage/ @danilouchoa
