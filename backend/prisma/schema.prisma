@@ -1,0 +1,188 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+/**
+ * Política de rollover para fechamento de fatura em fim de semana
+ * 
+ * - NEXT: Adiar fechamento para próxima segunda-feira (compras do FDS entram na fatura atual)
+ * - PREVIOUS: Antecipar fechamento para sexta-feira anterior (compras do FDS vão para próxima fatura)
+ * 
+ * A política PREVIOUS é mais comum em bancos brasileiros.
+ */
+enum BillingRolloverPolicy {
+  NEXT
+  PREVIOUS
+}
+
+model User {
+  id            String          @id @default(auto()) @map("_id") @db.ObjectId
+  email         String          @unique
+  name          String?
+  passwordHash  String
+  createdAt     DateTime        @default(now())
+  
+  // Relações (O usuário é "dono" de tudo)
+  origins       Origin[]
+  debtors       Debtor[]
+  expenses      Expense[]
+  salaryHistory SalaryHistory[]
+  jobs          Job[]
+}
+
+// v5.2 state.origins
+/**
+ * Model Origin - Representa origens de pagamento (Cartões e Contas)
+ * 
+ * Campos específicos para Cartões de Crédito:
+ * - closingDay: Dia de fechamento da fatura (1-31)
+ * - billingRolloverPolicy: Como tratar fechamentos em fim de semana
+ * 
+ * Exemplo de uso:
+ * - Cartão com fechamento dia 09 (sábado)
+ * - Policy PREVIOUS → ajusta para dia 07 (sexta)
+ * - Compras até 07: fatura do mês corrente
+ * - Compras após 07: fatura do próximo mês
+ */
+model Origin {
+  id      String    @id @default(auto()) @map("_id") @db.ObjectId
+  name    String
+  type    String    // "Cartão" ou "Conta"
+  dueDay  String?   // Armazenado como string para flexibilidade (ex: "N/A")
+  limit   String?  // Valor decimal armazenado como string para preservar precisão
+  status  String?
+  active  Boolean  @default(true)
+
+  // Campos para cálculo de fatura de cartão
+  closingDay            Int?                    // Dia de fechamento (1-31), obrigatório para type="Cartão"
+  billingRolloverPolicy BillingRolloverPolicy?  @default(PREVIOUS) // Padrão: antecipar para sexta
+  
+  // Relação com User
+  userId  String   @db.ObjectId
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Relação com Expenses
+  expenses Expense[]
+  
+  @@index([userId])
+}
+
+// v5.2 state.debtors
+model Debtor {
+  id    String @id @default(auto()) @map("_id") @db.ObjectId
+  name  String
+  status String?
+  active Boolean @default(true)
+  
+  // Relação com User
+  userId String @db.ObjectId
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Relação com Expenses
+  expenses Expense[]
+  
+  @@index([userId])
+}
+
+// v5.2 state.expenses
+/**
+ * Model Expense - Despesas do usuário
+ * 
+ * Campo billingMonth:
+ * - String no formato 'YYYY-MM' (ex: "2025-11")
+ * - Calculado automaticamente para despesas de cartão
+ * - Baseado na data da transação + closingDay da origin
+ * - Permite agrupar/filtrar despesas por fatura
+ * 
+ * Índice [userId, billingMonth]:
+ * - Otimiza queries por fatura: GET /api/expenses?mode=billing&month=2025-11
+ * - Usado na UI para exibir "Fatura de Novembro/2025"
+ */
+model Expense {
+  id                String    @id @default(auto()) @map("_id") @db.ObjectId
+  date              DateTime  // Data do lançamento
+  description       String
+  category          String
+  parcela           String    // "Único", "1/12", "Mensal"
+  amount            String   // Valor decimal armazenado como string
+  fingerprint       String   @unique
+  recurring         Boolean  @default(false)
+  recurrenceType    String?
+  fixed             Boolean  @default(false)
+  installments      Int?
+  sharedWith        String?
+  sharedAmount      String?  // Valor decimal armazenado como string
+  lastReplicatedAt  DateTime?
+  createdAt         DateTime? @default(now())
+  updatedAt         DateTime? @updatedAt
+  
+  // Relação com User
+  userId            String   @db.ObjectId
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Relação com Origin (Conta/Cartão)
+  originId          String?  @db.ObjectId
+  origin            Origin?  @relation(fields: [originId], references: [id])
+  
+  // Relação com Debtor (Opcional)
+  debtorId          String?  @db.ObjectId
+  debtor            Debtor?  @relation(fields: [debtorId], references: [id])
+
+  // Mês de faturamento para cartões de crédito (formato 'YYYY-MM')
+  // Calculado via deriveBillingMonth() ao criar/editar despesa
+  // Permite filtrar despesas por fatura: ?mode=billing&billingMonth=2025-11
+  billingMonth      String?
+
+  @@index([userId, date])          // Queries mensais por data de transação
+  @@index([userId, billingMonth])  // Queries por fatura de cartão
+  @@index([originId])
+  @@index([debtorId])
+}
+
+// v5.2 state.salaryHistory
+model SalaryHistory {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  month      String   // Formato "YYYY-MM"
+  hours      Float
+  hourRate   Float
+  taxRate    Float
+  cnae       String?
+  
+  // Relação com User
+  userId     String   @db.ObjectId
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Campos calculados (gross, net, tax) podem ser calculados na API
+  // ou armazenados aqui se necessário para relatórios
+  
+  @@unique([userId, month]) // Garante 1 registro por mês/usuário
+}
+
+model Job {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  type          String
+  queue         String
+  status        String
+  attempts      Int      @default(0)
+  payload       Json
+  error         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  resultSummary Json?
+  expiresAt     DateTime?
+
+  userId String? @db.ObjectId
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+}

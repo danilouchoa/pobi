@@ -1,0 +1,34 @@
+docs:
+  - changed-files:
+      any-glob-to-any-file: ['**/*.md','README.md','docs/**']
+
+tests:
+  - changed-files:
+      any-glob-to-any-file: ['**/*.spec.js','**/*.test.js','**/*.spec.ts','**/*.test.ts','**/*.spec.tsx','**/*.test.tsx']
+
+backend:
+  - changed-files:
+      any-glob-to-any-file: ['backend/**']
+frontend:
+  - changed-files:
+      any-glob-to-any-file: ['frontend/**']
+
+api:
+  - changed-files:
+      any-glob-to-any-file: ['backend/src/routes/**','backend/src/middlewares/**','backend/src/index.ts']
+
+infra:
+  - changed-files:
+      any-glob-to-any-file: ['backend/scripts/**','frontend/scripts/**','backend/prisma/**','docker-compose.yaml','.env*']
+
+ci:
+  - changed-files:
+      any-glob-to-any-file: ['.github/workflows/**','.github/actions/**','.husky/**']
+
+config:
+  - changed-files:
+      any-glob-to-any-file: ['.eslintrc*','.prettierrc*','tsconfig.json','tailwind.config.*','postcss.config.*','package.json','package-lock.json','pnpm-lock.yaml','yarn.lock']
+
+dependencies:
+  - changed-files:
+      any-glob-to-any-file: ['package.json','package-lock.json','pnpm-lock.yaml','yarn.lock']
