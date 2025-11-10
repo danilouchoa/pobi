@@ -75,6 +75,9 @@ jobs:
         cache: 'npm'
         cache-dependency-path: ${{ matrix.path }}/package-lock.json
 
+    - name: Ensure npm cache dir
+      run: mkdir -p ~/.npm
+
     - name: Install dependencies for ${{ matrix.project }}
       working-directory: ${{ matrix.path }}
       run: |

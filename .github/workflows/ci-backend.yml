@@ -24,6 +24,9 @@ jobs:
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
 
+      - name: Ensure npm cache dir
+        run: mkdir -p ~/.npm
+
       - name: Install dependencies
         working-directory: backend
         run: npm ci
