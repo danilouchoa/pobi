@@ -71,7 +71,7 @@ const buildGroupFilter = (userId: string, expense: ExpenseRecord) => {
   }
 
   const pattern = new RegExp(
-     `^${escapeRegex(info.baseDescription)}\\s*\\(\\s*\\d+\\s*/\\s*${info.total}\\s*\\)\\s*$`,
+    `^${escapeRegex(info.baseDescription)}\\s*\\(\\s*\\d+\\s*/\\s*${info.total}\\s*\\)\\s*$`,
     'i'
   );
 
