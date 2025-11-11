@@ -41,6 +41,12 @@ import { z } from 'zod';
 const OBJECT_ID_REGEX = /^[0-9a-fA-F]{24}$/;
 
 /**
+ * Limite máximo de despesas por operação de batch
+ * Usado para evitar timeouts e sobrecarga do servidor
+ */
+export const MAX_BATCH_SIZE = 200;
+
+/**
  * Validador de ObjectId MongoDB
  */
 const objectIdSchema = z.string()
@@ -114,7 +120,10 @@ export const createExpenseSchema = z.object({
   // não deve ser enviado pelo cliente
 }).strict(); // Rejeita campos extras
 
-export const createExpenseBatchSchema = z.array(createExpenseSchema).min(1, 'Informe ao menos uma despesa').max(200, 'Limite de 200 despesas por lote');
+export const createExpenseBatchSchema = z
+  .array(createExpenseSchema)
+  .min(1, 'Informe ao menos uma despesa')
+  .max(MAX_BATCH_SIZE, `Limite de ${MAX_BATCH_SIZE} despesas por lote`);
 
 // ============================================================================
 // Schema de Atualização de Despesa (PUT /api/expenses/:id)
