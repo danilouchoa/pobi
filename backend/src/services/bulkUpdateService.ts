@@ -225,14 +225,24 @@ export async function applyBulkDelete(
   if (!existing.length) return { deletedCount: 0 };
 
   // Use cascade deletion for each expense to handle installment groups
+  // Track already-deleted IDs to avoid trying to delete the same installment group multiple times
   const allDeleted: any[] = [];
+  const deletedIds = new Set<string>();
   const invalidationMap = new Map<string, { month: string; mode: 'calendar' | 'billing' }>();
 
   for (const expense of existing) {
+    // Skip if this expense was already deleted as part of a previous cascade
+    if (deletedIds.has(expense.id)) {
+      continue;
+    }
+
     const cascadeResult = await deleteExpenseCascade(prisma, userId, expense as any);
     allDeleted.push(...cascadeResult.deleted);
 
+    // Track all deleted IDs to prevent duplicate cascade attempts
     cascadeResult.deleted.forEach((deletedExpense) => {
+      deletedIds.add(deletedExpense.id);
+      
       const calendarMonth = monthKeyFromInput(deletedExpense.date);
       const entries = buildInvalidationEntries(calendarMonth, deletedExpense.billingMonth ?? null);
       entries.forEach((entry) => {
