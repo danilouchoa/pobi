@@ -37,7 +37,7 @@ import {
 
 interface AuthenticatedRequest extends Request {
   userId?: string;
-  body: any;
+  body: ExpensePayload | ExpensePayload[] | BulkUnifiedActionPayload | any;
 }
 
 class BillingConfigurationError extends Error {
