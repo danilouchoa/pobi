@@ -35,6 +35,7 @@ export const ExpenseSchema = z.object({
   sharedWith: nullableString.transform((value) => value ?? null),
   sharedAmount: nullableNumber.transform((value) => value ?? null),
   billingMonth: nullableString.transform((value) => value ?? null),
+  installmentGroupId: nullableString.transform((value) => value ?? null),
 });
 
 export const ExpensesSchema = z.array(ExpenseSchema);
