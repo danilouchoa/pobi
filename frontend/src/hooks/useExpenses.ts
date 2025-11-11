@@ -11,6 +11,7 @@ import {
   createExpensesBatch,
   createRecurringExpense,
   deleteExpense,
+  deleteGroup,
   duplicateExpense,
   getExpenses,
   getRecurringExpenses,
@@ -125,12 +126,12 @@ export function useExpenses(month: string, options: Options = {}) {
 
   const createMutation = useMutation({
     mutationFn: ({ payload }: CreateExpenseVariables) => createExpense(payload),
-    onMutate: async ({ payload }) => {
+    onMutate: async ({ payload }: CreateExpenseVariables) => {
       await queryClient.cancelQueries({ queryKey });
       const previous = queryClient.getQueryData<ExpensesResponse | undefined>(queryKey);
       if (page === 1) {
         const optimistic = buildOptimisticExpense(payload, mode, month);
-        queryClient.setQueryData<ExpensesResponse | undefined>(queryKey, (old) => {
+        queryClient.setQueryData<ExpensesResponse | undefined>(queryKey, (old: ExpensesResponse | undefined) => {
           const base: ExpensesResponse =
             old ?? {
               data: [],
@@ -151,7 +152,7 @@ export function useExpenses(month: string, options: Options = {}) {
       }
       return { previous };
     },
-    onError: (_err, _vars, ctx) => rollback(ctx),
+  onError: (_err: unknown, _vars: CreateExpenseVariables, ctx?: OptimisticContext) => rollback(ctx),
     onSettled: () => {
       invalidateAll();
     },
@@ -160,32 +161,33 @@ export function useExpenses(month: string, options: Options = {}) {
   const updateMutation = useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: ExpensePayload }) =>
       updateExpense(id, payload),
-    onMutate: async ({ id, payload }) => {
+    onMutate: async ({ id, payload }: { id: string; payload: ExpensePayload }) => {
       await queryClient.cancelQueries({ queryKey });
       const previous = queryClient.getQueryData<ExpensesResponse | undefined>(queryKey);
-      queryClient.setQueryData<ExpensesResponse | undefined>(queryKey, (old) => {
+      queryClient.setQueryData<ExpensesResponse | undefined>(queryKey, (old: ExpensesResponse | undefined) => {
         if (!old) return old;
         return {
           ...old,
-          data: old.data.map((expense) =>
+          data: old.data.map((expense: Expense) =>
             expense.id === id ? mergeExpenseWithPayload(expense, payload) : expense
           ),
         };
       });
       return { previous };
     },
-    onError: (_err, _vars, ctx) => rollback(ctx),
+    onError: (_err: unknown, _vars: { id: string; payload: ExpensePayload }, ctx?: OptimisticContext) =>
+      rollback(ctx),
     onSettled: invalidateAll,
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteExpense(id),
-    onMutate: async (id) => {
+    onMutate: async (id: string) => {
       await queryClient.cancelQueries({ queryKey });
       const previous = queryClient.getQueryData<ExpensesResponse | undefined>(queryKey);
-      queryClient.setQueryData<ExpensesResponse | undefined>(queryKey, (old) => {
+      queryClient.setQueryData<ExpensesResponse | undefined>(queryKey, (old: ExpensesResponse | undefined) => {
         if (!old) return old;
-        const nextData = old.data.filter((expense) => expense.id !== id);
+        const nextData = old.data.filter((expense: Expense) => expense.id !== id);
         if (nextData.length === old.data.length) {
           return old;
         }
@@ -205,7 +207,7 @@ export function useExpenses(month: string, options: Options = {}) {
       });
       return { previous };
     },
-    onError: (_err, _vars, ctx) => rollback(ctx),
+    onError: (_err: unknown, _vars: string, ctx?: OptimisticContext) => rollback(ctx),
     onSettled: invalidateAll,
   });
 
@@ -222,13 +224,15 @@ export function useExpenses(month: string, options: Options = {}) {
 
   const createBatchMutation = useMutation({
     mutationFn: ({ payloads }: CreateExpenseBatchVariables) => createExpensesBatch(payloads),
-    onMutate: async ({ payloads }) => {
+    onMutate: async ({ payloads }: CreateExpenseBatchVariables) => {
       await queryClient.cancelQueries({ queryKey });
       const previous = queryClient.getQueryData<ExpensesResponse | undefined>(queryKey);
 
       if (page === 1 && payloads.length) {
-        const optimisticItems = payloads.map((payload) => buildOptimisticExpense(payload, mode, month));
-        queryClient.setQueryData<ExpensesResponse | undefined>(queryKey, (old) => {
+        const optimisticItems = payloads.map((payload: ExpensePayload) =>
+          buildOptimisticExpense(payload, mode, month)
+        );
+        queryClient.setQueryData<ExpensesResponse | undefined>(queryKey, (old: ExpensesResponse | undefined) => {
           const base: ExpensesResponse =
             old ?? {
               data: [],
@@ -250,7 +254,7 @@ export function useExpenses(month: string, options: Options = {}) {
 
       return { previous };
     },
-    onError: (_err, _vars, ctx) => rollback(ctx),
+    onError: (_err: unknown, _vars: CreateExpenseBatchVariables, ctx?: OptimisticContext) => rollback(ctx),
     onSettled: invalidateAll,
   });
 
@@ -288,7 +292,7 @@ export function useExpenses(month: string, options: Options = {}) {
       createBatchMutation.mutateAsync({ payloads }),
     updateExpense: (id: string, payload: ExpensePayload) =>
       updateMutation.mutateAsync({ id, payload }),
-    deleteExpense: deleteMutation.mutateAsync,
+  deleteExpense: deleteMutation.mutateAsync,
     duplicateExpense: (id: string, duplicateOptions?: { incrementMonth?: boolean; customDate?: string }) =>
       duplicateMutation.mutateAsync({ id, options: duplicateOptions }),
     createRecurringExpense: createRecurringMutation.mutateAsync,
@@ -300,3 +304,14 @@ export function useExpenses(month: string, options: Options = {}) {
       bulkActionMutation.mutateAsync({ action: 'update', items }),
   };
 }
+
+export const useDeleteExpenseGroup = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (groupId: string) => deleteGroup(groupId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: expensesKeys.all });
+    },
+  });
+};
