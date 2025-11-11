@@ -114,6 +114,8 @@ export const createExpenseSchema = z.object({
   // não deve ser enviado pelo cliente
 }).strict(); // Rejeita campos extras
 
+export const createExpenseBatchSchema = z.array(createExpenseSchema).min(1, 'Informe ao menos uma despesa').max(200, 'Limite de 200 despesas por lote');
+
 // ============================================================================
 // Schema de Atualização de Despesa (PUT /api/expenses/:id)
 // ============================================================================

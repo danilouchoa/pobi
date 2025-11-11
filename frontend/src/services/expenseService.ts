@@ -112,6 +112,13 @@ export async function createExpense(payload: ExpensePayload): Promise<Expense> {
   return ExpenseSchema.parse(data);
 }
 
+export async function createExpensesBatch(payloads: ExpensePayload[]): Promise<Expense[]> {
+  if (!payloads.length) return [];
+  const body = payloads.map((payload) => normalizeExpensePayload(payload));
+  const { data } = await api.post<Expense[]>("/api/expenses/batch", body);
+  return ExpensesSchema.parse(data);
+}
+
 export async function updateExpense(
   id: string,
   payload: ExpensePayload

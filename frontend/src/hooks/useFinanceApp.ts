@@ -112,6 +112,19 @@ export function useFinanceApp() {
     [expenses]
   );
 
+  const createExpenseBatch = useCallback(
+    async (payloads: ExpensePayload[]) => {
+      if (!payloads.length) return;
+      const normalized = payloads.map((payload) => ({
+        ...payload,
+        amount: parseNum(payload.amount),
+        debtorId: payload.debtorId || null,
+      }));
+      await expenses.createExpenseBatch(normalized);
+    },
+    [expenses]
+  );
+
   const adjustExpense = useCallback(
     async (id: string, payload: ExpensePayload) => {
       await expenses.updateExpense(id, {
@@ -209,6 +222,7 @@ export function useFinanceApp() {
     error,
     refresh,
     createExpense,
+  createExpenseBatch,
     deleteExpense: expenses.deleteExpense,
     duplicateExpense: expenses.duplicateExpense,
     adjustExpense,
