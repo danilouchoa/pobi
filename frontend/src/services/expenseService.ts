@@ -132,6 +132,10 @@ export async function deleteExpense(id: string) {
   await api.delete(`/api/expenses/${id}`);
 }
 
+export async function deleteGroup(groupId: string) {
+  await api.delete(`/api/expenses/group/${groupId}`);
+}
+
 export async function duplicateExpense(
   id: string,
   options: { incrementMonth?: boolean; customDate?: string } = { incrementMonth: true }

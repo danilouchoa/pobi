@@ -113,6 +113,8 @@ model Expense {
   category          String
   parcela           String    // "Único", "1/12", "Mensal"
   amount            String   // Valor decimal armazenado como string
+  // Este ID agrupa todas as parcelas de uma transação parcelada
+  installmentGroupId String?  @db.ObjectId @map("installment_group_id")
   fingerprint       String   @unique
   recurring         Boolean  @default(false)
   recurrenceType    String?
@@ -145,6 +147,8 @@ model Expense {
   @@index([userId, billingMonth])  // Queries por fatura de cartão
   @@index([originId])
   @@index([debtorId])
+  // Índice para otimizar busca/exclusão de grupos de parcelas
+  @@index([userId, installmentGroupId])
 }
 
 // v5.2 state.salaryHistory
