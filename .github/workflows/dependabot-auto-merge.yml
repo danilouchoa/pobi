@@ -1,4 +1,4 @@
-name: Dependabot Auto-Approve & Auto-Merge
+name: Dependabot Auto-Approve (no auto-merge)
 
 on:
   pull_request_target:
@@ -9,10 +9,15 @@ permissions:
   pull-requests: write
 
 jobs:
-  automerge:
+  approve:
     if: github.actor == 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Dependabot metadata
         id: metadata
         uses: dependabot/fetch-metadata@v2
@@ -23,11 +28,3 @@ jobs:
         uses: hmarr/auto-approve-action@v4
         with:
           github-token: ${{ secrets.SECRET_GITHUB_TOKEN }}
-
-      - name: Enable auto-merge when CI succeeds (squash)
-        uses: peter-evans/enable-pull-request-automerge@v3
-        with:
-          token: ${{ secrets.SECRET_GITHUB_TOKEN }}
-          merge-method: squash
-        env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
