@@ -84,23 +84,26 @@ app.use(invalidJsonHandler);
 
 // Middleware CSRF - protege rotas autenticadas
 // Usa cookie para armazenar o token CSRF
-app.use(
-  csurf({
-    cookie: {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-    },
-    ignoreMethods: ['GET', 'HEAD', 'OPTIONS'],
-  })
-);
+const csrfProtection = csurf({
+  cookie: {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+  },
+  ignoreMethods: ['GET', 'HEAD', 'OPTIONS'],
+});
 
 app.use('/api', apiLimiter);
 
-// Expor o token CSRF em uma rota pública para o frontend buscar
-app.get('/api/csrf-token', (req: Request, res) => {
+// Esta rota usa o middleware CSRF para gerar e expor o token ao frontend.
+// O middleware CSRF é aplicado especificamente aqui para criar o token,
+// e depois globalmente para proteger todas as outras rotas.
+app.get('/api/csrf-token', csrfProtection, (req: Request, res) => {
   res.json({ csrfToken: req.csrfToken ? req.csrfToken() : null });
 });
+
+// Aplicar CSRF protection em todas as outras rotas
+app.use(csrfProtection);
 
 // Rotas públicas (sem autenticação)
 app.use('/api/auth', authRoutes(prisma));

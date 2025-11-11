@@ -44,11 +44,15 @@ import { useToast } from "../hooks/useToast";
 import { todayISO, parseNum, toBRL } from "../utils/helpers";
 import { compareMonths, formatMonthLabel } from "../utils/dateHelpers";
 
+// Regex para detectar formato de parcelas (ex: "1/12", "3/6")
+const INSTALLMENT_PATTERN = /(\d+)\/(\d+)/;
+
 export default function Lancamentos({
     state,
     month,
     onChangeMonth,
     createExpense,
+  createExpenseBatch,
     deleteExpense,
     duplicateExpense,
     adjustExpense,
@@ -233,10 +237,30 @@ export default function Lancamentos({
         });
       }
       setSubmitting(true);
+      
+      // Show loading message for large batches
+      if (payloads.length > 5) {
+        toast.info(`Criando ${payloads.length} parcelas... isso pode levar alguns segundos.`);
+      }
+      
       try {
+        const regularPayloads = [];
+        const specialPayloads = [];
         for (const p of payloads) {
-          if (p.recurring || p.fixed) await createRecurringExpense(p);
-          else await createExpense(p);
+          if (p.recurring || p.fixed) specialPayloads.push(p);
+          else regularPayloads.push(p);
+        }
+
+        if (regularPayloads.length > 1 && createExpenseBatch) {
+          await createExpenseBatch(regularPayloads);
+        } else {
+          for (const p of regularPayloads) {
+            await createExpense(p);
+          }
+        }
+
+        for (const p of specialPayloads) {
+          await createRecurringExpense(p);
         }
         setForm((c) => ({
           ...c,
@@ -251,17 +275,31 @@ export default function Lancamentos({
           sharedWith: "",
           sharedAmount: "",
         }));
-        toast.success();
+        
+        if (payloads.length > 1) {
+          toast.success(`${payloads.length} parcelas criadas com sucesso!`);
+        } else {
+          toast.success();
+        }
       } catch (e) {
         toast.error(e);
       } finally {
         setSubmitting(false);
       }
     };
-    const handleDeleteExpense = async (id) => {
-      if (!window.confirm("Deseja excluir este lançamento?")) return;
+    const handleDeleteExpense = async (expense) => {
+      const isInstallment = expense.parcela && expense.parcela !== "Único" && INSTALLMENT_PATTERN.test(expense.parcela);
+      
+      let confirmMessage = "Deseja excluir este lançamento?";
+      if (isInstallment) {
+        const match = expense.parcela.match(INSTALLMENT_PATTERN);
+        const totalInstallments = match ? match[2] : "X";
+        confirmMessage = `⚠️ ATENÇÃO: Este é um lançamento PARCELADO (${expense.parcela}).\n\nAo confirmar, TODAS as ${totalInstallments} parcelas serão excluídas do histórico.\n\nEsta ação NÃO pode ser desfeita.\n\nDeseja continuar?`;
+      }
+      
+      if (!window.confirm(confirmMessage)) return;
       try {
-        await deleteExpense(id);
+        await deleteExpense(expense.id);
         toast.success();
       } catch (e) {
         toast.error(e);
@@ -403,7 +441,22 @@ export default function Lancamentos({
     const handleBulkDelete = async () => {
       if (!selectedIds.size) return;
       const count = selectedIds.size;
-      if (!window.confirm(`Excluir ${count} lançamento(s)? Esta ação não pode ser desfeita.`)) return;
+      
+      // Check if any selected expense is an installment
+      const selectedExpenses = filteredExpenses.filter((ex) => selectedIds.has(ex.id));
+      const hasInstallments = selectedExpenses.some((ex) => 
+        ex.parcela && ex.parcela !== "Único" && INSTALLMENT_PATTERN.test(ex.parcela)
+      );
+      
+      let confirmMessage = `Excluir ${count} lançamento(s)?`;
+      if (hasInstallments) {
+        confirmMessage = `⚠️ ATENÇÃO: Você selecionou ${count} lançamento(s) e pelo menos um é PARCELADO.\n\nAo confirmar, TODAS as parcelas relacionadas serão excluídas automaticamente (não só as visíveis nesta página).\n\nEsta ação NÃO pode ser desfeita.\n\nDeseja continuar?`;
+      } else {
+        confirmMessage += " Esta ação não pode ser desfeita.";
+      }
+      
+      if (!window.confirm(confirmMessage)) return;
+      
       setBulkSubmitting(true);
       try {
         await bulkDelete(Array.from(selectedIds));
@@ -755,7 +808,7 @@ export default function Lancamentos({
                           <IconButton size="small" onClick={() => openEditDialog(ex)}>
                             <EditIcon fontSize="small" />
                           </IconButton>
-                          <IconButton color="error" size="small" onClick={() => handleDeleteExpense(ex.id)}>
+                          <IconButton color="error" size="small" onClick={() => handleDeleteExpense(ex)}>
                             <DeleteIcon fontSize="small" />
                           </IconButton>
                         </Stack>

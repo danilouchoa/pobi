@@ -18,6 +18,42 @@ vi.mock('../services/expenseService', async (importOriginal) => {
 		createExpense: vi.fn(() =>
 			Promise.resolve({ id: '1', description: 'Nova', amount: 10 })
 		),
+		createExpensesBatch: vi.fn(() =>
+			Promise.resolve([
+				{
+					id: '10',
+					description: 'Batch 1',
+					category: 'Outros',
+					parcela: '1/2',
+					amount: 5,
+					date: '2025-11-01T00:00:00.000Z',
+					originId: null,
+					debtorId: null,
+					recurring: false,
+					fixed: false,
+					installments: 2,
+					sharedWith: null,
+					sharedAmount: null,
+					billingMonth: null,
+				},
+				{
+					id: '11',
+					description: 'Batch 2',
+					category: 'Outros',
+					parcela: '2/2',
+					amount: 5,
+					date: '2025-12-01T00:00:00.000Z',
+					originId: null,
+					debtorId: null,
+					recurring: false,
+					fixed: false,
+					installments: 2,
+					sharedWith: null,
+					sharedAmount: null,
+					billingMonth: null,
+				},
+			])
+		),
 		updateExpense: vi.fn(() =>
 			Promise.resolve({ id: '1', description: 'Editada', amount: 20 })
 		),
@@ -65,6 +101,29 @@ describe('useExpenses', () => {
 			});
 			expect(created).toBeDefined();
 			expect(created.description).toBe('Nova');
+		});
+	});
+	it('deve criar despesas em lote', async () => {
+		const { result } = renderHook(() => useExpenses('2025-11'), { wrapper });
+		await waitFor(() => result.current.expensesQuery.isSuccess);
+		await act(async () => {
+			const created = await result.current.createExpenseBatch([
+				{
+					description: 'Batch 1',
+					category: 'Outros',
+					amount: 5,
+					date: '2025-11-01T00:00:00.000Z',
+				},
+				{
+					description: 'Batch 2',
+					category: 'Outros',
+					amount: 5,
+					date: '2025-11-01T00:00:00.000Z',
+				},
+			]);
+			expect(created).toBeDefined();
+			expect(Array.isArray(created)).toBe(true);
+			expect(created?.length).toBe(2);
 		});
 	});
 	it('deve atualizar uma despesa', async () => {

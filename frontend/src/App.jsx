@@ -55,6 +55,7 @@ function App() {
     error,
     refresh,
     createExpense,
+  createExpenseBatch,
     deleteExpense,
     duplicateExpense,
     adjustExpense,
@@ -217,6 +218,7 @@ function App() {
                 month={month}
                 onChangeMonth={setMonth}
                 createExpense={createExpense}
+                createExpenseBatch={createExpenseBatch}
                 deleteExpense={deleteExpense}
                 duplicateExpense={duplicateExpense}
                 adjustExpense={adjustExpense}

@@ -8,6 +8,7 @@ import {
   bulkUpdateExpenses,
   bulkExpensesAction,
   createExpense,
+  createExpensesBatch,
   createRecurringExpense,
   deleteExpense,
   duplicateExpense,
@@ -28,6 +29,14 @@ type Options = {
 
 type OptimisticContext = {
   previous: ExpensesResponse | undefined;
+};
+
+type CreateExpenseVariables = {
+  payload: ExpensePayload;
+};
+
+type CreateExpenseBatchVariables = {
+  payloads: ExpensePayload[];
 };
 
 const mergeExpenseWithPayload = (
@@ -115,8 +124,8 @@ export function useExpenses(month: string, options: Options = {}) {
   };
 
   const createMutation = useMutation({
-    mutationFn: (payload: ExpensePayload) => createExpense(payload),
-    onMutate: async (payload) => {
+    mutationFn: ({ payload }: CreateExpenseVariables) => createExpense(payload),
+    onMutate: async ({ payload }) => {
       await queryClient.cancelQueries({ queryKey });
       const previous = queryClient.getQueryData<ExpensesResponse | undefined>(queryKey);
       if (page === 1) {
@@ -143,7 +152,9 @@ export function useExpenses(month: string, options: Options = {}) {
       return { previous };
     },
     onError: (_err, _vars, ctx) => rollback(ctx),
-    onSettled: invalidateAll,
+    onSettled: () => {
+      invalidateAll();
+    },
   });
 
   const updateMutation = useMutation({
@@ -209,6 +220,40 @@ export function useExpenses(month: string, options: Options = {}) {
     onSuccess: invalidateAll,
   });
 
+  const createBatchMutation = useMutation({
+    mutationFn: ({ payloads }: CreateExpenseBatchVariables) => createExpensesBatch(payloads),
+    onMutate: async ({ payloads }) => {
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<ExpensesResponse | undefined>(queryKey);
+
+      if (page === 1 && payloads.length) {
+        const optimisticItems = payloads.map((payload) => buildOptimisticExpense(payload, mode, month));
+        queryClient.setQueryData<ExpensesResponse | undefined>(queryKey, (old) => {
+          const base: ExpensesResponse =
+            old ?? {
+              data: [],
+              pagination: { page: 1, limit, total: 0, pages: 1 },
+            };
+          const limitCap = base.pagination.limit ?? limit;
+          const nextTotal = base.pagination.total + payloads.length;
+          const nextPages = Math.max(1, Math.ceil(nextTotal / limitCap));
+          return {
+            data: [...optimisticItems, ...base.data].slice(0, limitCap),
+            pagination: {
+              ...base.pagination,
+              total: nextTotal,
+              pages: nextPages,
+            },
+          };
+        });
+      }
+
+      return { previous };
+    },
+    onError: (_err, _vars, ctx) => rollback(ctx),
+    onSettled: invalidateAll,
+  });
+
   const createRecurringMutation = useMutation({
     mutationFn: (payload: ExpensePayload) => createRecurringExpense(payload),
     onSuccess: invalidateAll,
@@ -237,7 +282,10 @@ export function useExpenses(month: string, options: Options = {}) {
     recurringQuery,
     sharedQuery,
     pagination,
-    createExpense: createMutation.mutateAsync,
+    createExpense: (payload: ExpensePayload) =>
+      createMutation.mutateAsync({ payload }),
+    createExpenseBatch: (payloads: ExpensePayload[]) =>
+      createBatchMutation.mutateAsync({ payloads }),
     updateExpense: (id: string, payload: ExpensePayload) =>
       updateMutation.mutateAsync({ id, payload }),
     deleteExpense: deleteMutation.mutateAsync,

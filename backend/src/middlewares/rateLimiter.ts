@@ -1,17 +1,5 @@
 import rateLimit from 'express-rate-limit';
 import type { Options } from 'express-rate-limit';
-import type { Request } from 'express';
-
-const defaultKeyGenerator = (req: Request) => {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string') {
-    return forwarded.split(',')[0].trim();
-  }
-  if (Array.isArray(forwarded) && forwarded.length > 0) {
-    return forwarded[0];
-  }
-  return req.ip ?? req.socket.remoteAddress ?? 'unknown';
-};
 
 const createLimiter = (options: Partial<Options>) =>
   rateLimit({
@@ -19,7 +7,6 @@ const createLimiter = (options: Partial<Options>) =>
     max: 100,
     standardHeaders: 'draft-7',
     legacyHeaders: false,
-    keyGenerator: defaultKeyGenerator,
     message: {
       error: 'RATE_LIMIT_EXCEEDED',
       message: 'Too many requests. Please try again later.',
