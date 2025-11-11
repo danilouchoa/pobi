@@ -16,11 +16,13 @@ type ExpenseRecord = {
   date: Date;
   billingMonth: string | null;
   fingerprint: string | null;
+  installmentGroupId: string | null;
 };
 
 type DeleteCascadeResult = {
   deleted: ExpenseRecord[];
 };
+type SingleDeleteResult = ExpenseRecord | null;
 
 const normalizeParcela = (value: string | null | undefined) => {
   if (!value) return null;
@@ -88,11 +90,93 @@ const buildGroupFilter = (userId: string, expense: ExpenseRecord) => {
   return { where, info, pattern } as const;
 };
 
-export async function deleteExpenseCascade(
+export async function deleteExpenseById(
   prisma: PrismaClient,
+  userId: string,
+  expenseId: string
+): Promise<SingleDeleteResult> {
+  return prisma.$transaction(async (tx) => {
+    const expense = await tx.expense.findFirst({
+      where: { id: expenseId, userId },
+      select: {
+        id: true,
+        description: true,
+        parcela: true,
+        amount: true,
+        originId: true,
+        debtorId: true,
+        installments: true,
+        date: true,
+        billingMonth: true,
+        fingerprint: true,
+        installmentGroupId: true,
+      },
+    });
+
+    if (!expense) {
+      return null;
+    }
+
+    await tx.expense.delete({ where: { id: expense.id } });
+    return expense as ExpenseRecord;
+  });
+}
+
+export async function deleteExpenseCascade(
+  prisma: PrismaClient | Prisma.TransactionClient,
   userId: string,
   expense: ExpenseRecord
 ): Promise<DeleteCascadeResult> {
+  if (expense.installmentGroupId) {
+    const related = await prisma.expense.findMany({
+      where: {
+        userId,
+        installmentGroupId: expense.installmentGroupId,
+      },
+      select: {
+        id: true,
+        description: true,
+        parcela: true,
+        amount: true,
+        originId: true,
+        debtorId: true,
+        installments: true,
+        date: true,
+        billingMonth: true,
+        fingerprint: true,
+        installmentGroupId: true,
+      },
+    });
+
+    if (!related.length) {
+      await prisma.expense.delete({ where: { id: expense.id } });
+      return { deleted: [expense] };
+    }
+
+    await prisma.expense.deleteMany({
+      where: {
+        userId,
+        installmentGroupId: expense.installmentGroupId,
+      },
+    });
+
+    return {
+      deleted: related.map((record) => ({
+        id: record.id,
+        description: record.description,
+        parcela: record.parcela,
+        amount: record.amount,
+        originId: record.originId,
+        debtorId: record.debtorId,
+        installments: record.installments,
+        date: record.date,
+        billingMonth: record.billingMonth,
+        fingerprint: record.fingerprint,
+        installmentGroupId: record.installmentGroupId,
+      })),
+    };
+  }
+
   const groupFilter = buildGroupFilter(userId, expense);
 
   if (!groupFilter) {
@@ -113,6 +197,7 @@ export async function deleteExpenseCascade(
       date: true,
       billingMonth: true,
       fingerprint: true,
+      installmentGroupId: true,
     },
   });
 
@@ -155,6 +240,7 @@ export async function deleteExpenseCascade(
       date: record.date,
       billingMonth: record.billingMonth,
       fingerprint: record.fingerprint,
+      installmentGroupId: record.installmentGroupId,
     })),
   };
 }
