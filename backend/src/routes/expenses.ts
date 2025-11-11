@@ -35,6 +35,9 @@ import {
   idParamSchema,
 } from '../schemas/expense.schema';
 
+// Timeout para transações de batch (suporta até ~200 parcelas)
+const BATCH_TRANSACTION_TIMEOUT_MS = 30000; // 30 segundos
+
 interface AuthenticatedRequest extends Request {
   userId?: string;
   body: ExpensePayload | ExpensePayload[] | BulkUnifiedActionPayload | any;
@@ -438,7 +441,6 @@ export default function expensesRoutes(prisma: PrismaClient) {
       const createData = payloads.map((payload) => buildCreateData(userId, payload));
       const originCache = new Map<string, Origin | null>();
 
-      // Aumentar timeout para 30 segundos para suportar criação de muitas parcelas
       const expenses = await prisma.$transaction(async (tx) => {
         const created = [] as any[];
         for (const data of createData) {
@@ -448,8 +450,8 @@ export default function expensesRoutes(prisma: PrismaClient) {
         }
         return created;
       }, {
-        maxWait: 30000, // 30 segundos de espera máxima
-        timeout: 30000, // 30 segundos de timeout
+        maxWait: BATCH_TRANSACTION_TIMEOUT_MS,
+        timeout: BATCH_TRANSACTION_TIMEOUT_MS,
       });
 
       const invalidationMap = new Map<string, { month: string; mode: 'calendar' | 'billing' }>();
