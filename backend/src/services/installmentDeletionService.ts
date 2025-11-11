@@ -15,6 +15,7 @@ type ExpenseRecord = {
   installments: number | null;
   date: Date;
   billingMonth: string | null;
+  fingerprint: string | null;
 };
 
 type DeleteCascadeResult = {
@@ -56,6 +57,15 @@ const buildGroupFilter = (userId: string, expense: ExpenseRecord) => {
 
   if (totalInstallments && totalInstallments > 1) {
     where.installments = totalInstallments;
+  }
+
+  // Use fingerprint to restrict cascade to a single installment series
+  // This prevents deleting unrelated installments with identical description/amount
+  if (expense.fingerprint) {
+    const fingerprintPrefix = expense.fingerprint.split('-')[0];
+    if (fingerprintPrefix && fingerprintPrefix.length >= 8) {
+      where.fingerprint = { startsWith: fingerprintPrefix };
+    }
   }
 
   if (expense.originId !== null && expense.originId !== undefined) {
@@ -102,6 +112,7 @@ export async function deleteExpenseCascade(
       installments: true,
       date: true,
       billingMonth: true,
+      fingerprint: true,
     },
   });
 
@@ -143,6 +154,7 @@ export async function deleteExpenseCascade(
       installments: record.installments,
       date: record.date,
       billingMonth: record.billingMonth,
+      fingerprint: record.fingerprint,
     })),
   };
 }
