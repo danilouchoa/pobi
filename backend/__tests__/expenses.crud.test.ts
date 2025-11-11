@@ -66,6 +66,29 @@ describe('/expenses CRUD', () => {
     createdExpenseId = res.body.id;
   });
 
+  it('deve criar despesas em lote', async () => {
+    const csrf = await getCsrfToken();
+    const payload = [
+      { ...expensePayload, description: 'Despesa Lote 1', parcela: '1/2' },
+      { ...expensePayload, description: 'Despesa Lote 2', parcela: '2/2' },
+    ];
+
+    const res = await request(app)
+      .post('/api/expenses/batch')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .set('Cookie', csrf.csrfCookie)
+      .set('X-CSRF-Token', csrf.csrfToken)
+      .send(payload);
+
+    if (res.status !== 201) {
+      throw new Error('Erro criação em lote: ' + JSON.stringify(res.body));
+    }
+
+    expect(res.status).toBe(201);
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body).toHaveLength(2);
+  });
+
   it('deve buscar despesas filtrando por billingMonth', async () => {
     const res = await request(app)
       .get('/api/expenses?billingMonth=2025-11')

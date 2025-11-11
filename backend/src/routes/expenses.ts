@@ -1,5 +1,5 @@
 import { Router, Request } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Origin, Prisma, Expense } from '@prisma/client';
 import { addMonths, startOfMonth, format } from 'date-fns';
 import {
   addByRecurrence,
@@ -16,6 +16,7 @@ import { publishRecurringJob, publishBulkUpdateJob } from '../lib/rabbit';
 import { applyBulkUnifiedUpdate, applyBulkDelete } from '../services/bulkUpdateService';
 import { getOrSetCache } from '../lib/redisCache';
 import { deriveBillingMonth, BillingRolloverPolicy } from '../lib/billing';
+import { deleteExpenseCascade } from '../services/installmentDeletionService';
 import {
   ExpenseViewMode,
   buildExpenseCacheKey,
@@ -28,14 +29,19 @@ import { ZodError } from 'zod';
 import { validate } from '../middlewares/validation';
 import {
   createExpenseSchema,
+  createExpenseBatchSchema,
   updateExpenseSchema,
   queryExpenseSchema,
   idParamSchema,
+  MAX_BATCH_SIZE,
 } from '../schemas/expense.schema';
+
+// Timeout para transações de batch (suporta até MAX_BATCH_SIZE parcelas)
+const BATCH_TRANSACTION_TIMEOUT_MS = 30000; // 30 segundos
 
 interface AuthenticatedRequest extends Request {
   userId?: string;
-  body: ExpensePayload;
+  body: ExpensePayload | ExpensePayload[] | BulkUnifiedActionPayload | any;
 }
 
 class BillingConfigurationError extends Error {
@@ -80,15 +86,28 @@ const shouldApplyBillingLogic = (originType?: string | null) =>
  * // Retorna: null (contas não têm fatura)
  */
 const computeBillingMonth = async (
-  prisma: PrismaClient,
+  prisma: PrismaClient | Prisma.TransactionClient,
   originId: string | null | undefined,
-  date: Date
+  date: Date,
+  originCache?: Map<string, Origin | null>
 ): Promise<string | null> => {
   // Se despesa não tem origin, não pode ter billingMonth
   if (!originId) return null;
 
   // Buscar dados da origin (cartão/conta)
-  const origin = await prisma.origin.findUnique({ where: { id: originId } });
+  let origin: Origin | null | undefined = null;
+
+  if (originCache) {
+    const cached = originCache.get(originId);
+    if (cached !== undefined) {
+      origin = cached;
+    } else {
+      origin = await prisma.origin.findUnique({ where: { id: originId } });
+      originCache.set(originId, origin ?? null);
+    }
+  } else {
+    origin = await prisma.origin.findUnique({ where: { id: originId } });
+  }
 
   // Se origin não existe ou não é cartão, retorna null
   if (!origin || !shouldApplyBillingLogic(origin.type)) {
@@ -406,6 +425,74 @@ export default function expensesRoutes(prisma: PrismaClient) {
     }
   });
 
+  router.post('/batch', validate({ body: createExpenseBatchSchema }), async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.userId;
+
+      if (!userId) {
+        return res.status(401).json({ message: 'Não autorizado.' });
+      }
+
+      const payloads = Array.isArray(req.body) ? req.body : [];
+
+      if (!payloads.length) {
+        return res.status(400).json({ message: 'Informe ao menos uma despesa.' });
+      }
+
+      const createData = payloads.map((payload) => buildCreateData(userId, payload));
+      const originCache = new Map<string, Origin | null>();
+
+      const expenses = await prisma.$transaction(async (tx) => {
+        const created: Expense[] = [];
+        for (const data of createData) {
+          const billingMonth = await computeBillingMonth(tx, data.originId ?? null, data.date, originCache);
+          const expense = await tx.expense.create({ data: { ...data, billingMonth } });
+          created.push(expense);
+        }
+        return created;
+      }, {
+        maxWait: BATCH_TRANSACTION_TIMEOUT_MS,
+        timeout: BATCH_TRANSACTION_TIMEOUT_MS,
+      });
+
+      const invalidationMap = new Map<string, { month: string; mode: 'calendar' | 'billing' }>();
+      expenses.forEach((expense) => {
+        const entries = buildInvalidationEntries(
+          monthKeyFromInput(expense.date),
+          expense.billingMonth ?? null
+        );
+        entries.forEach((entry) => {
+          if (!entry.month) return;
+          const key = `${entry.mode}:${entry.month}`;
+          if (!invalidationMap.has(key)) {
+            invalidationMap.set(key, { month: entry.month, mode: entry.mode });
+          }
+        });
+      });
+
+      if (invalidationMap.size) {
+        await invalidateExpenseCache(userId, Array.from(invalidationMap.values()));
+      }
+
+      res.status(201).json(expenses.map(serializeExpense));
+    } catch (error) {
+      console.error('Erro ao criar despesas em lote:', error);
+      if (error instanceof BillingConfigurationError) {
+        return res.status(error.statusCode).json({ message: error.message });
+      }
+      if (error instanceof Error && error.message.includes('Campos obrigatórios')) {
+        return res.status(400).json({ message: error.message });
+      }
+      if (error instanceof Error && error.message.includes('recorrente e fixa')) {
+        return res.status(400).json({ message: error.message });
+      }
+      if (error instanceof Error && error.message.includes('parcelamento')) {
+        return res.status(400).json({ message: error.message });
+      }
+      res.status(500).json({ message: 'Erro interno ao criar despesas.' });
+    }
+  });
+
   router.post('/', validate({ body: createExpenseSchema }), async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.userId;
@@ -522,14 +609,26 @@ export default function expensesRoutes(prisma: PrismaClient) {
         return res.status(404).json({ message: 'Despesa não encontrada.' });
       }
 
-      await prisma.expense.delete({ where: { id } });
-      await invalidateExpenseCache(
-        userId,
-        buildInvalidationEntries(
-          monthKeyFromInput(existing.date),
-          existing.billingMonth ?? null
-        )
-      );
+      const cascadeResult = await deleteExpenseCascade(prisma, userId, existing as any);
+
+      const invalidationMap = new Map<string, { month: string; mode: 'calendar' | 'billing' }>();
+      cascadeResult.deleted.forEach((expense) => {
+        const entries = buildInvalidationEntries(
+          monthKeyFromInput(expense.date),
+          expense.billingMonth ?? null
+        );
+        entries.forEach((entry) => {
+          if (!entry.month) return;
+          const key = `${entry.mode}:${entry.month}`;
+          if (!invalidationMap.has(key)) {
+            invalidationMap.set(key, { month: entry.month, mode: entry.mode });
+          }
+        });
+      });
+
+      if (invalidationMap.size) {
+        await invalidateExpenseCache(userId, Array.from(invalidationMap.values()));
+      }
 
       res.status(204).send();
     } catch (error) {
