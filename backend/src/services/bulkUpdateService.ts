@@ -5,6 +5,7 @@ import {
   invalidateExpenseCache,
   monthKeyFromInput,
 } from '../utils/expenseCache';
+import { deleteExpenseCascade } from './installmentDeletionService';
 
 export type BulkUpdateJob = {
   jobId: string;
@@ -209,30 +210,44 @@ export async function applyBulkDelete(
 
   const existing = await prisma.expense.findMany({
     where: { id: { in: ids }, userId },
-    select: { id: true, date: true, billingMonth: true },
+    select: {
+      id: true,
+      description: true,
+      parcela: true,
+      amount: true,
+      originId: true,
+      debtorId: true,
+      installments: true,
+      date: true,
+      billingMonth: true,
+    },
   });
   if (!existing.length) return { deletedCount: 0 };
 
+  // Use cascade deletion for each expense to handle installment groups
+  const allDeleted: any[] = [];
   const invalidationMap = new Map<string, { month: string; mode: 'calendar' | 'billing' }>();
-  existing.forEach((expense) => {
-    const calendarMonth = monthKeyFromInput(expense.date);
-    const entries = buildInvalidationEntries(calendarMonth, expense.billingMonth ?? null);
-    entries.forEach((entry) => {
-      if (!entry.month) return;
-      const key = `${entry.mode}:${entry.month}`;
-      if (!invalidationMap.has(key)) {
-        invalidationMap.set(key, { month: entry.month, mode: entry.mode });
-      }
-    });
-  });
 
-  const result = await prisma.expense.deleteMany({
-    where: { id: { in: existing.map((e) => e.id) }, userId },
-  });
+  for (const expense of existing) {
+    const cascadeResult = await deleteExpenseCascade(prisma, userId, expense as any);
+    allDeleted.push(...cascadeResult.deleted);
+
+    cascadeResult.deleted.forEach((deletedExpense) => {
+      const calendarMonth = monthKeyFromInput(deletedExpense.date);
+      const entries = buildInvalidationEntries(calendarMonth, deletedExpense.billingMonth ?? null);
+      entries.forEach((entry) => {
+        if (!entry.month) return;
+        const key = `${entry.mode}:${entry.month}`;
+        if (!invalidationMap.has(key)) {
+          invalidationMap.set(key, { month: entry.month, mode: entry.mode });
+        }
+      });
+    });
+  }
 
   if (invalidationMap.size) {
     await invalidateExpenseCache(userId, Array.from(invalidationMap.values()));
   }
 
-  return { deletedCount: result.count };
+  return { deletedCount: allDeleted.length };
 }

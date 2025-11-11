@@ -121,11 +121,22 @@ export const buildCreateData = (userId: string, body: ExpensePayload) => {
     body.fingerprint ??
     generateFingerprint(`${userId}-${body.description}-${body.date ?? ''}`);
 
+  let normalizedParcela = body.parcela ?? 'Único';
+  const parcelaMatch =
+    typeof normalizedParcela === 'string'
+      ? normalizedParcela.match(/^(.*?)(\d+)\s*\/\s*(\d+)(.*?)$/)
+      : null;
+  const inferredInstallments = (() => {
+    if (!parcelaMatch) return null;
+    const total = Number(parcelaMatch[3]);
+    return Number.isFinite(total) && total > 1 ? total : null;
+  })();
+
   return {
     userId,
     description: body.description!,
     category: body.category!,
-    parcela: body.parcela ?? 'Único',
+    parcela: normalizedParcela,
     amount: toDecimalString(amountDecimal.toString()),
     date: parseDateOrNow(body.date),
     originId: body.originId ?? null,
@@ -133,7 +144,7 @@ export const buildCreateData = (userId: string, body: ExpensePayload) => {
     recurring,
     recurrenceType: recurring ? body.recurrenceType ?? 'monthly' : null,
     fixed,
-    installments: body.installments ?? null,
+    installments: body.installments ?? inferredInstallments,
     sharedWith: body.sharedWith ?? null,
     sharedAmount: sharedAmountDecimal
       ? toDecimalString(sharedAmountDecimal.toString())
