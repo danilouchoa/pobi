@@ -95,8 +95,9 @@ const csrfProtection = csurf({
 
 app.use('/api', apiLimiter);
 
-// Expor o token CSRF em uma rota pública para o frontend buscar
-// IMPORTANTE: Esta rota deve vir ANTES de aplicar o middleware CSRF
+// Esta rota usa o middleware CSRF para gerar e expor o token ao frontend.
+// O middleware CSRF é aplicado especificamente aqui para criar o token,
+// e depois globalmente para proteger todas as outras rotas.
 app.get('/api/csrf-token', csrfProtection, (req: Request, res) => {
   res.json({ csrfToken: req.csrfToken ? req.csrfToken() : null });
 });
