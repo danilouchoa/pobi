@@ -122,9 +122,11 @@ export const buildCreateData = (userId: string, body: ExpensePayload) => {
     generateFingerprint(`${userId}-${body.description}-${body.date ?? ''}`);
 
   let normalizedParcela = body.parcela ?? 'Único';
+  // Regex segura: usa limite de caracteres para evitar ReDoS
+  // Aceita formatos: "1/12", "Desc 1/12", "1/12 Desc", etc.
   const parcelaMatch =
     typeof normalizedParcela === 'string'
-      ? normalizedParcela.match(/^(.*?)(\d+)\s*\/\s*(\d+)(.*?)$/)
+      ? normalizedParcela.match(/^(.{0,100}?)(\d{1,4})\s*\/\s*(\d{1,4})(.{0,100}?)$/)
       : null;
   const inferredInstallments = (() => {
     if (!parcelaMatch) return null;
