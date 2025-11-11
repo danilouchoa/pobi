@@ -44,6 +44,9 @@ import { useToast } from "../hooks/useToast";
 import { todayISO, parseNum, toBRL } from "../utils/helpers";
 import { compareMonths, formatMonthLabel } from "../utils/dateHelpers";
 
+// Regex para detectar formato de parcelas (ex: "1/12", "3/6")
+const INSTALLMENT_PATTERN = /(\d+)\/(\d+)/;
+
 export default function Lancamentos({
     state,
     month,
@@ -285,11 +288,11 @@ export default function Lancamentos({
       }
     };
     const handleDeleteExpense = async (expense) => {
-      const isInstallment = expense.parcela && expense.parcela !== "Único" && /\d+\/\d+/.test(expense.parcela);
+      const isInstallment = expense.parcela && expense.parcela !== "Único" && INSTALLMENT_PATTERN.test(expense.parcela);
       
       let confirmMessage = "Deseja excluir este lançamento?";
       if (isInstallment) {
-        const match = expense.parcela.match(/(\d+)\/(\d+)/);
+        const match = expense.parcela.match(INSTALLMENT_PATTERN);
         const totalInstallments = match ? match[2] : "X";
         confirmMessage = `⚠️ ATENÇÃO: Este é um lançamento PARCELADO (${expense.parcela}).\n\nAo confirmar, TODAS as ${totalInstallments} parcelas serão excluídas do histórico.\n\nEsta ação NÃO pode ser desfeita.\n\nDeseja continuar?`;
       }
@@ -442,7 +445,7 @@ export default function Lancamentos({
       // Check if any selected expense is an installment
       const selectedExpenses = filteredExpenses.filter((ex) => selectedIds.has(ex.id));
       const hasInstallments = selectedExpenses.some((ex) => 
-        ex.parcela && ex.parcela !== "Único" && /\d+\/\d+/.test(ex.parcela)
+        ex.parcela && ex.parcela !== "Único" && INSTALLMENT_PATTERN.test(ex.parcela)
       );
       
       let confirmMessage = `Excluir ${count} lançamento(s)?`;
