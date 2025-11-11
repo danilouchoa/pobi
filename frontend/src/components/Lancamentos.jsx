@@ -210,7 +210,6 @@ export default function Lancamentos({
             parcela: `${i + 1}/${installments}`,
             debtorId: form.debtorId || null,
             amount: installmentAmount,
-            installments,
             recurring: form.expenseType === "recurring",
             recurrenceType: form.expenseType === "recurring" ? form.recurrenceType : undefined,
             fixed: form.expenseType === "fixed",
