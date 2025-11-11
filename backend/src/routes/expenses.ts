@@ -33,9 +33,10 @@ import {
   updateExpenseSchema,
   queryExpenseSchema,
   idParamSchema,
+  MAX_BATCH_SIZE,
 } from '../schemas/expense.schema';
 
-// Timeout para transações de batch (suporta até ~200 parcelas)
+// Timeout para transações de batch (suporta até MAX_BATCH_SIZE parcelas)
 const BATCH_TRANSACTION_TIMEOUT_MS = 30000; // 30 segundos
 
 interface AuthenticatedRequest extends Request {
