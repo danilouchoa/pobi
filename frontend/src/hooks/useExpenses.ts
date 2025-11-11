@@ -33,9 +33,6 @@ type OptimisticContext = {
 
 type CreateExpenseVariables = {
   payload: ExpensePayload;
-  options?: {
-    skipInvalidate?: boolean;
-  };
 };
 
 type CreateExpenseBatchVariables = {
@@ -155,10 +152,8 @@ export function useExpenses(month: string, options: Options = {}) {
       return { previous };
     },
     onError: (_err, _vars, ctx) => rollback(ctx),
-    onSettled: (_data, _error, variables) => {
-      if (!variables?.options?.skipInvalidate) {
-        invalidateAll();
-      }
+    onSettled: () => {
+      invalidateAll();
     },
   });
 
@@ -287,8 +282,8 @@ export function useExpenses(month: string, options: Options = {}) {
     recurringQuery,
     sharedQuery,
     pagination,
-    createExpense: (payload: ExpensePayload, options?: CreateExpenseVariables["options"]) =>
-      createMutation.mutateAsync({ payload, options }),
+    createExpense: (payload: ExpensePayload) =>
+      createMutation.mutateAsync({ payload }),
     createExpenseBatch: (payloads: ExpensePayload[]) =>
       createBatchMutation.mutateAsync({ payloads }),
     updateExpense: (id: string, payload: ExpensePayload) =>
