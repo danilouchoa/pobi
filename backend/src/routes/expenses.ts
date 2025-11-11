@@ -1,5 +1,5 @@
 import { Router, Request } from 'express';
-import { PrismaClient, Origin, Prisma } from '@prisma/client';
+import { PrismaClient, Origin, Prisma, Expense } from '@prisma/client';
 import { addMonths, startOfMonth, format } from 'date-fns';
 import {
   addByRecurrence,
@@ -443,7 +443,7 @@ export default function expensesRoutes(prisma: PrismaClient) {
       const originCache = new Map<string, Origin | null>();
 
       const expenses = await prisma.$transaction(async (tx) => {
-        const created = [] as any[];
+        const created: Expense[] = [];
         for (const data of createData) {
           const billingMonth = await computeBillingMonth(tx, data.originId ?? null, data.date, originCache);
           const expense = await tx.expense.create({ data: { ...data, billingMonth } });
