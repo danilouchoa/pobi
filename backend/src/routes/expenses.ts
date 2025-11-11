@@ -17,7 +17,7 @@ import { publishRecurringJob, publishBulkUpdateJob } from '../lib/rabbit';
 import { applyBulkUnifiedUpdate, applyBulkDelete } from '../services/bulkUpdateService';
 import { getOrSetCache } from '../lib/redisCache';
 import { deriveBillingMonth, BillingRolloverPolicy } from '../lib/billing';
-import { deleteExpenseCascade } from '../services/installmentDeletionService';
+import { deleteExpenseCascade, deleteExpenseById } from '../services/installmentDeletionService';
 import {
   ExpenseViewMode,
   buildExpenseCacheKey,
@@ -417,7 +417,7 @@ export default function expensesRoutes(prisma: PrismaClient) {
       const expenses: Expense[] = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         const created: Expense[] = [];
         for (const data of createData) {
-          const billingMonth = await computeBillingMonth(prisma, data.originId ?? null, data.date, originCache);
+          const billingMonth = await computeBillingMonth(tx, data.originId ?? null, data.date, originCache);
           const expense = await tx.expense.create({ data: { ...data, billingMonth } });
           created.push(expense);
         }
@@ -477,44 +477,50 @@ export default function expensesRoutes(prisma: PrismaClient) {
         return res.status(400).json({ message: 'groupId é obrigatório.' });
       }
 
-      const expensesToDelete = await prisma.expense.findMany({
+      const pivotExpense = await prisma.expense.findFirst({
         where: {
           userId,
           installmentGroupId: groupId,
         },
-      });
-
-      if (!expensesToDelete.length) {
-        return res.status(204).send();
-      }
-
-      await prisma.expense.deleteMany({
-        where: {
-          userId,
-          installmentGroupId: groupId,
+        select: {
+          id: true,
+          description: true,
+          parcela: true,
+          amount: true,
+          originId: true,
+          debtorId: true,
+          installments: true,
+          date: true,
+          billingMonth: true,
+          fingerprint: true,
+          installmentGroupId: true,
         },
       });
 
-      const invalidationMap = new Map<string, { month: string; mode: 'calendar' | 'billing' }>();
-  expensesToDelete.forEach((expense: Expense) => {
-        const entries = buildInvalidationEntries(
-          monthKeyFromInput(expense.date),
-          expense.billingMonth ?? null
-        );
-        entries.forEach((entry) => {
-          if (!entry.month) return;
-          const key = `${entry.mode}:${entry.month}`;
-          if (!invalidationMap.has(key)) {
-            invalidationMap.set(key, { month: entry.month, mode: entry.mode });
-          }
-        });
-      });
-
-      if (invalidationMap.size) {
-        await invalidateExpenseCache(userId, Array.from(invalidationMap.values()));
+      if (!pivotExpense) {
+        return res.status(404).json({ message: 'Nenhuma parcela encontrada para o grupo informado.' });
       }
 
-      return res.status(204).send();
+      const cascadeResult = await prisma.$transaction((tx) =>
+        deleteExpenseCascade(tx, userId, pivotExpense as any)
+      );
+
+      if (!cascadeResult.deleted.length) {
+        return res.status(404).json({ message: 'Nenhuma parcela encontrada para o grupo informado.' });
+      }
+
+      const invalidations = collectInvalidationTargets(
+        cascadeResult.deleted.map((expense) => ({
+          date: expense.date,
+          billingMonth: expense.billingMonth,
+        }))
+      );
+
+      if (invalidations.length) {
+        await invalidateExpenseCache(userId, invalidations);
+      }
+
+      return res.json({ message: 'Todas as parcelas foram removidas com sucesso' });
     } catch (error) {
       console.error('Erro ao excluir grupo de despesas:', error);
       return res.status(500).json({ message: 'Erro interno ao excluir grupo de despesas.' });
@@ -533,8 +539,15 @@ export default function expensesRoutes(prisma: PrismaClient) {
       // Se for parcela única, installmentGroupId = null
       // Se for parcela (ex: "1/12"), gera um groupId se não vier do batch
       let dataToCreate = { ...payload };
-      if (payload.parcela && typeof payload.parcela === 'string' && payload.parcela.match(/\d+\s*\/\s*\d+/)) {
-        (dataToCreate as any).installmentGroupId = crypto.randomBytes(12).toString('hex');
+      if (payload.parcela && typeof payload.parcela === 'string') {
+        const normalizedParcela = payload.parcela.replace(/\s+/g, '');
+        const isInstallment = INSTALLMENT_FORMAT_REGEX.test(normalizedParcela);
+        if (isInstallment) {
+          dataToCreate = {
+            ...dataToCreate,
+            installmentGroupId: crypto.randomBytes(12).toString('hex'),
+          };
+        }
       }
       const billingMonth = await computeBillingMonth(prisma, payload.originId ?? null, payload.date);
       const expense = await prisma.expense.create({ data: { ...dataToCreate, billingMonth } });
@@ -636,34 +649,19 @@ export default function expensesRoutes(prisma: PrismaClient) {
 
       const { id } = req.params;
 
-      const existing = await prisma.expense.findUnique({ where: { id } });
+      const deletedExpense = await deleteExpenseById(prisma, userId, id);
 
-      if (!existing || existing.userId !== userId) {
+      if (!deletedExpense) {
         return res.status(404).json({ message: 'Despesa não encontrada.' });
       }
 
-      const cascadeResult = await deleteExpenseCascade(prisma, userId, existing as any);
+      const invalidations = collectInvalidationTargets([deletedExpense]);
 
-      const invalidationMap = new Map<string, { month: string; mode: 'calendar' | 'billing' }>();
-      cascadeResult.deleted.forEach((expense) => {
-        const entries = buildInvalidationEntries(
-          monthKeyFromInput(expense.date),
-          expense.billingMonth ?? null
-        );
-        entries.forEach((entry) => {
-          if (!entry.month) return;
-          const key = `${entry.mode}:${entry.month}`;
-          if (!invalidationMap.has(key)) {
-            invalidationMap.set(key, { month: entry.month, mode: entry.mode });
-          }
-        });
-      });
-
-      if (invalidationMap.size) {
-        await invalidateExpenseCache(userId, Array.from(invalidationMap.values()));
+      if (invalidations.length) {
+        await invalidateExpenseCache(userId, invalidations);
       }
 
-      res.status(204).send();
+      return res.status(204).send();
     } catch (error) {
       console.error('Erro ao excluir despesa:', error);
       res.status(500).json({ message: 'Erro interno ao excluir despesa.' });
@@ -826,3 +824,24 @@ export default function expensesRoutes(prisma: PrismaClient) {
 
   return router;
 }
+const INSTALLMENT_FORMAT_REGEX = /^\d{1,3}\/\d{1,3}$/;
+
+const collectInvalidationTargets = (
+  expenses: Array<{ date: Date; billingMonth: string | null }>
+) => {
+  const invalidationMap = new Map<string, { month: string; mode: 'calendar' | 'billing' }>();
+  expenses.forEach((expense) => {
+    const entries = buildInvalidationEntries(
+      monthKeyFromInput(expense.date),
+      expense.billingMonth ?? null
+    );
+    entries.forEach((entry) => {
+      if (!entry.month) return;
+      const key = `${entry.mode}:${entry.month}`;
+      if (!invalidationMap.has(key)) {
+        invalidationMap.set(key, { month: entry.month, mode: entry.mode });
+      }
+    });
+  });
+  return Array.from(invalidationMap.values());
+};
