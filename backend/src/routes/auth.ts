@@ -8,9 +8,19 @@ import { publishRecurringJob } from '../lib/rabbit';
 import { validate } from '../middlewares/validation';
 import { registerSchema, loginSchema, googleLoginSchema } from '../schemas/auth.schema';
 // import { authLimiter, authSensitiveLimiter } from '../middlewares/rateLimiter';
+import rateLimit from 'express-rate-limit';
 
 const SALT_ROUNDS = 10;
 const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Limitar POST /auth/google para 5 requisições por minuto por IP
+const googleAuthLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minuto
+  max: 5, // 5 requisições por janela por IP
+  handler: (req, res) => {
+    res.status(429).json({ error: 'TOO_MANY_REQUESTS', message: 'Muitas tentativas. Tente novamente mais tarde.' });
+  }
+});
 
 /**
  * Recupera o segredo JWT do ambiente
@@ -369,7 +379,7 @@ export default function authRoutes(prisma: PrismaClient) {
   // ==========================================================================
   // POST /api/auth/google - Login via Google OAuth2
   // ==========================================================================
-  router.post('/google', validate({ body: googleLoginSchema }), async (req: Request, res: Response) => {
+  router.post('/google', googleAuthLimiter, validate({ body: googleLoginSchema }), async (req: Request, res: Response) => {
     try {
       const { credential } = googleLoginSchema.parse(req.body);
 
