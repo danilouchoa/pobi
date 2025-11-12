@@ -1,4 +1,5 @@
 import { createContext, useEffect, useMemo, useState, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import api, { registerUnauthorizedHandler, setAuthToken } from "../services/api";
 
 /**
@@ -42,6 +43,9 @@ export function AuthProvider({ children }) {
     setAuthToken(token);
   }, [token]);
 
+  // React Query client - usado para limpar/invalidar cache entre sessões
+  const queryClient = useQueryClient();
+
   // Cachear user no localStorage (apenas para UX, não é sensível)
   useEffect(() => {
     if (user) {
@@ -55,34 +59,38 @@ export function AuthProvider({ children }) {
    * Tenta renovar access token usando refresh token (cookie httpOnly)
    * Chamado automaticamente quando access token expira (401)
    */
-  const refreshAccessToken = useCallback(async () => {
-    if (isRefreshing) {
-      // Evita múltiplas chamadas simultâneas
-      return null;
-    }
-
-    setIsRefreshing(true);
-    try {
-      const { data } = await api.post("/api/auth/refresh");
-      setToken(data.accessToken);
-      return data.accessToken;
-    } catch {
-      console.warn("[Auth] Refresh token expired or invalid, redirecting to login");
-      setToken(null);
-      setUser(null);
-      setAuthError("Sessão expirada. Faça login novamente.");
-      return null;
-    } finally {
-      setIsRefreshing(false);
-    }
-  }, [isRefreshing]);
+  const refreshAccessToken = useCallback(
+    async () => {
+      if (isRefreshing) return null;
+      setIsRefreshing(true);
+      try {
+        const { data } = await api.post("/api/auth/refresh");
+        setToken(data.accessToken);
+        return data.accessToken;
+      } catch (e) {
+        console.warn("[Auth] Refresh token expired or invalid, redirecting to login", e);
+        setToken(null);
+        setUser(null);
+        try {
+          await queryClient.clear();
+        } catch (err) {
+          console.warn("[Auth] Failed to clear query cache:", err);
+        }
+        setAuthError("Sessão expirada. Faça login novamente.");
+        return null;
+      } finally {
+        setIsRefreshing(false);
+      }
+    },
+    [isRefreshing, queryClient]
+  );
 
   // Registrar handler para 401 (access token expirado)
   useEffect(() => {
     registerUnauthorizedHandler(async () => {
       console.log("[Auth] Access token expired, attempting refresh...");
       const newToken = await refreshAccessToken();
-      
+
       if (!newToken) {
         // Refresh falhou → redirecionar para login
         setAuthError("Sessão expirada. Faça login novamente.");
@@ -116,11 +124,18 @@ export function AuthProvider({ children }) {
    * Login com email e senha
    * Backend retorna accessToken no corpo + define refreshToken em cookie
    */
-  const login = async ({ email, password }) => {
+  const login = useCallback(async ({ email, password }) => {
     setLoading(true);
     setAuthError(null);
     try {
       const { data } = await api.post("/api/auth/login", { email, password });
+
+      // Limpar cache do QueryClient antes de configurar nova sessão
+      try {
+        await queryClient.clear();
+      } catch (e) {
+        console.warn("[Auth] Failed to clear query cache before login:", e);
+      }
       
       // Backend retorna { user, accessToken }
       // refreshToken vem como cookie httpOnly (não acessível aqui)
@@ -135,14 +150,42 @@ export function AuthProvider({ children }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [queryClient]);
+
+  /**
+   * Login via Google credential (ID token)
+   * Backend expects { credential }
+   */
+  const loginWithGoogle = useCallback(async ({ credential }) => {
+    setLoading(true);
+    setAuthError(null);
+    try {
+      const { data } = await api.post('/api/auth/google', { credential });
+
+      try {
+        await queryClient.clear();
+      } catch (e) {
+        console.warn('[Auth] Failed to clear query cache before google login:', e);
+      }
+
+      setToken(data.accessToken);
+      setUser(data.user);
+      return data;
+    } catch (error) {
+      const message = error.response?.data?.message ?? 'Não foi possível autenticar com Google.';
+      setAuthError(message);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  }, [queryClient]);
 
   /**
    * Logout seguro
    * 1. Chama backend para limpar cookie httpOnly
    * 2. Limpa state local
    */
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
       // Chamar backend para limpar cookie
       await api.post("/api/auth/logout");
@@ -153,21 +196,28 @@ export function AuthProvider({ children }) {
       setToken(null);
       setUser(null);
       setAuthError(null);
+      // Limpar cache do QueryClient para evitar que dados da sessão anterior persistam
+      try {
+        await queryClient.clear();
+      } catch (e) {
+        console.warn("[Auth] Failed to clear query cache on logout:", e);
+      }
     }
-  };
+  }, [queryClient]);
 
   const value = useMemo(
     () => ({
       token,
       user,
       login,
+      loginWithGoogle,
       logout,
       authError,
       loading,
       isAuthenticated: Boolean(token),
-      refreshAccessToken, // Expor para uso manual se necessário
+      refreshAccessToken,
     }),
-    [token, user, authError, loading, refreshAccessToken]
+    [token, user, authError, loading, refreshAccessToken, login, loginWithGoogle, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

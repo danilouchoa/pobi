@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 
 type JsonParseError = SyntaxError & { status?: number; statusCode?: number; type?: string };
+type CsrfError = Error & { code?: string };
 
 export const invalidJsonHandler = (
   err: unknown,
@@ -26,6 +27,17 @@ export const globalErrorHandler = (
   res: Response,
   _next: NextFunction,
 ) => {
+  const csrfError = err as CsrfError;
+  if (csrfError?.code === 'EBADCSRFTOKEN') {
+    console.warn('[SECURITY] CSRF token mismatch');
+    return res.status(403).json({ error: 'INVALID_CSRF_TOKEN', message: 'Token CSRF inválido ou ausente.' });
+  }
+
+  if (err instanceof Error && err.message === 'Origin not allowed by CORS') {
+    console.warn('[SECURITY] CORS blocked request');
+    return res.status(403).json({ error: 'CORS_NOT_ALLOWED', message: 'Origem não autorizada.' });
+  }
+
   if (err instanceof PrismaClientKnownRequestError) {
     if (err.code === 'P2002') {
       return res.status(409).json({ error: 'Registro duplicado.' });
