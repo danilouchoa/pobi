@@ -9,10 +9,11 @@ import {
   Button,
   Alert,
 } from "@mui/material";
+import { GoogleLogin } from '@react-oauth/google';
 import { useAuth } from "../context/useAuth";
 
 export default function Login() {
-  const { login, authError, loading } = useAuth();
+  const { login, loginWithGoogle, authError, loading } = useAuth();
   const [form, setForm] = useState({
     email: "danilo.uchoa@finance.app",
     password: "finance123",
@@ -26,6 +27,16 @@ export default function Login() {
       await login(form);
     } catch (error) {
       const message = error.response?.data?.message ?? "Não foi possível fazer login.";
+      setFeedback(message);
+    }
+  };
+
+  const handleGoogleSuccess = async (res) => {
+    setFeedback(null);
+    try {
+      await loginWithGoogle({ credential: res.credential });
+    } catch (error) {
+      const message = error.response?.data?.message ?? 'Não foi possível autenticar com Google.';
       setFeedback(message);
     }
   };
@@ -74,6 +85,10 @@ export default function Login() {
             <Button type="submit" variant="contained" size="large" disabled={loading}>
               {loading ? "Entrando..." : "Entrar"}
             </Button>
+            <GoogleLogin
+              onSuccess={handleGoogleSuccess}
+              onError={() => setFeedback('Erro ao autenticar com Google')}
+            />
           </Stack>
         </Paper>
       </Container>

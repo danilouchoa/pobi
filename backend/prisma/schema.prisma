@@ -23,11 +23,19 @@ enum BillingRolloverPolicy {
   PREVIOUS
 }
 
+enum Provider {
+  LOCAL
+  GOOGLE
+}
+
 model User {
   id            String          @id @default(auto()) @map("_id") @db.ObjectId
   email         String          @unique
   name          String?
-  passwordHash  String
+  passwordHash  String?
+  googleId      String?         @unique
+  provider      Provider        @default(LOCAL)
+  avatar        String?
   createdAt     DateTime        @default(now())
   
   // Relações (O usuário é "dono" de tudo)
@@ -36,6 +44,8 @@ model User {
   expenses      Expense[]
   salaryHistory SalaryHistory[]
   jobs          Job[]
+  
+  @@index([provider])
 }
 
 // v5.2 state.origins

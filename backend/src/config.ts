@@ -21,6 +21,10 @@ const envSchema = z.object({
   // Sanitizado: nunca incluir credenciais reais em default
   RABBIT_URL: z.string().min(1).default('amqp://localhost'),
   CORS_ORIGINS: z.string().optional(),
+  FRONTEND_ORIGIN: z.string().optional(),
+  COOKIE_DOMAIN: z.string().optional(),
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
   /**
    * Feature Flag: Validação de Entrada (Milestone #11)
    * 
@@ -68,6 +72,10 @@ export const config = {
   rabbitUrl: parsedEnv.data.RABBIT_URL,
   corsOrigins,
   validationEnabled: parsedEnv.data.VALIDATION_ENABLED,
+  frontendOrigin: parsedEnv.data.FRONTEND_ORIGIN,
+  cookieDomain: parsedEnv.data.COOKIE_DOMAIN,
+  googleClientId: parsedEnv.data.GOOGLE_CLIENT_ID,
+  googleClientSecret: parsedEnv.data.GOOGLE_CLIENT_SECRET,
 };
 
 export const isCorsAllowed = (origin?: string): boolean => {

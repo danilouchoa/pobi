@@ -119,6 +119,21 @@ E a tela de lançamentos possui um botão “Excluir selecionados”.
 - Milestone #15 - Service/Repository Layer
 - Milestone #18 - Autenticação Avançada (MFA + Google)
 
+## 🔐 Google OAuth2 (Novas variáveis de ambiente)
+
+Para habilitar Login com Google configure as seguintes variáveis:
+
+- No backend (`/backend/.env`):
+  - `GOOGLE_CLIENT_ID` - Client ID obtido no Google Cloud Console
+  - `GOOGLE_CLIENT_SECRET` - Client Secret (usado para server-side flows)
+  - `FRONTEND_ORIGIN` - Origem do frontend (ex: `http://localhost:5173`)
+  - `COOKIE_DOMAIN` - (opcional) domínio do cookie de refresh (ex: `.uchoa.app`)
+
+- No frontend (`/frontend/.env`):
+  - `VITE_GOOGLE_CLIENT_ID` - Client ID (usado pelo SDK do navegador)
+
+Durante deploy canário, habilite as variáveis no ambiente de destino. O backend valida (Zod) as variáveis em runtime para evitar builds quebrados.
+
 #
 
 # Milestone #14 - Dead Letter Queue (DLQ)

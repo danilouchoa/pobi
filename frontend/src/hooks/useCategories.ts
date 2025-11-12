@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useEffect } from "react";
 import { readLS, saveLS } from "../utils/helpers";
 
 /**
@@ -25,43 +25,92 @@ export const DEFAULT_CATEGORIES = [
 
 const sanitize = (value: string) => value.trim().replace(/\s+/g, " ");
 
-const buildInitialList = () => {
-  if (typeof window === "undefined") return DEFAULT_CATEGORIES;
-  const stored = readLS(STORAGE_KEY, []) as unknown;
-  const extras =
-    Array.isArray(stored) && stored.length
-      ? stored
-          .map((item) => (typeof item === "string" ? sanitize(item) : null))
-          .filter(Boolean)
-      : [];
-  // Remove duplicidades mantendo a ordem de inserção (padrões + customizados).
-  return Array.from(
-    new Map(
-      [...DEFAULT_CATEGORIES, ...extras].map((entry) => [
-        entry.toLowerCase(),
-        entry,
-      ])
-    ).values()
-  );
+const readCustomList = (key: string): string[] => {
+  const stored = readLS(key, []) as unknown;
+  if (!Array.isArray(stored) || !stored.length) return [];
+  return stored
+    .map((item) => (typeof item === "string" ? sanitize(item) : null))
+    .filter(Boolean) as string[];
 };
 
-export function useCategories() {
-  const [categories, setCategories] = useState<string[]>(buildInitialList);
-
-  const persistCustom = useCallback((list: string[]) => {
-    // Persistimos somente o que não faz parte do catálogo padrão para manter o storage enxuto.
-    const custom = list.filter(
-      (item) =>
-        !DEFAULT_CATEGORIES.some(
-          (defaultItem) =>
-            defaultItem.toLocaleLowerCase("pt-BR") ===
-            item.toLocaleLowerCase("pt-BR")
-        )
+export function useCategories(userId?: string) {
+  const buildInitialListFor = (uid?: string) => {
+    const key = uid ? `${STORAGE_KEY}:${uid}` : STORAGE_KEY;
+    if (typeof window === "undefined") return DEFAULT_CATEGORIES;
+    const extras = readCustomList(key);
+    // Remove duplicidades mantendo a ordem de inserção (padrões + customizados).
+    return Array.from(
+      new Map(
+        [...DEFAULT_CATEGORIES, ...extras].map((entry) => [
+          entry.toLowerCase(),
+          entry,
+        ])
+      ).values()
     );
-    if (typeof window !== "undefined") {
-      saveLS(STORAGE_KEY, custom);
+  };
+
+  const [categories, setCategories] = useState<string[]>(() =>
+    buildInitialListFor(userId)
+  );
+
+  const migrateLegacyCategories = useCallback(
+    (uid: string) => {
+      if (typeof window === "undefined") return false;
+      const legacy = readCustomList(STORAGE_KEY);
+      if (!legacy.length) return false;
+
+      const key = `${STORAGE_KEY}:${uid}`;
+      const current = readCustomList(key);
+      const merged = Array.from(
+        new Map(
+          [...current, ...legacy].map((entry) => [
+            entry.toLowerCase(),
+            entry,
+          ])
+        ).values()
+      );
+
+      saveLS(key, merged);
+      try {
+        window.localStorage.removeItem(STORAGE_KEY);
+      } catch (err) {
+        // ignore removal failures (quota, private mode, etc.)
+      }
+      return true;
+    },
+    []
+  );
+
+  // Quando o userId muda (login/logout), recarregar categorias do storage correspondente
+  useEffect(() => {
+    if (userId) {
+      const migrated = migrateLegacyCategories(userId);
+      if (migrated) {
+        setCategories(buildInitialListFor(userId));
+        return;
+      }
     }
-  }, []);
+    setCategories(buildInitialListFor(userId));
+  }, [userId, migrateLegacyCategories]);
+
+  const persistCustom = useCallback(
+    (list: string[]) => {
+      // Persistimos somente o que não faz parte do catálogo padrão para manter o storage enxuto.
+      const custom = list.filter(
+        (item) =>
+          !DEFAULT_CATEGORIES.some(
+            (defaultItem) =>
+              defaultItem.toLocaleLowerCase("pt-BR") ===
+              item.toLocaleLowerCase("pt-BR")
+          )
+      );
+      const key = userId ? `${STORAGE_KEY}:${userId}` : STORAGE_KEY;
+      if (typeof window !== "undefined") {
+        saveLS(key, custom);
+      }
+    },
+    [userId]
+  );
 
   const addCategory = useCallback(
     (name: string) => {
