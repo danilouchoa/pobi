@@ -220,6 +220,8 @@ export async function applyBulkDelete(
       installments: true,
       date: true,
       billingMonth: true,
+      fingerprint: true,
+      installmentGroupId: true,
     },
   });
   if (!existing.length) return { deletedCount: 0 };
