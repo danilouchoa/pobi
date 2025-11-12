@@ -2,6 +2,7 @@
 
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '../context/AuthProvider';
 import { useAuth } from '../context/useAuth';
 import React from 'react';
@@ -59,22 +60,22 @@ describe('AuthProvider', () => {
 	beforeEach(() => {
 		localStorage.clear();
 	});
-	it('deve iniciar deslogado', () => {
+	const renderWithClient = () =>
 		render(
-			<AuthProvider>
-				<TestComponent />
-			</AuthProvider>
+			<QueryClientProvider client={new QueryClient()}>
+				<AuthProvider>
+					<TestComponent />
+				</AuthProvider>
+			</QueryClientProvider>
 		);
+	it('deve iniciar deslogado', () => {
+		renderWithClient();
 		expect(screen.getByTestId('auth').textContent).toBe('no');
 		expect(screen.getByTestId('user').textContent).toBe('none');
 	});
 
 		it('deve logar e deslogar', async () => {
-			render(
-				<AuthProvider>
-					<TestComponent />
-				</AuthProvider>
-			);
+		renderWithClient();
 			await act(async () => {
 				fireEvent.click(screen.getByText('login'));
 			});
@@ -101,11 +102,7 @@ describe('AuthProvider', () => {
 					}
 					return Promise.resolve({ data: {} });
 				});
-				render(
-					<AuthProvider>
-						<TestComponent />
-					</AuthProvider>
-				);
+				renderWithClient();
 				await act(async () => {
 					fireEvent.click(screen.getByText('login'));
 				});
@@ -127,11 +124,7 @@ describe('AuthProvider', () => {
 				});
 				// Força user em cache para disparar refresh
 				localStorage.setItem('finance_user', JSON.stringify({ email: 'a@b.com' }));
-				render(
-					<AuthProvider>
-						<TestComponent />
-					</AuthProvider>
-				);
+				renderWithClient();
 				// Aguarda erro de sessão expirada
 				await waitFor(() => screen.getByTestId('error').textContent !== '');
 				expect(screen.getByTestId('error').textContent).toBe('Sessão expirada. Faça login novamente.');

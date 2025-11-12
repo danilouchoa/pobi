@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { OAuth2Client } from 'google-auth-library';
+import { config } from '../config';
 import { publishRecurringJob } from '../lib/rabbit';
 import { validate } from '../middlewares/validation';
 import { registerSchema, loginSchema } from '../schemas/auth.schema';
@@ -59,6 +61,9 @@ const sanitizeUser = (user: { id: string; email: string; name: string | null }) 
 
 export default function authRoutes(prisma: PrismaClient) {
   const router = Router();
+
+  // Google OAuth2 client (used to validate ID tokens sent by frontend)
+  const googleClient = new OAuth2Client(config.googleClientId);
 
   // ==========================================================================
   // POST /api/auth/register - Registro de novo usuário
@@ -342,6 +347,103 @@ export default function authRoutes(prisma: PrismaClient) {
         error: 'INTERNAL_ERROR',
         message: 'Erro interno no servidor.' 
       });
+    }
+  });
+
+  // ==========================================================================
+  // POST /api/auth/google - Login via Google OAuth2
+  // ==========================================================================
+  router.post('/google', authSensitiveLimiter, async (req: Request, res: Response) => {
+    try {
+      const { credential } = req.body as { credential?: string };
+
+      if (!credential) {
+        return res.status(400).json({ error: 'MISSING_CREDENTIAL', message: 'Credential ausente.' });
+      }
+
+      let ticket;
+      try {
+        ticket = await googleClient.verifyIdToken({ idToken: credential, audience: config.googleClientId });
+      } catch (verifyError) {
+        console.warn('[AUTH] Google token verification failed');
+        return res.status(401).json({ error: 'INVALID_GOOGLE_TOKEN', message: 'Token inválido.' });
+      }
+
+      const payload = ticket.getPayload();
+
+      if (!payload) {
+        return res.status(401).json({ error: 'INVALID_GOOGLE_TOKEN', message: 'Token inválido.' });
+      }
+
+      const email = payload.email;
+      const emailVerified = payload.email_verified;
+      const googleId = payload.sub;
+      const name = payload.name ?? undefined;
+      const avatar = payload.picture ?? undefined;
+
+      if (!email || !googleId) {
+        return res.status(400).json({ error: 'INVALID_GOOGLE_PAYLOAD', message: 'Payload incompleto.' });
+      }
+
+      if (!emailVerified) {
+        return res.status(400).json({ error: 'EMAIL_NOT_VERIFIED', message: 'Email não verificado pelo provedor.' });
+      }
+
+      // Buscar usuário por googleId primeiro
+      let user = await prisma.user.findUnique({ where: { googleId } as any });
+
+      // Se não encontrou por googleId, tentar por email e vincular
+      if (!user) {
+        const byEmail = await prisma.user.findUnique({ where: { email } as any });
+        if (byEmail) {
+          // Vincular conta existente
+          user = await prisma.user.update({
+            where: { id: byEmail.id },
+            data: { googleId, provider: 'GOOGLE', avatar },
+          } as any);
+        }
+      }
+
+      // Se ainda não existe, criar usuário novo
+      if (!user) {
+        user = await prisma.user.create({
+          data: {
+            email,
+            name,
+            googleId,
+            provider: 'GOOGLE',
+            avatar,
+            // passwordHash deixado vazio para contas OAuth (campo opcional no schema)
+          },
+        } as any);
+      }
+
+      // Gerar tokens
+      const accessToken = generateAccessToken(user.id);
+      const refreshToken = generateRefreshToken(user.id);
+
+      // Definir cookie com opções de segurança
+      const cookieOptions: any = {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dias
+        path: '/',
+      };
+
+      if (config.cookieDomain) {
+        cookieOptions.domain = config.cookieDomain;
+      }
+
+      res.cookie('refreshToken', refreshToken, cookieOptions);
+
+      // Log sem expor tokens
+      console.log(`[AUTH] Google login success for ${email}`);
+
+      return res.json({ user: sanitizeUser(user), accessToken });
+    } catch (error) {
+      console.error('[AUTH] Erro no login Google:', error);
+      return res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Erro interno no servidor.' });
     }
   });
 

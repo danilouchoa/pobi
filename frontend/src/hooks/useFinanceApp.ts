@@ -25,7 +25,7 @@ export const DEFAULT_SALARY_TEMPLATE = {
 };
 
 export function useFinanceApp() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [month, setMonthState] = useState(() =>
     readLS(MONTH_STORAGE_KEY, new Date().toISOString().slice(0, 7))
   );
@@ -42,7 +42,7 @@ export function useFinanceApp() {
   const catalogs = useCatalogs({ enabled: isEnabled });
   const salary = useSalary(month, { enabled: isEnabled });
   // Garante que categorias customizadas (persistidas localmente) estejam disponíveis globalmente.
-  const { categories, addCategory } = useCategories();
+  const { categories, addCategory } = useCategories((user as any)?.id);
 
   const state = useMemo(
     () => ({

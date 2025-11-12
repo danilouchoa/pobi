@@ -32,7 +32,10 @@ if (process.env.NODE_ENV !== 'production') {
     useDefaults: true,
     directives: {
       ...defaultDirectives,
-      "script-src": ["'self'", "'unsafe-eval'"],
+      "script-src": ["'self'", "'unsafe-eval'", 'https://accounts.google.com', 'https://*.gstatic.com'],
+      "img-src": ["'self'", 'https://*.gstatic.com', 'data:'],
+      "frame-src": ["'self'", 'https://accounts.google.com'],
+      "connect-src": ["'self'", 'https://accounts.google.com']
     },
   };
 }
