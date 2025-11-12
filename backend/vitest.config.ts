@@ -5,6 +5,12 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     setupFiles: ['./__tests__/setup.ts'],
+    env: {
+      FRONTEND_ORIGIN: 'http://localhost:5173',
+      GOOGLE_CLIENT_ID: 'test-google-client-id',
+      GOOGLE_CLIENT_SECRET: 'test-google-client-secret',
+      COOKIE_DOMAIN: 'localhost',
+    },
     testTimeout: 30000,
     hookTimeout: 30000,
     passWithNoTests: true,

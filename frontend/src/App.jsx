@@ -112,8 +112,12 @@ function App() {
             </Typography>
           </Box>
           <Stack direction="row" spacing={2} alignItems="center">
-            <Avatar sx={{ bgcolor: "primary.main" }}>
-              {getInitials(user?.name ?? user?.email)}
+            <Avatar
+              src={user?.avatar ?? undefined}
+              alt={user?.name ?? user?.email}
+              sx={{ bgcolor: user?.avatar ? "transparent" : "primary.main" }}
+            >
+              {!user?.avatar ? getInitials(user?.name ?? user?.email) : null}
             </Avatar>
             <Box>
               <Typography

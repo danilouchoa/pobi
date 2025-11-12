@@ -55,4 +55,28 @@ describe('POST /api/auth/login', () => {
     expect(res.body).toHaveProperty('error');
     expect(res.body.error).toBe('INVALID_CREDENTIALS');
   });
+
+  it('deve rejeitar login se usuario nao tem passwordHash', async () => {
+    // Mockar usuário existente sem passwordHash
+    const mockUser = {
+      id: 'user-456',
+      email: 'sem.senha@finance.app',
+      name: 'Sem Senha',
+      passwordHash: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    prisma.user.findUnique.mockResolvedValue(mockUser);
+
+    const { csrfToken, csrfCookie } = await getCsrfToken();
+    const res = await request(app)
+      .post('/api/auth/login')
+      .set('Cookie', csrfCookie)
+      .set('X-CSRF-Token', csrfToken)
+      .send({ email: 'sem.senha@finance.app', password: 'qualquer' });
+
+    expect(res.status).toBe(401);
+    expect(res.body).toHaveProperty('error');
+    expect(res.body.error).toBe('INVALID_CREDENTIALS');
+  });
 });

@@ -27,17 +27,19 @@ Workflows modulares garantem qualidade antes do merge:
 
 ## 🆕 O que mudou recentemente (2025-11-09)
 
+### Backend
+
+- feat(auth): `POST /api/auth/google` validando ID token via `google-auth-library`, vinculando contas existentes e persistindo avatar/provider. Cookies httpOnly respeitam `COOKIE_DOMAIN`, `SameSite=strict`, tempo de 7 dias e logs não expõem credenciais.
+- feat(security): CORS agora usa allowlist (`FRONTEND_ORIGIN` + `CORS_ORIGINS`) com `credentials=true`, Helmet ativado com CSP liberando apenas `accounts.google.com`/`*.gstatic.com` e rota `/api/csrf-token` restabelecida para trabalhar com `csurf`.
+
 ### Frontend
 
-- fix(Salário): validação de comprimento do campo CNAE (máx. 20) com `maxLength`, contador de caracteres e bloqueio no submit com toast amigável. PR: #15 (mergeado).
-- fix(Despesas): normalização do payload antes do POST/PATCH para compatibilidade total com validação do backend:
-  - `amount`/`sharedAmount` convertidos para string no formato `"0.00"`;
-  - `originId`/`debtorId` omitidos quando vazios (evita 400);
-  - `recurrenceType` `weekly` mapeado para `custom` (alinhado ao schema do backend).
-  - PR: #19 (aberto).
+- feat(login): app envolvido por `GoogleOAuthProvider`, botão do `@react-oauth/google` envia `credential` para o backend e `Login.jsx` dispara toasts para falhas locais/Google ao invés do alerta silencioso.
+- feat(UI): Avatar global exibe foto do Google quando disponível; hook `useToast` deixa de ser stub e usa `notistack` + `mapBackendError`.
 
 ### DevEx / Manutenção
 
+- chore(CI): workflows `ci-backend.yml` e `ci-frontend.yml` agora injetam `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `FRONTEND_ORIGIN` e `COOKIE_DOMAIN` a partir dos secrets já existentes para que a validação Zod rode no build/test.
 - chore(Dependabot): agendamento alterado para executar diariamente às **14:02 BRT** (`America/Sao_Paulo`). PR: #17 (mergeado).
 - Proteção de branch `main` mantida; todos os ajustes entram via PR com checks verdes.
 
@@ -126,13 +128,30 @@ Para habilitar Login com Google configure as seguintes variáveis:
 - No backend (`/backend/.env`):
   - `GOOGLE_CLIENT_ID` - Client ID obtido no Google Cloud Console
   - `GOOGLE_CLIENT_SECRET` - Client Secret (usado para server-side flows)
-  - `FRONTEND_ORIGIN` - Origem do frontend (ex: `http://localhost:5173`)
-  - `COOKIE_DOMAIN` - (opcional) domínio do cookie de refresh (ex: `.uchoa.app`)
+  - `FRONTEND_ORIGIN` - Origem do frontend (ex: `http://localhost:5173`) usada em CORS e Helmet
+  - `COOKIE_DOMAIN` - (opcional) domínio compartilhado para cookies httpOnly (`.uchoa.app` em produção)
 
 - No frontend (`/frontend/.env`):
   - `VITE_GOOGLE_CLIENT_ID` - Client ID (usado pelo SDK do navegador)
+  - `VITE_API_URL` - Endpoint do backend (`http://localhost:4000` em dev)
 
 Durante deploy canário, habilite as variáveis no ambiente de destino. O backend valida (Zod) as variáveis em runtime para evitar builds quebrados.
+
+### Fluxo end-to-end
+
+1. O `GoogleLogin` do frontend recebe `credential` (ID Token) e envia para `POST /api/auth/google`.
+2. O backend valida o token via `google-auth-library`, vincula o usuário existente (por `googleId` ou `email`) e retorna `{ accessToken, user }`.
+3. Um novo refresh token é emitido em cookie httpOnly (`SameSite=strict`, `secure` em produção, domínio configurável) por 7 dias.
+4. Helmet aplica CSP permitindo scripts/frames somente de `accounts.google.com` e assets de `*.gstatic.com`; CORS aceita apenas origens das envs.
+5. Para ambientes locais use `http://localhost:5173` e no cloud `https://finance.uchoa.app` respeitando `COOKIE_DOMAIN=.uchoa.app`.
+
+#### ⚠️ Estratégias de Migração e Rollback durante Deploy Canário
+
+- **Rollout Parcial:** exponha o login Google inicialmente para uma fração controlada dos usuários, mantendo o fluxo local como padrão para o restante.
+- **Fallback Seguro:** o login por e-mail/senha continua disponível como caminho alternativo mesmo durante o experimento.
+- **Monitoramento Contínuo:** acompanhe logs de autenticação, taxa de erro (4xx/5xx) e métricas de latência enquanto o canário estiver ativo.
+- **Rollback Rápido:** basta remover/invalidar `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET` ou implantar novamente a imagem anterior para desativar o fluxo Google.
+- **Checklist Pré-Expansão:** confirme que ambos os fluxos (Google e local) operam normalmente antes de ampliar o rollout para 100% dos usuários.
 
 #
 

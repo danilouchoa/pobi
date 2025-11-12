@@ -90,6 +90,14 @@ export const loginSchema = z.object({
 .strict();
 
 // ============================================================================
+// Schema de Login via Google OAuth2 (POST /api/auth/google)
+// ============================================================================
+
+export const googleLoginSchema = z.object({
+  credential: z.string().min(1, 'Credential é obrigatória'),
+}).strict();
+
+// ============================================================================
 // Tipos TypeScript Inferidos
 // ============================================================================
 

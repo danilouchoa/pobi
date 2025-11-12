@@ -32,6 +32,7 @@ model User {
   id            String          @id @default(auto()) @map("_id") @db.ObjectId
   email         String          @unique
   name          String?
+  /// Para usuários com provider LOCAL, passwordHash deve ser preenchido.
   passwordHash  String?
   googleId      String?         @unique
   provider      Provider        @default(LOCAL)
