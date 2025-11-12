@@ -14,6 +14,7 @@ export type Expense = {
   sharedWith?: string | null;
   sharedAmount?: number | null;
   billingMonth?: string | null;
+  installmentGroupId?: string | null;
 };
 
 export type ExpensePayload = {
