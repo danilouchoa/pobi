@@ -21,10 +21,25 @@ const envSchema = z.object({
   // Sanitizado: nunca incluir credenciais reais em default
   RABBIT_URL: z.string().min(1).default('amqp://localhost'),
   CORS_ORIGINS: z.string().optional(),
-  FRONTEND_ORIGIN: z.string().optional(),
-  COOKIE_DOMAIN: z.string().optional(),
-  GOOGLE_CLIENT_ID: z.string().optional(),
-  GOOGLE_CLIENT_SECRET: z.string().optional(),
+  FRONTEND_ORIGIN: z
+    .string({
+      required_error: 'FRONTEND_ORIGIN is required',
+    })
+    .url('FRONTEND_ORIGIN must be a valid URL'),
+  COOKIE_DOMAIN: z
+    .string()
+    .optional()
+    .transform((val) => val?.trim() || undefined),
+  GOOGLE_CLIENT_ID: z
+    .string({
+      required_error: 'GOOGLE_CLIENT_ID is required',
+    })
+    .min(1, 'GOOGLE_CLIENT_ID is required'),
+  GOOGLE_CLIENT_SECRET: z
+    .string({
+      required_error: 'GOOGLE_CLIENT_SECRET is required',
+    })
+    .min(1, 'GOOGLE_CLIENT_SECRET is required'),
   /**
    * Feature Flag: Validação de Entrada (Milestone #11)
    * 
@@ -58,11 +73,18 @@ if (!parsedEnv.success) {
   throw new Error('Invalid environment configuration.');
 }
 
-const corsOrigins =
+const rawCorsOrigins =
   parsedEnv.data.CORS_ORIGINS
     ?.split(',')
     .map((origin) => origin.trim())
     .filter(Boolean) ?? [];
+
+const derivedCorsOrigins = Array.from(
+  new Set([
+    ...rawCorsOrigins,
+    parsedEnv.data.FRONTEND_ORIGIN,
+  ].filter(Boolean)),
+);
 
 export const config = {
   nodeEnv: parsedEnv.data.NODE_ENV,
@@ -70,7 +92,7 @@ export const config = {
   databaseUrl: parsedEnv.data.DATABASE_URL,
   jwtSecret: parsedEnv.data.JWT_SECRET,
   rabbitUrl: parsedEnv.data.RABBIT_URL,
-  corsOrigins,
+  corsOrigins: derivedCorsOrigins,
   validationEnabled: parsedEnv.data.VALIDATION_ENABLED,
   frontendOrigin: parsedEnv.data.FRONTEND_ORIGIN,
   cookieDomain: parsedEnv.data.COOKIE_DOMAIN,
@@ -79,8 +101,8 @@ export const config = {
 };
 
 export const isCorsAllowed = (origin?: string): boolean => {
-  if (!origin || corsOrigins.length === 0 || corsOrigins.includes('*')) {
+  if (!origin || derivedCorsOrigins.length === 0 || derivedCorsOrigins.includes('*')) {
     return true;
   }
-  return corsOrigins.includes(origin);
+  return derivedCorsOrigins.includes(origin);
 };

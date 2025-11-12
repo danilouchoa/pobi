@@ -1,33 +1,46 @@
-import { renderHook, waitFor } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useToast } from '../hooks/useToast.ts';
+import { renderHook } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { vi, describe, it, expect, beforeEach } from "vitest";
+import { useToast } from "../hooks/useToast.ts";
 
-vi.mock('notistack', () => ({
-	useSnackbar: () => ({ enqueueSnackbar: vi.fn() })
+const enqueueSnackbar = vi.fn();
+
+vi.mock("notistack", () => ({
+  useSnackbar: () => ({ enqueueSnackbar }),
 }));
 
 describe('useToast', () => {
-	const wrapper = ({ children }: { children: React.ReactNode }) => (
-		<QueryClientProvider client={new QueryClient()}>{children}</QueryClientProvider>
-	);
+  const wrapper = ({ children }: { children: React.ReactNode }) => (
+    <QueryClientProvider client={new QueryClient()}>{children}</QueryClientProvider>
+  );
 
-	it('deve exibir toast de sucesso', () => {
-		const { result } = renderHook(() => useToast(), { wrapper });
-		expect(() => result.current.success('Sucesso!')).not.toThrow();
-	});
+  beforeEach(() => {
+    enqueueSnackbar.mockClear();
+  });
 
-	it('deve exibir toast de erro', () => {
-		const { result } = renderHook(() => useToast(), { wrapper });
-		expect(() => result.current.error('Erro!')).not.toThrow();
-	});
+  it("deve exibir toast de sucesso", () => {
+    const { result } = renderHook(() => useToast(), { wrapper });
+    result.current.success("Sucesso!");
+    expect(enqueueSnackbar).toHaveBeenCalledWith("Sucesso!", { variant: "success" });
+  });
 
-	it('deve exibir toast de info', () => {
-		const { result } = renderHook(() => useToast(), { wrapper });
-		expect(() => result.current.info('Info!')).not.toThrow();
-	});
+  it("deve exibir toast de erro com fallback", () => {
+    const { result } = renderHook(() => useToast(), { wrapper });
+    result.current.error();
+    expect(enqueueSnackbar).toHaveBeenCalledWith("Não foi possível completar a operação.", {
+      variant: "error",
+    });
+  });
 
-	it('deve exibir toast de warning', () => {
-		const { result } = renderHook(() => useToast(), { wrapper });
-		expect(() => result.current.warning('Atenção!')).not.toThrow();
-	});
+  it("deve exibir toast de info", () => {
+    const { result } = renderHook(() => useToast(), { wrapper });
+    result.current.info("Info!");
+    expect(enqueueSnackbar).toHaveBeenCalledWith("Info!", { variant: "info" });
+  });
+
+  it("deve exibir toast de warning", () => {
+    const { result } = renderHook(() => useToast(), { wrapper });
+    result.current.warning("Atenção!");
+    expect(enqueueSnackbar).toHaveBeenCalledWith("Atenção!", { variant: "warning" });
+  });
 });

@@ -11,9 +11,11 @@ import {
 } from "@mui/material";
 import { GoogleLogin } from '@react-oauth/google';
 import { useAuth } from "../context/useAuth";
+import { useToast } from "../hooks/useToast";
 
 export default function Login() {
   const { login, loginWithGoogle, authError, loading } = useAuth();
+  const toast = useToast();
   const [form, setForm] = useState({
     email: "danilo.uchoa@finance.app",
     password: "finance123",
@@ -27,17 +29,24 @@ export default function Login() {
       await login(form);
     } catch (error) {
       const message = error.response?.data?.message ?? "Não foi possível fazer login.";
-      setFeedback(message);
+      toast.error({ message });
     }
   };
 
   const handleGoogleSuccess = async (res) => {
     setFeedback(null);
+    const credential = res?.credential;
+    if (!credential) {
+      const message = "Credencial do Google não disponível.";
+      setFeedback(message);
+      toast.error({ message });
+      return;
+    }
     try {
-      await loginWithGoogle({ credential: res.credential });
+      await loginWithGoogle({ credential });
     } catch (error) {
       const message = error.response?.data?.message ?? 'Não foi possível autenticar com Google.';
-      setFeedback(message);
+      toast.error({ message });
     }
   };
 
@@ -87,7 +96,11 @@ export default function Login() {
             </Button>
             <GoogleLogin
               onSuccess={handleGoogleSuccess}
-              onError={() => setFeedback('Erro ao autenticar com Google')}
+              onError={() => {
+                const message = 'Erro ao autenticar com Google';
+                setFeedback(message);
+                toast.error({ message });
+              }}
             />
           </Stack>
         </Paper>

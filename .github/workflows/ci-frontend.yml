@@ -13,6 +13,8 @@ permissions:
 jobs:
   build-test-frontend:
     runs-on: ubuntu-latest
+    env:
+      VITE_GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID != '' && secrets.GOOGLE_CLIENT_ID || 'test-google-client-id' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
