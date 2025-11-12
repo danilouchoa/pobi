@@ -137,6 +137,13 @@ Para habilitar Login com Google configure as seguintes variáveis:
 
 Durante deploy canário, habilite as variáveis no ambiente de destino. O backend valida (Zod) as variáveis em runtime para evitar builds quebrados.
 
+> **⚠️ Estratégias de Migração e Rollback durante Deploy Canário**
+>
+> - **Rollout Parcial:** Durante o canário, alguns usuários podem ter acesso ao login via Google enquanto outros não. Garanta que o login tradicional (senha) continue disponível como fallback.
+> - **Feature Flag:** Considere usar uma feature flag para ativar/desativar o login Google apenas para um grupo de usuários ou ambientes.
+> - **Monitoramento:** Monitore erros de autenticação e feedback dos usuários durante o rollout.
+> - **Rollback:** Se detectar problemas, desabilite as variáveis de ambiente relacionadas ao Google OAuth2 ou desative a feature flag para reverter ao comportamento anterior.
+> - **Checklist:** Antes de expandir o rollout, valide que todos os fluxos de login (Google e tradicional) funcionam para todos os perfis de usuário.
 ### Fluxo end-to-end
 
 1. O `GoogleLogin` do frontend recebe `credential` (ID Token) e envia para `POST /api/auth/google`.
