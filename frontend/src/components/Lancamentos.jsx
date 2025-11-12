@@ -39,7 +39,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import Section from "./ui/Section";
 import ExpenseBulkModal from "./ExpenseBulkModal";
 import EmptyState from "./ui/EmptyState";
-import { useExpenses } from "../hooks/useExpenses";
+import { useExpenses, useDeleteExpenseGroup } from "../hooks/useExpenses";
+import DeleteExpenseModal from "./DeleteExpenseModal";
 import { useToast } from "../hooks/useToast";
 import { todayISO, parseNum, toBRL } from "../utils/helpers";
 import { compareMonths, formatMonthLabel } from "../utils/dateHelpers";
@@ -69,12 +70,13 @@ export default function Lancamentos({
     // Pagination
     const [page, setPage] = useState(1);
     const limit = 20;
-    const { expensesQuery: paginatedQuery, pagination, bulkUpdate, bulkDelete } = useExpenses(month, {
+  const { expensesQuery: paginatedQuery, pagination, bulkUpdate, bulkDelete } = useExpenses(month, {
       enabled: true,
       mode: "calendar",
       page,
       limit,
     });
+  const { mutateAsync: deleteExpenseGroup } = useDeleteExpenseGroup();
     const paginatedExpenses = useMemo(() => paginatedQuery.data?.data ?? [], [paginatedQuery.data]);
     const isPageLoading = paginatedQuery.isLoading;
     const isPageFetching = paginatedQuery.isFetching;
@@ -287,22 +289,46 @@ export default function Lancamentos({
         setSubmitting(false);
       }
     };
+    // Modal de exclusão de parcela/grupo
+  const [deleteModal, setDeleteModal] = useState(null); // { expenseId: string; groupId: string | null }
+
     const handleDeleteExpense = async (expense) => {
-      const isInstallment = expense.parcela && expense.parcela !== "Único" && INSTALLMENT_PATTERN.test(expense.parcela);
-      
-      let confirmMessage = "Deseja excluir este lançamento?";
-      if (isInstallment) {
-        const match = expense.parcela.match(INSTALLMENT_PATTERN);
-        const totalInstallments = match ? match[2] : "X";
-        confirmMessage = `⚠️ ATENÇÃO: Este é um lançamento PARCELADO (${expense.parcela}).\n\nAo confirmar, TODAS as ${totalInstallments} parcelas serão excluídas do histórico.\n\nEsta ação NÃO pode ser desfeita.\n\nDeseja continuar?`;
+      if (expense.installmentGroupId) {
+        setDeleteModal({ expenseId: expense.id, groupId: expense.installmentGroupId });
+        return;
       }
-      
-      if (!window.confirm(confirmMessage)) return;
+
+      if (window.confirm("Deseja excluir este lançamento?")) {
+        try {
+          await deleteExpense(expense.id);
+          toast.success("Lançamento excluído.");
+        } catch (error) {
+          toast.error(error);
+        }
+      }
+    };
+
+    const handleConfirmDeleteSingle = async () => {
+      if (!deleteModal) return;
       try {
-        await deleteExpense(expense.id);
-        toast.success();
-      } catch (e) {
-        toast.error(e);
+        await deleteExpense(deleteModal.expenseId);
+        toast.success("Parcela excluída.");
+      } catch (error) {
+        toast.error(error);
+      } finally {
+        setDeleteModal(null);
+      }
+    };
+
+    const handleConfirmDeleteGroup = async () => {
+      if (!deleteModal?.groupId) return;
+      try {
+        await deleteExpenseGroup(deleteModal.groupId);
+        toast.success("Parcelas excluídas.");
+      } catch (error) {
+        toast.error(error);
+      } finally {
+        setDeleteModal(null);
       }
     };
     const handleDuplicate = async (expense) => {
@@ -482,6 +508,12 @@ export default function Lancamentos({
           message="Processando lançamentos..."
           anchorOrigin={{ vertical: "top", horizontal: "center" }}
           ContentProps={{ sx: { bgcolor: "info.main", color: "info.contrastText", fontWeight: 500 } }}
+        />
+        <DeleteExpenseModal
+          isOpen={Boolean(deleteModal)}
+          onClose={() => setDeleteModal(null)}
+          onConfirmOne={handleConfirmDeleteSingle}
+          onConfirmAll={handleConfirmDeleteGroup}
         />
         <Stack spacing={3}>
           {/* Create form */}

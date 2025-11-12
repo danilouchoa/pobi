@@ -31,6 +31,7 @@ export type ExpensePayload = {
   incrementMonth?: boolean;
   customDate?: string;
   fingerprint?: string;
+  installmentGroupId?: string | null;
 };
 
 const normalizeDecimalSource = (value: unknown): string | null => {
@@ -152,6 +153,7 @@ export const buildCreateData = (userId: string, body: ExpensePayload) => {
       ? toDecimalString(sharedAmountDecimal.toString())
       : null,
     fingerprint,
+    installmentGroupId: body.installmentGroupId ?? null,
   };
 };
 
