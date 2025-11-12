@@ -32,7 +32,8 @@ model User {
   id            String          @id @default(auto()) @map("_id") @db.ObjectId
   email         String          @unique
   name          String?
-  /// Para usuários com provider LOCAL, passwordHash deve ser preenchido.
+  /// Para usuários com provider LOCAL, passwordHash deve ser não-nulo.
+  /// Application-level: validação em /register garante passwordHash para Provider.LOCAL.
   passwordHash  String?
   googleId      String?         @unique
   provider      Provider        @default(LOCAL)

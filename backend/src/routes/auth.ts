@@ -182,6 +182,7 @@ export default function authRoutes(prisma: PrismaClient) {
    */
   router.post('/login', validate({ body: loginSchema }), async (req: Request, res: Response) => {
     const { email, password } = req.body;
+    const safeEmail = typeof email === 'string' ? email.replace(/[\r\n]/g, '') : '';
     const clientIp = req.ip || req.connection.remoteAddress || 'unknown';
 
     try {
@@ -190,7 +191,7 @@ export default function authRoutes(prisma: PrismaClient) {
 
       // Se usuário não existe → mensagem genérica
       if (!user) {
-        console.warn(`[AUTH] Login failed - user not found: ${email} from ${clientIp}`);
+        console.warn(`[AUTH] Login failed - user not found: ${safeEmail} from ${clientIp}`);
         return res.status(401).json({ 
           error: 'INVALID_CREDENTIALS',
           message: 'Credenciais inválidas.' 
@@ -199,7 +200,7 @@ export default function authRoutes(prisma: PrismaClient) {
 
       // Validar senha com bcrypt (ignora usuários sem passwordHash)
       if (!user.passwordHash) {
-        console.warn(`[AUTH] Login failed - user has no passwordHash: ${email} from ${clientIp}`);
+        console.warn(`[AUTH] Login failed - user has no passwordHash: ${safeEmail} from ${clientIp}`);
         return res.status(401).json({ 
           error: 'INVALID_CREDENTIALS',
           message: 'Credenciais inválidas.' 
@@ -209,7 +210,7 @@ export default function authRoutes(prisma: PrismaClient) {
 
       // Se senha incorreta → mesma mensagem genérica
       if (!isValidPassword) {
-        console.warn(`[AUTH] Login failed - invalid password: ${email} from ${clientIp}`);
+        console.warn(`[AUTH] Login failed - invalid password: ${safeEmail} from ${clientIp}`);
         return res.status(401).json({ 
           error: 'INVALID_CREDENTIALS',
           message: 'Credenciais inválidas.' 
@@ -236,7 +237,7 @@ export default function authRoutes(prisma: PrismaClient) {
       });
 
       // Log de sucesso
-      console.log(`[AUTH] Login success: ${email} from ${clientIp}`);
+      console.log(`[AUTH] Login success: ${safeEmail} from ${clientIp}`);
 
       // Retornar access token no corpo
       return res.json({
