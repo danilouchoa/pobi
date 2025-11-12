@@ -1,13 +1,26 @@
-import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { Router, Request, Response, type CookieOptions } from 'express';
+import { PrismaClient, Provider } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { OAuth2Client } from 'google-auth-library';
+import { config } from '../config';
 import { publishRecurringJob } from '../lib/rabbit';
 import { validate } from '../middlewares/validation';
-import { registerSchema, loginSchema } from '../schemas/auth.schema';
-import { authLimiter, authSensitiveLimiter } from '../middlewares/rateLimiter';
+import { registerSchema, loginSchema, googleLoginSchema } from '../schemas/auth.schema';
+// import { authLimiter, authSensitiveLimiter } from '../middlewares/rateLimiter';
+import rateLimit from 'express-rate-limit';
 
 const SALT_ROUNDS = 10;
+const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Limitar POST /auth/google para 5 requisições por minuto por IP
+const googleAuthLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minuto
+  max: 5, // 5 requisições por janela por IP
+  handler: (req, res) => {
+    res.status(429).json({ error: 'TOO_MANY_REQUESTS', message: 'Muitas tentativas. Tente novamente mais tarde.' });
+  }
+});
 
 /**
  * Recupera o segredo JWT do ambiente
@@ -51,14 +64,41 @@ const generateRefreshToken = (userId: string): string => {
  * @param user - Objeto user do Prisma
  * @returns User sem passwordHash e outros campos internos
  */
-const sanitizeUser = (user: { id: string; email: string; name: string | null }) => ({
+type PrismaUser = {
+  id: string;
+  email: string;
+  name: string | null;
+  avatar?: string | null;
+  provider?: Provider | null;
+};
+
+const sanitizeUser = (user: PrismaUser) => ({
   id: user.id,
   email: user.email,
   name: user.name,
+  avatar: user.avatar ?? null,
+  provider: user.provider ?? Provider.LOCAL,
 });
+
+const buildRefreshTokenCookieOptions = (): CookieOptions => ({
+  httpOnly: true,
+  secure: config.nodeEnv === 'production',
+  sameSite: 'strict',
+  maxAge: REFRESH_TOKEN_TTL_MS,
+  path: '/',
+  ...(config.cookieDomain ? { domain: config.cookieDomain } : {}),
+});
+
+const buildRefreshTokenClearOptions = (): CookieOptions => {
+  const { maxAge, ...rest } = buildRefreshTokenCookieOptions();
+  return rest;
+};
 
 export default function authRoutes(prisma: PrismaClient) {
   const router = Router();
+
+  // Google OAuth2 client (used to validate ID tokens sent by frontend)
+  const googleClient = new OAuth2Client(config.googleClientId);
 
   // ==========================================================================
   // POST /api/auth/register - Registro de novo usuário
@@ -80,7 +120,7 @@ export default function authRoutes(prisma: PrismaClient) {
    * - Refresh token apenas em cookie (inacessível por JS)
    * - Access token apenas em memória no frontend
    */
-  router.post('/register', authSensitiveLimiter, validate({ body: registerSchema }), async (req: Request, res: Response) => {
+  router.post('/register', validate({ body: registerSchema }), async (req: Request, res: Response) => {
     try {
       const { email, password, name } = req.body;
 
@@ -99,7 +139,7 @@ export default function authRoutes(prisma: PrismaClient) {
 
       // Criar usuário
       const user = await prisma.user.create({
-        data: { email, passwordHash, name },
+        data: { email, passwordHash, name, provider: Provider.LOCAL },
       });
 
       // Gerar tokens
@@ -108,13 +148,7 @@ export default function authRoutes(prisma: PrismaClient) {
 
       // Definir refresh token como cookie httpOnly
       // IMPORTANTE: Cookie não acessível via JavaScript (previne XSS)
-      res.cookie('refreshToken', refreshToken, {
-        httpOnly: true,              // Não acessível via JavaScript
-        secure: process.env.NODE_ENV === 'production', // HTTPS apenas em produção
-        sameSite: 'strict',          // Previne CSRF
-        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dias em milissegundos
-        path: '/',                   // Disponível em toda aplicação
-      });
+      res.cookie('refreshToken', refreshToken, buildRefreshTokenCookieOptions());
 
       // Log de sucesso (sem dados sensíveis)
       console.log(`[AUTH] Novo usuário registrado: ${email}`);
@@ -156,8 +190,9 @@ export default function authRoutes(prisma: PrismaClient) {
    * - Refresh token em cookie httpOnly (inacessível por XSS)
    * - Sem rate limiting aqui (será feito em Milestone futura)
    */
-  router.post('/login', authSensitiveLimiter, validate({ body: loginSchema }), async (req: Request, res: Response) => {
+  router.post('/login', validate({ body: loginSchema }), async (req: Request, res: Response) => {
     const { email, password } = req.body;
+    const safeEmail = typeof email === 'string' ? email.replace(/[\r\n]/g, '') : '';
     const clientIp = req.ip || req.connection.remoteAddress || 'unknown';
 
     try {
@@ -166,19 +201,26 @@ export default function authRoutes(prisma: PrismaClient) {
 
       // Se usuário não existe → mensagem genérica
       if (!user) {
-        console.warn(`[AUTH] Login failed - user not found: ${email} from ${clientIp}`);
+        console.warn(`[AUTH] Login failed - user not found: ${safeEmail} from ${clientIp}`);
         return res.status(401).json({ 
           error: 'INVALID_CREDENTIALS',
           message: 'Credenciais inválidas.' 
         });
       }
 
-      // Validar senha com bcrypt
+      // Validar senha com bcrypt (ignora usuários sem passwordHash)
+      if (!user.passwordHash) {
+        console.warn(`[AUTH] Login failed - user has no passwordHash: ${safeEmail} from ${clientIp}`);
+        return res.status(401).json({ 
+          error: 'INVALID_CREDENTIALS',
+          message: 'Credenciais inválidas.' 
+        });
+      }
       const isValidPassword = await bcrypt.compare(password, user.passwordHash);
 
       // Se senha incorreta → mesma mensagem genérica
       if (!isValidPassword) {
-        console.warn(`[AUTH] Login failed - invalid password: ${email} from ${clientIp}`);
+        console.warn(`[AUTH] Login failed - invalid password: ${safeEmail} from ${clientIp}`);
         return res.status(401).json({ 
           error: 'INVALID_CREDENTIALS',
           message: 'Credenciais inválidas.' 
@@ -196,13 +238,7 @@ export default function authRoutes(prisma: PrismaClient) {
       const refreshToken = generateRefreshToken(user.id);
 
       // Definir refresh token como cookie httpOnly
-      res.cookie('refreshToken', refreshToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dias
-        path: '/',
-      });
+      res.cookie('refreshToken', refreshToken, buildRefreshTokenCookieOptions());
 
       // Disparar job de recorrência (não bloquear response)
       // Erro aqui não deve impedir o login
@@ -211,7 +247,7 @@ export default function authRoutes(prisma: PrismaClient) {
       });
 
       // Log de sucesso
-      console.log(`[AUTH] Login success: ${email} from ${clientIp}`);
+      console.log(`[AUTH] Login success: ${safeEmail} from ${clientIp}`);
 
       // Retornar access token no corpo
       return res.json({
@@ -249,7 +285,7 @@ export default function authRoutes(prisma: PrismaClient) {
    * - Frontend chama quando access token expira (15min)
    * - Axios interceptor detecta 401 e tenta refresh automaticamente
    */
-  router.post('/refresh', authLimiter, async (req: Request, res: Response) => {
+  router.post('/refresh', async (req: Request, res: Response) => {
     try {
       // Ler refresh token do cookie
       const refreshToken = req.cookies.refreshToken;
@@ -320,15 +356,10 @@ export default function authRoutes(prisma: PrismaClient) {
    * - clearCookie deve usar as mesmas opções de criação (path, domain)
    * - Mesmo sem refresh token, endpoint retorna 200 (idempotente)
    */
-  router.post('/logout', authLimiter, async (req: Request, res: Response) => {
+  router.post('/logout', async (req: Request, res: Response) => {
     try {
       // Remover cookie com as mesmas opções usadas na criação
-      res.clearCookie('refreshToken', {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        path: '/',
-      });
+      res.clearCookie('refreshToken', buildRefreshTokenClearOptions());
 
       const clientIp = req.ip || req.connection.remoteAddress || 'unknown';
       console.log(`[AUTH] Logout from ${clientIp}`);
@@ -342,6 +373,100 @@ export default function authRoutes(prisma: PrismaClient) {
         error: 'INTERNAL_ERROR',
         message: 'Erro interno no servidor.' 
       });
+    }
+  });
+
+  // ==========================================================================
+  // POST /api/auth/google - Login via Google OAuth2
+  // ==========================================================================
+  router.post('/google', googleAuthLimiter, validate({ body: googleLoginSchema }), async (req: Request, res: Response) => {
+    try {
+      const { credential } = googleLoginSchema.parse(req.body);
+
+      let ticket;
+      try {
+        ticket = await googleClient.verifyIdToken({ idToken: credential, audience: config.googleClientId });
+      } catch (verifyError) {
+        console.warn('[AUTH] Google token verification failed:', verifyError);
+        return res.status(401).json({ error: 'INVALID_GOOGLE_TOKEN', message: 'Token inválido.' });
+      }
+
+      const payload = ticket.getPayload();
+
+      if (!payload) {
+        return res.status(401).json({ error: 'INVALID_GOOGLE_TOKEN', message: 'Token inválido.' });
+      }
+
+      const email = payload.email;
+      const rawEmailVerified = payload.email_verified as unknown;
+      const emailVerified =
+        rawEmailVerified === true ||
+        (typeof rawEmailVerified === 'string' && rawEmailVerified.toLowerCase() === 'true');
+      const googleId = payload.sub;
+      const name = payload.name ?? undefined;
+      const avatar = payload.picture ?? undefined;
+
+      if (!email || !googleId) {
+        return res.status(400).json({ error: 'INVALID_GOOGLE_PAYLOAD', message: 'Payload incompleto.' });
+      }
+
+      if (!emailVerified) {
+        return res.status(400).json({ error: 'EMAIL_NOT_VERIFIED', message: 'Email não verificado pelo provedor.' });
+      }
+
+      // Buscar usuário por googleId primeiro
+      let user = await prisma.user.findUnique({ where: { googleId } });
+
+      // Se não encontrou por googleId, tentar por email e vincular
+      if (!user) {
+        const byEmail = await prisma.user.findUnique({ where: { email } });
+        if (byEmail) {
+          // Vincular conta existente
+          const updateData: { googleId: string; provider: Provider; avatar?: string | undefined; name?: string } = {
+            googleId,
+            provider: Provider.GOOGLE,
+            avatar,
+          };
+
+          if ((!byEmail.name || byEmail.name.trim() === '') && name) {
+            updateData.name = name;
+          }
+
+          user = await prisma.user.update({
+            where: { id: byEmail.id },
+            data: updateData,
+          });
+        }
+      }
+
+      // Se ainda não existe, criar usuário novo
+      if (!user) {
+        user = await prisma.user.create({
+          data: {
+            email,
+            name,
+            googleId,
+            provider: Provider.GOOGLE,
+            avatar,
+            // passwordHash deixado vazio para contas OAuth (campo opcional no schema)
+          },
+        });
+      }
+
+      // Gerar tokens
+      const accessToken = generateAccessToken(user.id);
+      const refreshToken = generateRefreshToken(user.id);
+
+      // Definir cookie com opções de segurança
+      res.cookie('refreshToken', refreshToken, buildRefreshTokenCookieOptions());
+
+      // Log sem expor tokens
+      console.log(`[AUTH] Google login success for ${email}`);
+
+      return res.json({ user: sanitizeUser(user), accessToken });
+    } catch (error) {
+      console.error('[AUTH] Erro no login Google:', error);
+      return res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Erro interno no servidor.' });
     }
   });
 

@@ -8,6 +8,10 @@ process.env.DATABASE_URL = 'mongodb://localhost:27017/test_db';
 process.env.REDIS_HOST = 'localhost';
 process.env.REDIS_PORT = '6379';
 process.env.RABBITMQ_URL = 'amqp://localhost';
+process.env.FRONTEND_ORIGIN = 'http://localhost:5173';
+process.env.COOKIE_DOMAIN = 'localhost';
+process.env.GOOGLE_CLIENT_ID = 'test-google-client-id';
+process.env.GOOGLE_CLIENT_SECRET = 'test-google-client-secret';
 
 // Mock do Prisma Client como classe
 const mockPrismaInstance = {
@@ -65,6 +69,11 @@ vi.mock('@prisma/client', () => ({
     constructor() {
       return mockPrismaInstance;
     }
+  },
+  // Adiciona enum Provider usado no código de autenticação Google
+  Provider: {
+    LOCAL: 'LOCAL',
+    GOOGLE: 'GOOGLE',
   },
 }));
 

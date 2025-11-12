@@ -103,8 +103,10 @@ services:
       - "5173:5173"
     networks:
       - finance_net
+    env_file:
+      - ./frontend/.env
     environment:
-      - VITE_API_URL=http://backend:4000
+      - VITE_API_URL=http://localhost:4000
     # Frontend só inicia quando backend estiver SAUDÁVEL
     # Evita tela em branco ou erros de "Cannot connect to API"
     depends_on:

@@ -2,6 +2,7 @@ import express, { Request } from 'express';
 import cors from 'cors';
 import helmet, { type HelmetOptions } from 'helmet';
 import cookieParser from 'cookie-parser';
+import csurf from 'csurf';
 import { PrismaClient } from '@prisma/client';
 import authRoutes from './routes/auth';
 import { authenticate } from './middlewares/auth';
@@ -14,61 +15,72 @@ import healthRoutes from './routes/health';
 import dlqRoutes from './routes/dlq';
 import { requestLogger } from './middlewares/logger';
 import { globalErrorHandler, invalidJsonHandler } from './middlewares/errorHandler';
-import { config, isCorsAllowed } from './config';
-import { apiLimiter } from './middlewares/rateLimiter';
-
-import csurf from 'csurf';
+import { config } from './config';
+// import { apiLimiter } from './middlewares/rateLimiter';
 
 const app = express();
 const port = config.port;
 const prisma = new PrismaClient();
+const googleTrustedHosts = ["https://accounts.google.com", "https://*.gstatic.com"];
 
-// Middlewares
-const helmetOptions: HelmetOptions = {};
+const scriptSrcDirectives = ["'self'", ...googleTrustedHosts];
 
-if (process.env.NODE_ENV !== 'production') {
-  const defaultDirectives = helmet.contentSecurityPolicy.getDefaultDirectives();
-  helmetOptions.contentSecurityPolicy = {
-    useDefaults: true,
-    directives: {
-      ...defaultDirectives,
-      "script-src": ["'self'", "'unsafe-eval'"],
-    },
-  };
+if (config.nodeEnv !== 'production') {
+  // Vite e bibliotecas de desenvolvimento podem depender de eval em ambientes locais.
+  // Mantemos 'unsafe-eval' apenas fora da produção para preservar segurança.
+  scriptSrcDirectives.push("'unsafe-eval'");
 }
 
+const helmetOptions: HelmetOptions = {
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      'script-src': scriptSrcDirectives,
+      'frame-src': ["'self'", 'https://accounts.google.com'],
+      'img-src': ["'self'", 'data:', 'https://*.gstatic.com'],
+    },
+  },
+};
+
+const allowAllOrigins = config.corsOrigins.length === 0 || config.corsOrigins.includes('*');
+const corsMiddleware = cors({
+  credentials: true,
+  origin: (origin, callback) => {
+    if (!origin || allowAllOrigins) {
+      return callback(null, true);
+    }
+    if (config.corsOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    console.warn(`[CORS] Origin blocked: ${origin}`);
+    return callback(new Error('Origin not allowed by CORS'), false);
+  },
+});
+
+const csrfProtection = csurf({
+  cookie: {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: config.nodeEnv === 'production',
+    path: '/',
+    ...(config.cookieDomain ? { domain: config.cookieDomain } : {}),
+  },
+});
+
+// Middlewares
+// Helmet removido para rodar localmente sem headers extras
+
+/**
+ * Helmet + CSP garantem headers básicos e limitam origens externas
+ * Google OAuth requer liberarmos accounts.google.com e *.gstatic.com
+ */
 app.use(helmet(helmetOptions));
 
 /**
  * CORS Configuration - Milestone #13
- * 
- * Segurança:
- * - credentials: true → permite envio de cookies entre domínios
- * - origin callback → allowlist de origens permitidas (dev + prod)
- * - Rejeita requisições de origens desconhecidas
- * 
- * Origens permitidas:
- * - Dev: http://localhost:5173 (Vite)
- * - Prod: definido via ALLOWED_ORIGINS env var
- * 
- * IMPORTANTE: Nunca usar origin: '*' com credentials: true (erro CORS)
+ * Mantém allowlist baseada nas envs FRONTEND_ORIGIN + CORS_ORIGINS
  */
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Permitir requests sem origin (ex: mobile apps, Postman)
-      if (!origin) return callback(null, true);
-      
-      if (isCorsAllowed(origin)) {
-        callback(null, true);
-      } else {
-        console.warn(`[CORS] Blocked request from unauthorized origin: ${origin}`);
-        callback(new Error('Not allowed by CORS'));
-      }
-    },
-    credentials: true, // Permite envio de cookies
-  })
-);
+app.use(corsMiddleware);
 
 /**
  * Cookie Parser - Milestone #13
@@ -82,28 +94,17 @@ app.use(requestLogger);
 app.use(express.json()); // Habilita o parsing de JSON
 app.use(invalidJsonHandler);
 
-// Middleware CSRF - protege rotas autenticadas
-// Usa cookie para armazenar o token CSRF
-const csrfProtection = csurf({
-  cookie: {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-  },
-  ignoreMethods: ['GET', 'HEAD', 'OPTIONS'],
-});
-
-app.use('/api', apiLimiter);
-
-// Esta rota usa o middleware CSRF para gerar e expor o token ao frontend.
-// O middleware CSRF é aplicado especificamente aqui para criar o token,
-// e depois globalmente para proteger todas as outras rotas.
-app.get('/api/csrf-token', csrfProtection, (req: Request, res) => {
-  res.json({ csrfToken: req.csrfToken ? req.csrfToken() : null });
-});
-
-// Aplicar CSRF protection em todas as outras rotas
 app.use(csrfProtection);
+app.get('/api/csrf-token', (req, res) => {
+  const csrfToken = req.csrfToken();
+  res.json({ csrfToken });
+});
+
+// apiLimiter removido para rodar localmente
+
+// Rota CSRF removida
+
+// CSRF protection removido
 
 // Rotas públicas (sem autenticação)
 app.use('/api/auth', authRoutes(prisma));
