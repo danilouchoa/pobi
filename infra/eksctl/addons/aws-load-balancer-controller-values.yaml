@@ -1,0 +1,15 @@
+clusterName: lab-eks
+region: us-east-1
+vpcId: vpc-0758d3d3c37d3dfe0
+image:
+  tag: v2.8.1
+serviceAccount:
+  create: true
+  name: aws-load-balancer-controller
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::<ACCOUNT_ID>:role/lab-eks-alb-controller # TODO substituir pela role criada
+autoDiscoverAwsRegion: false
+autoDiscoverAwsVpcID: false
+podLabels:
+  Environment: lab
+  shutdown: "true"

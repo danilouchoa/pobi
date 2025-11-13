@@ -1,0 +1,23 @@
+autoDiscovery:
+  clusterName: lab-eks
+awsRegion: us-east-1
+rbac:
+  serviceAccount:
+    create: true
+    name: cluster-autoscaler
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::<ACCOUNT_ID>:role/lab-eks-autoscaler # TODO substituir pela role criada
+extraArgs:
+  skip-nodes-with-system-pods: "false"
+  balance-similar-node-groups: "true"
+  expander: least-waste
+  scale-down-utilization-threshold: "0.3"
+extraEnv:
+  - name: AWS_REGION
+    value: us-east-1
+podLabels:
+  Environment: lab
+  shutdown: "true"
+tolerations:
+  - key: "CriticalAddonsOnly"
+    operator: "Exists"

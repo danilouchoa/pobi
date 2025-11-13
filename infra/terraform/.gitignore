@@ -1,0 +1,33 @@
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfvars.backup
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# Lock files (manter apenas em cada environment)
+# .terraform.lock.hcl já está commitado em envs/dev/
+
+# Logs
+*.log
+
+# Backup files
+*~
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.iml

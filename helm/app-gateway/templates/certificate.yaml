@@ -1,0 +1,15 @@
+{{- if and .Values.tls.enabled .Values.certificate.enabled .Values.host }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ .Values.tls.secretName }}
+  labels:
+    app.kubernetes.io/part-of: {{ include "finfy-app-gateway.fullname" . }}
+spec:
+  secretName: {{ .Values.tls.secretName }}
+  dnsNames:
+    - {{ .Values.host | quote }}
+  issuerRef:
+    name: {{ .Values.tls.issuerRef.name }}
+    kind: {{ .Values.tls.issuerRef.kind }}
+{{- end }}

@@ -1,0 +1,180 @@
+# Production environment values
+# Namespace: production
+# Domain: app.finfy.me
+
+replicaCount: 3
+
+rollout:
+  enabled: true  # Usar Argo Rollouts com canary deployment
+
+backend:
+  enabled: true
+  name: backend
+  image:
+    repository: 211125320014.dkr.ecr.us-east-1.amazonaws.com/finance-app
+    tag: stable
+    pullPolicy: IfNotPresent
+  
+  service:
+    type: ClusterIP
+    port: 3000
+    targetPort: 3000
+  
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+  
+  env:
+    - name: NODE_ENV
+      value: "production"
+    - name: PORT
+      value: "3000"
+    - name: DATABASE_URL
+      valueFrom:
+        secretKeyRef:
+          name: finance-app-secrets
+          key: database-url
+    - name: JWT_SECRET
+      valueFrom:
+        secretKeyRef:
+          name: finance-app-secrets
+          key: jwt-secret
+    - name: GOOGLE_CLIENT_ID
+      valueFrom:
+        secretKeyRef:
+          name: finance-app-secrets
+          key: google-client-id
+    - name: GOOGLE_CLIENT_SECRET
+      valueFrom:
+        secretKeyRef:
+          name: finance-app-secrets
+          key: google-client-secret
+  
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 3000
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 3000
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+frontend:
+  enabled: true
+  name: frontend
+  image:
+    repository: 211125320014.dkr.ecr.us-east-1.amazonaws.com/finance-app-frontend
+    tag: stable
+    pullPolicy: IfNotPresent
+  
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 80
+  
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  
+  env:
+    - name: VITE_API_URL
+      value: "https://app.finfy.me/api"
+    - name: VITE_GOOGLE_CLIENT_ID
+      valueFrom:
+        secretKeyRef:
+          name: finance-app-secrets
+          key: google-client-id
+
+ingress:
+  enabled: true
+  className: "alb"
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
+    # Certificado SSL (criar via ACM)
+    # alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:211125320014:certificate/xxx
+    # Rate limiting
+    alb.ingress.kubernetes.io/load-balancer-attributes: idle_timeout.timeout_seconds=60
+  hosts:
+    - host: app.finfy.me
+      paths:
+        - path: /api
+          pathType: Prefix
+          backend:
+            service:
+              name: backend-stable  # Service canary quando rollout enabled
+              port: 3000
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: frontend
+              port: 80
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: "finance-app"
+
+podAnnotations:
+  environment: "production"
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "3000"
+  prometheus.io/path: "/metrics"
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: false
+
+nodeSelector: {}
+
+tolerations:
+  - key: "node.kubernetes.io/lifecycle"
+    operator: "Equal"
+    value: "spot"
+    effect: "NoSchedule"
+
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+            - key: app.kubernetes.io/name
+              operator: In
+              values:
+                - finance-app
+        topologyKey: kubernetes.io/hostname

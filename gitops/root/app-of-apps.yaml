@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-apps
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  
+  source:
+    repoURL: https://github.com/danilouchoa/pobi.git
+    targetRevision: main
+    path: gitops/root
+    directory:
+      recurse: false
+      include: '*.yaml'
+      exclude: 'app-of-apps.yaml'
+  
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true

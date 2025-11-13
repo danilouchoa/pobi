@@ -1,0 +1,10 @@
+# Placeholders para helm install argo-cd
+server:
+  extraArgs:
+    - --insecure
+  service:
+    type: LoadBalancer
+    annotations: {}
+configs:
+  params:
+    server.insecure: true

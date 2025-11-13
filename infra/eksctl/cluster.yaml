@@ -1,0 +1,57 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: lab-eks
+  region: us-east-1
+  version: "1.34"
+  tags:
+    Environment: lab
+    shutdown: "true"
+
+vpc:
+  id: vpc-0758d3d3c37d3dfe0
+  subnets:
+    private:
+      us-east-1a:
+        id: subnet-0b56a33f2355ff548
+      us-east-1b:
+        id: subnet-06a7870888cb55ab6
+    public:
+      us-east-1a:
+        id: subnet-0c8afb96c5f7b501c
+      us-east-1b:
+        id: subnet-05f3d80590f621724
+  clusterEndpoints:
+    privateAccess: false
+    publicAccess: true
+  publicAccessCIDRs:
+    - 0.0.0.0/0 # ajuste depois para os IPs de administração
+
+iam:
+  withOIDC: true
+
+cloudWatch:
+  clusterLogging:
+    enableTypes: ["api", "audit", "authenticator"]
+
+managedNodeGroups:
+  - name: spot-arm
+    instanceTypes:
+      - t4g.medium
+    spot: true
+    desiredCapacity: 1
+    minSize: 1
+    maxSize: 4
+    privateNetworking: true
+    subnets:
+      - subnet-0b56a33f2355ff548
+      - subnet-06a7870888cb55ab6
+    ssh:
+      allow: false
+    labels:
+      node.kubernetes.io/lifecycle: spot
+      eks.amazonaws.com/capacityType: SPOT
+    tags:
+      Environment: lab
+      shutdown: "true"

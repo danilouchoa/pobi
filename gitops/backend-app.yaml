@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: finfy-backend
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: finfy
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/danilouchoa/pobi.git
+    targetRevision: main
+    path: helm/backend
+    helm:
+      releaseName: finfy-backend
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: finfy
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+  revisionHistoryLimit: 5
