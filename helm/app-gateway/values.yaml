@@ -1,0 +1,36 @@
+host: app.finfy.me
+
+ingress:
+  enabled: true
+  gatewayName: finfy-gw
+  selector:
+    istio: ingressgateway
+  httpPort: 80
+  httpsPort: 443
+
+backend:
+  serviceName: finfy-backend
+  servicePort: 4000
+  namespace: finfy
+  pathPrefix: /api
+
+frontend:
+  serviceName: finfy-frontend
+  servicePort: 5173
+  namespace: finfy
+  pathPrefix: /
+
+tls:
+  enabled: true
+  secretName: finfy-cert
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+
+certificate:
+  enabled: true # separate toggle in case TLS secret is managed externally
+
+annotations: {}
+# Example to add to Gateway:
+# annotations:
+#   external-dns.alpha.kubernetes.io/hostname: app.finfy.me.

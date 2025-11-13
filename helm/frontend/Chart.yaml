@@ -1,0 +1,15 @@
+apiVersion: v2
+name: finfy-frontend
+version: 0.1.0
+description: Helm chart for Finfy frontend SPA
+appVersion: "0.1.0"
+type: application
+keywords:
+  - frontend
+  - spa
+  - web
+sources:
+  - https://github.com/danilouchoa/pobi
+maintainers:
+  - name: Finfy Team
+    email: dev@finfy.me
