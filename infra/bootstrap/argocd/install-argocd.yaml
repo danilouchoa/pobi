@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argocd
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argocd-bootstrap
+  namespace: argocd
+---
+# Nota: iremos instalar ArgoCD via Helm no script, este arquivo apenas garante o namespace.

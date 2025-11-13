@@ -1,0 +1,26 @@
+{{- if and .Values.ingress.enabled .Values.host }}
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: finfy-frontend-vs
+  labels:
+    app.kubernetes.io/part-of: {{ include "finfy-app-gateway.fullname" . }}
+spec:
+  hosts:
+    - {{ .Values.host | quote }}
+  gateways:
+    - {{ .Values.ingress.gatewayName }}
+  http:
+    - match:
+        - uri:
+            prefix: {{ .Values.frontend.pathPrefix | quote }}
+      route:
+        - destination:
+            host: {{ printf "%s.%s.svc.cluster.local" .Values.frontend.serviceName .Values.frontend.namespace }}
+            port:
+              number: {{ .Values.frontend.servicePort }}
+      headers:
+        response:
+          set:
+            Strict-Transport-Security: "max-age=63072000; includeSubDomains; preload"
+{{- end }}

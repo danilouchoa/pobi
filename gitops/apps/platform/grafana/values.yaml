@@ -1,0 +1,4 @@
+adminUser: admin
+adminPassword: admin123 # substitua por Secret via ArgoCD se preferir
+service:
+  type: ClusterIP

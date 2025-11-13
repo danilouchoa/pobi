@@ -47,6 +47,21 @@ Workflows modulares garantem qualidade antes do merge:
 
 - Build Vite OK; testes Vitest (FE/BE) 100% passando localmente; cobertura mantida.
 
+### DNS & Ingress (Preview)
+
+- Adicionado chart `helm/external-dns` (Cloudflare) + Application ArgoCD para gerenciar automaticamente o hostname `app.finfy.me` via anotação no Service do Istio Ingress Gateway.
+- Para habilitar, crie o secret antes da sincronização:
+
+```bash
+kubectl create secret generic external-dns-secret -n kube-system \
+  --from-literal=CF_API_TOKEN=<cloudflare_token>
+```
+
+- Verifique funcionamento:
+  - `kubectl logs -n kube-system deploy/external-dns | grep SyncLoop`
+  - `dig +short app.finfy.me` deve retornar o IP do LoadBalancer.
+- O ownership dos registros usa `TXT` com `pobi` (configurado em `values.yaml`).
+
 ---
 
 ---
@@ -134,6 +149,9 @@ Para habilitar Login com Google configure as seguintes variáveis:
 - No frontend (`/frontend/.env`):
   - `VITE_GOOGLE_CLIENT_ID` - Client ID (usado pelo SDK do navegador)
   - `VITE_API_URL` - Endpoint do backend (`http://localhost:4000` em dev)
+
+- **CI/CD**: workflows `ci-backend.yml` e `ci-frontend.yml` injetam valores de fallback (`test-google-client-id`, etc.) quando os secrets não estão presentes, garantindo que a validação Zod aconteça sem quebrar o build.
+- **Cookies**: o refresh token recebe `HttpOnly`, `SameSite=strict`, `Path=/` e duração de 7 dias. O flag `Secure` é habilitado automaticamente quando `NODE_ENV=production`.
 
 Durante deploy canário, habilite as variáveis no ambiente de destino. O backend valida (Zod) as variáveis em runtime para evitar builds quebrados.
 

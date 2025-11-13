@@ -1,0 +1,31 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: external-dns
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/danilomessias/pobi.git
+    path: helm/external-dns
+    targetRevision: HEAD
+    helm:
+      values: |
+        replicaCount: 1
+        cloudflare:
+          apiTokenSecretName: external-dns-secret
+        domainFilters:
+          - finfy.me
+        txtOwnerId: pobi
+        sources:
+          - service
+          - istio-gateway
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

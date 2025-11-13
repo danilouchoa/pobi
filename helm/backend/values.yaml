@@ -1,0 +1,39 @@
+replicaCount: 1
+
+image:
+  repository: 211125320014.dkr.ecr.us-east-1.amazonaws.com/finfy-backend
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 4000
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+env: []
+# Example:
+# env:
+#   - name: NODE_ENV
+#     value: production
+#   - name: DATABASE_URL
+#     valueFrom:
+#       secretKeyRef:
+#         name: backend-secrets
+#         key: database_url
+
+probes:
+  liveness:
+    path: /api/health
+    initialDelaySeconds: 15
+    periodSeconds: 20
+  readiness:
+    path: /api/health/ready
+    initialDelaySeconds: 10
+    periodSeconds: 15

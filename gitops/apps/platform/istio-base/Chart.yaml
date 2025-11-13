@@ -1,0 +1,14 @@
+apiVersion: v2
+name: istio-platform
+version: 0.1.0
+dependencies:
+  - name: base
+    version: "*"
+    repository: https://istio-release.storage.googleapis.com/charts
+  - name: istiod
+    version: "*"
+    repository: https://istio-release.storage.googleapis.com/charts
+  - name: gateway
+    alias: ingressgateway
+    version: "*"
+    repository: https://istio-release.storage.googleapis.com/charts
