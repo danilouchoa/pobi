@@ -1,0 +1,37 @@
+replicaCount: 1
+
+image:
+  repository: k8s.gcr.io/external-dns/external-dns
+  tag: v0.14.0
+  pullPolicy: IfNotPresent
+
+cloudflare:
+  # Name of the secret containing the Cloudflare API token (key: CF_API_TOKEN)
+  apiTokenSecretName: external-dns-secret
+
+logLevel: info
+interval: 1m
+policy: sync
+registry: txt
+txtOwnerId: pobi
+sources:
+  - service
+  - istio-gateway
+# domainFilters is a list of zones the controller manages
+# Example: ["finfy.me"]
+domainFilters:
+  - finfy.me
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

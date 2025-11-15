@@ -58,3 +58,74 @@ jobs:
           name: frontend-coverage
           path: frontend/coverage
           if-no-files-found: warn
+
+  deploy-frontend-dev:
+    name: Deploy Frontend Dev (EKS + ArgoCD)
+    needs: build-test-frontend
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # OIDC to AWS
+      contents: read
+    env:
+      AWS_REGION: us-east-1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          tags: |
+            ${{ secrets.AWS_ECR_REGISTRY }}/pobi-frontend:${{ github.sha }}
+
+      - name: Install ArgoCD CLI
+        run: |
+          curl -sSL -o argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+          sudo install -m 0755 argocd /usr/local/bin/argocd
+          argocd version --client
+
+      - name: ArgoCD Login
+        env:
+          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+          ARGOCD_USERNAME: ${{ secrets.ARGOCD_USERNAME }}
+          ARGOCD_PASSWORD: ${{ secrets.ARGOCD_PASSWORD }}
+        run: |
+          argocd login "$ARGOCD_SERVER" \
+            --username "$ARGOCD_USERNAME" \
+            --password "$ARGOCD_PASSWORD" \
+            --insecure
+
+      - name: Update frontend image values
+        env:
+          REGISTRY: ${{ secrets.AWS_ECR_REGISTRY }}
+          TAG: ${{ github.sha }}
+        run: |
+          argocd app set finfy-frontend \
+            --helm-set image.repository=${REGISTRY}/pobi-frontend \
+            --helm-set image.tag=${TAG}
+
+      - name: Sync and wait frontend
+        run: |
+          argocd app sync finfy-frontend
+          argocd app wait finfy-frontend --health --timeout 600
+
+      - name: Smoke test UI
+        run: |
+          set -euo pipefail
+          for i in {1..10}; do
+            echo "[Attempt $i] GET /login";
+            if curl -fsS --retry 4 --retry-all-errors --connect-timeout 5 https://app.finfy.me/login >/dev/null; then
+              echo OK; break; fi; sleep 5; done

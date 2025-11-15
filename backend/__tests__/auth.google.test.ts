@@ -1,146 +1,185 @@
 import request from 'supertest';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { PrismaClient } from '@prisma/client';
-// IMPORTANT: mock google-auth-library BEFORE importing app to ensure route uses stub
-vi.mock('google-auth-library', () => {
-  return {
-    OAuth2Client: class {
-      constructor() {}
-      async verifyIdToken() {
-        return (this as any).__verifyResult || { getPayload: () => null };
-      }
-    },
-  };
-});
 import app from '../src/index';
 import { getCsrfToken } from './utils/csrf';
 
-// Mock Prisma client used by routes (tests rely on mocking methods). @prisma/client is already mocked in setup.ts
 const prisma = new PrismaClient() as any;
 
+const mockVerifyIdToken = vi.hoisted(() => vi.fn());
+
+vi.mock('google-auth-library', () => {
+  class OAuth2ClientMock {
+    verifyIdToken = mockVerifyIdToken;
+  }
+
+  return {
+    OAuth2Client: OAuth2ClientMock,
+  };
+});
+
 describe('POST /api/auth/google', () => {
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.clearAllMocks();
-    const { OAuth2Client } = await import('google-auth-library');
-    (OAuth2Client.prototype as any).__verifyResult = undefined;
-    (OAuth2Client.prototype as any).verifyIdToken = async function () {
-      return (this as any).__verifyResult || { getPayload: () => null };
-    };
+    mockVerifyIdToken.mockReset();
   });
 
-  it('should create a new user when none exists and return accessToken + cookie', async () => {
-    // Mock Google verification payload
-    const payload = {
+  const createPayload = (overrides: Record<string, unknown> = {}) => ({
+    email: 'new.user@finance.app',
+    email_verified: true,
+    sub: 'google-user-123',
+    name: 'New User',
+    picture: 'https://lh3.googleusercontent.com/a/AEdFTp12345',
+    ...overrides,
+  });
+
+  it('cria novo usuário quando não existe registro com googleId ou email', async () => {
+    prisma.user.findUnique.mockResolvedValueOnce(null); // by googleId
+    prisma.user.findUnique.mockResolvedValueOnce(null); // by email
+
+    const createdUser = {
+      id: 'user-created-1',
       email: 'new.user@finance.app',
-      email_verified: true,
-      sub: 'google-123',
       name: 'New User',
-      picture: 'https://avatar.test/img.png',
-    };
-
-    // Inject custom verify result
-    const { OAuth2Client } = await import('google-auth-library');
-    (OAuth2Client.prototype as any).__verifyResult = { getPayload: () => payload };
-
-    // Prisma: no user by googleId or email
-    prisma.user.findUnique = vi.fn().mockResolvedValue(null);
-    prisma.user.create = vi.fn().mockResolvedValue({
-      id: 'user-new',
-      email: payload.email,
-      name: payload.name,
-      createdAt: new Date(),
+      googleId: 'google-user-123',
       provider: 'GOOGLE',
-      googleId: payload.sub,
-      avatar: payload.picture,
-    });
-
-    const { csrfToken, csrfCookie } = await getCsrfToken();
-    const res = await request(app)
-      .post('/api/auth/google')
-      .set('Cookie', csrfCookie)
-      .set('X-CSRF-Token', csrfToken)
-      .send({ credential: 'dummy-token' });
-
-    expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty('accessToken');
-    expect(res.body.user.email).toBe(payload.email);
-    expect(res.body.user.provider).toBe('GOOGLE');
-    expect(res.body.user.avatar).toBe(payload.picture);
-    expect(res.headers['set-cookie']).toBeDefined();
-    const cookie = res.headers['set-cookie'][0] as string;
-    expect(cookie).toContain('HttpOnly');
-    expect(cookie).toContain('SameSite=Strict');
-    expect(cookie).toContain('Domain=localhost');
-  });
-
-  it('should link existing local account by email', async () => {
-    const payload = {
-      email: 'exists@finance.app',
-      email_verified: true,
-      sub: 'google-456',
-      name: 'Exists',
-      picture: null,
+      avatar: 'https://lh3.googleusercontent.com/a/AEdFTp12345',
     };
 
-    const { OAuth2Client } = await import('google-auth-library');
-    (OAuth2Client.prototype as any).__verifyResult = { getPayload: () => payload };
+    prisma.user.create.mockResolvedValueOnce(createdUser);
 
-    // First call (find by googleId) -> null
-    // Second call (find by email) -> existing user
-    prisma.user.findUnique = vi.fn()
-      .mockImplementationOnce(() => Promise.resolve(null))
-      .mockImplementationOnce(() => Promise.resolve({ id: 'local-1', email: payload.email, name: 'Local', passwordHash: 'hash' }));
-
-    prisma.user.update = vi.fn().mockResolvedValue({ id: 'local-1', email: payload.email, name: 'Local' });
-
-    const { csrfToken, csrfCookie } = await getCsrfToken();
-    const res = await request(app)
-      .post('/api/auth/google')
-      .set('Cookie', csrfCookie)
-      .set('X-CSRF-Token', csrfToken)
-      .send({ credential: 'dummy-token' });
-
-    expect(res.status).toBe(200);
-    expect(prisma.user.update).toHaveBeenCalled();
-    expect(res.body.user.email).toBe(payload.email);
-  });
-
-  it('should return 401 for invalid token', async () => {
-    // Make verify throw
-    const { OAuth2Client } = await import('google-auth-library');
-    (OAuth2Client.prototype as any).verifyIdToken = vi.fn(async () => {
-      throw new Error('invalid');
+    mockVerifyIdToken.mockResolvedValueOnce({
+      getPayload: () => createPayload(),
     });
 
     const { csrfToken, csrfCookie } = await getCsrfToken();
+
     const res = await request(app)
       .post('/api/auth/google')
       .set('Cookie', csrfCookie)
       .set('X-CSRF-Token', csrfToken)
-      .send({ credential: 'bad-token' });
+      .send({ credential: 'valid-google-token' });
+
+    expect(res.status).toBe(200);
+    expect(prisma.user.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        email: createdUser.email,
+        googleId: createdUser.googleId,
+        provider: 'GOOGLE',
+        avatar: createdUser.avatar,
+        name: createdUser.name,
+      }),
+    });
+    expect(res.body).toEqual({
+      user: {
+        id: createdUser.id,
+        email: createdUser.email,
+        name: createdUser.name,
+        avatar: createdUser.avatar,
+        provider: 'GOOGLE',
+      },
+      accessToken: expect.any(String),
+    });
+
+    const setCookie = res.headers['set-cookie'];
+    expect(setCookie).toBeDefined();
+    const refreshCookie = Array.isArray(setCookie) ? setCookie[0] : setCookie;
+    expect(refreshCookie).toContain('refreshToken=');
+    expect(refreshCookie.toLowerCase()).toContain('httponly');
+    expect(refreshCookie).toContain('SameSite=Strict');
+  });
+
+  it('vincula usuário existente pelo email quando já cadastrado', async () => {
+    prisma.user.findUnique.mockResolvedValueOnce(null); // by googleId
+
+    const existingUser = {
+      id: 'existing-user-1',
+      email: 'existing.user@finance.app',
+      name: '',
+      provider: 'LOCAL',
+      googleId: null,
+      avatar: null,
+    };
+
+    prisma.user.findUnique.mockResolvedValueOnce(existingUser); // by email
+
+    const updatedUser = {
+      ...existingUser,
+      provider: 'GOOGLE',
+      googleId: 'google-existing-1',
+      avatar: 'https://lh3.googleusercontent.com/a/AEdFTp67890',
+      name: 'Existing User',
+    };
+
+    prisma.user.update.mockResolvedValueOnce(updatedUser);
+
+    mockVerifyIdToken.mockResolvedValueOnce({
+      getPayload: () => createPayload({
+        email: existingUser.email,
+        sub: updatedUser.googleId,
+        name: updatedUser.name,
+        picture: updatedUser.avatar,
+      }),
+    });
+
+    const { csrfToken, csrfCookie } = await getCsrfToken();
+
+    const res = await request(app)
+      .post('/api/auth/google')
+      .set('Cookie', csrfCookie)
+      .set('X-CSRF-Token', csrfToken)
+      .send({ credential: 'valid-google-token-existing' });
+
+    expect(res.status).toBe(200);
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: existingUser.id },
+      data: expect.objectContaining({
+        googleId: updatedUser.googleId,
+        provider: 'GOOGLE',
+        avatar: updatedUser.avatar,
+        name: updatedUser.name,
+      }),
+    });
+    expect(res.body.user).toEqual({
+      id: updatedUser.id,
+      email: updatedUser.email,
+      name: updatedUser.name,
+      avatar: updatedUser.avatar,
+      provider: 'GOOGLE',
+    });
+  });
+
+  it('retorna 401 quando verifyIdToken lança erro', async () => {
+    mockVerifyIdToken.mockRejectedValueOnce(new Error('invalid token'));
+
+    const { csrfToken, csrfCookie } = await getCsrfToken();
+
+    const res = await request(app)
+      .post('/api/auth/google')
+      .set('Cookie', csrfCookie)
+      .set('X-CSRF-Token', csrfToken)
+      .send({ credential: 'invalid-token' });
 
     expect(res.status).toBe(401);
     expect(res.body.error).toBe('INVALID_GOOGLE_TOKEN');
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
   });
 
-  it('should return 400 when email not verified', async () => {
-    const payload = {
-      email: 'unverified@finance.app',
-      email_verified: false,
-      sub: 'google-789',
-    };
-
-    const { OAuth2Client } = await import('google-auth-library');
-    (OAuth2Client.prototype as any).__verifyResult = { getPayload: () => payload };
+  it('retorna 400 quando email não está verificado', async () => {
+    mockVerifyIdToken.mockResolvedValueOnce({
+      getPayload: () => createPayload({ email_verified: false }),
+    });
 
     const { csrfToken, csrfCookie } = await getCsrfToken();
+
     const res = await request(app)
       .post('/api/auth/google')
       .set('Cookie', csrfCookie)
       .set('X-CSRF-Token', csrfToken)
-      .send({ credential: 'dummy-token' });
+      .send({ credential: 'unverified-email-token' });
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('EMAIL_NOT_VERIFIED');
+    expect(prisma.user.create).not.toHaveBeenCalled();
   });
 });

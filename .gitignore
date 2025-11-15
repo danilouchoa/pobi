@@ -9,9 +9,10 @@ pnpm-debug.log*
 lerna-debug.log*
 .pnp
 .pnp.js
-package-lock.json
-yarn.lock
-MIGRATION_ENUM_BILLING.md
+
+# NOTE: commit lockfiles (package-lock.json / yarn.lock) per-package to
+# ensure repeatable installs. Remove the lines above if you intentionally
+# want to ignore lockfiles at the repo root.
 
 #QUODANA
 .qodana-report.json

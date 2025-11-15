@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: external-dns
+  labels:
+    app.kubernetes.io/name: external-dns
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: external-dns
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: external-dns
+    spec:
+      serviceAccountName: external-dns
+      containers:
+        - name: external-dns
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --provider=cloudflare
+            {{- range .Values.sources }}
+            - --source={{ . }}
+            {{- end }}
+            - --policy={{ .Values.policy }}
+            - --registry={{ .Values.registry }}
+            - --txt-owner-id={{ .Values.txtOwnerId }}
+            - --interval={{ .Values.interval }}
+            - --log-level={{ .Values.logLevel }}
+            {{- range .Values.domainFilters }}
+            - --domain-filter={{ . }}
+            {{- end }}
+          env:
+            - name: CF_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.cloudflare.apiTokenSecretName }}
+                  key: CF_API_TOKEN
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
