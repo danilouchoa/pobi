@@ -392,31 +392,44 @@ export default function expensesRoutes(prisma: PrismaClient) {
         return res.status(401).json({ message: 'Não autorizado.' });
       }
 
-  const payloads = Array.isArray(req.body) ? (req.body as ExpensePayload[]) : [];
+      const payloads = Array.isArray(req.body) ? (req.body as ExpensePayload[]) : [];
 
       if (!payloads.length) {
         return res.status(400).json({ message: 'Informe ao menos uma despesa.' });
       }
 
+      const createData = payloads.map((payload) => buildCreateData(userId, payload));
 
       // Detecta se é parcelado: todas as parcelas têm o mesmo valor de installments > 1
       const isInstallment =
-        payloads.length > 1 &&
-        payloads.every((payload) => {
+        createData.length > 1 &&
+        createData.every((payload) => {
           const installments = payload.installments ?? null;
           return installments != null && installments > 1;
         });
+
       // Gera um groupId se for parcelado
       const groupId = isInstallment ? crypto.randomBytes(12).toString('hex') : null;
-      const createData = payloads.map((payload) => {
-        const base = buildCreateData(userId, payload);
-        return groupId ? { ...base, installmentGroupId: groupId } : base;
+
+      const createDataWithGroup = createData.map((payload, index) => {
+        const installments = payload.installments ?? null;
+        const parcela = installments && installments > 1 ? `${index + 1}/${installments}` : payload.parcela;
+
+        if (isInstallment && groupId) {
+          return {
+            ...payload,
+            parcela,
+            installmentGroupId: payload.installmentGroupId ?? groupId,
+          };
+        }
+
+        return { ...payload, parcela };
       });
       const originCache = new Map<string, Origin | null>();
 
       const expenses: Expense[] = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         const created: Expense[] = [];
-        for (const data of createData) {
+        for (const data of createDataWithGroup) {
           const billingMonth = await computeBillingMonth(tx, data.originId ?? null, data.date, originCache);
           const expense = await tx.expense.create({ data: { ...data, billingMonth } });
           created.push(expense);
