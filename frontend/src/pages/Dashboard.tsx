@@ -26,6 +26,7 @@ import { useToast } from "../hooks/useToast";
 import ConfirmInstallmentDeleteModal from "../components/ConfirmInstallmentDeleteModal";
 import { useSelectedInstallments } from "../hooks/useSelectedInstallments";
 import { useDeleteInstallments } from "../hooks/useDeleteInstallments";
+import { validateInstallmentGroup } from "../utils/installments";
 import type { Debtor, Expense, Origin } from "../types";
 
 const palette = ["#6366f1", "#3b82f6", "#10b981", "#f97316", "#ec4899", "#0ea5e9"] as const;
@@ -180,8 +181,8 @@ export default function Dashboard({ state, month, onChangeMonth, viewMode, onCha
 
   const handleDeleteSelection = () => {
     if (!selectedExpenses.length) return;
-    const uniqueGroupIds = new Set(selectedExpenses.map((expense) => expense.installmentGroupId ?? null));
-    if (selectedExpenses.length > 1 && uniqueGroupIds.size > 1) {
+    const validation = validateInstallmentGroup(selectedExpenses);
+    if (!validation.isValid) {
       toast.warning(
         "As parcelas selecionadas pertencem a grupos diferentes. A exclusão em massa só funciona dentro do mesmo agrupamento."
       );
@@ -190,7 +191,7 @@ export default function Dashboard({ state, month, onChangeMonth, viewMode, onCha
 
     setDeleteContext({
       ids: selectedExpenses.map((expense) => expense.id),
-      groupId: selectedExpenses[0]?.installmentGroupId ?? null,
+      groupId: validation.groupId,
     });
   };
 
