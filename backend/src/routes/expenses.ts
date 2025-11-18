@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient, Origin, Expense, Prisma } from '@prisma/client';
-import crypto from 'crypto';
+import { randomBytes } from 'crypto';
 import { addMonths, startOfMonth, format } from 'date-fns';
 import {
   addByRecurrence,
@@ -405,18 +405,24 @@ export default function expensesRoutes(prisma: PrismaClient) {
         const installments = payload.installments ?? null;
         return installments != null && installments > 1;
       });
-      const isInstallment = createData.length > 1 && installmentCandidates.length > 0;
+      const hasParcelaPattern = createData.some((payload) => {
+        const normalizedParcela = typeof payload.parcela === 'string' ? payload.parcela.replace(/\s+/g, '') : '';
+        return INSTALLMENT_FORMAT_REGEX.test(normalizedParcela);
+      });
+      const isInstallment = createData.length > 1 && (installmentCandidates.length > 0 || hasParcelaPattern);
 
       // Gera (ou reaproveita) um único groupId se for parcelado
       const groupId = isInstallment
         ? createData.find((payload) => payload.installmentGroupId)?.installmentGroupId ??
-          crypto.randomBytes(12).toString('hex')
+          generateInstallmentGroupId()
         : null;
 
       if (isInstallment && groupId) {
         console.info('[expenses.batch] Parcelamento detectado', {
           parcelas: createData.length,
           parcelasComInstallments: installmentCandidates.length,
+          installmentsInformados: installmentCandidates[0]?.installments ?? null,
+          parcelaPattern: hasParcelaPattern,
           installmentGroupId: groupId,
         });
       }
@@ -434,6 +440,7 @@ export default function expensesRoutes(prisma: PrismaClient) {
           console.info('[expenses.batch] Criando parcela', {
             parcela: `${index + 1}/${createData.length}`,
             installmentGroupId: groupId,
+            installmentsDeclarados: payload.installments ?? null,
           });
           return data;
         }
