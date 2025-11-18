@@ -99,6 +99,7 @@ export const createExpenseSchema = z.object({
   // Relacionamentos opcionais
   originId: objectIdSchema.optional(),
   debtorId: objectIdSchema.optional(),
+  installmentGroupId: objectIdSchema.optional(),
   
   // Campos de recorrência
   recurring: z.boolean().default(false),
