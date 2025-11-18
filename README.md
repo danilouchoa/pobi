@@ -31,11 +31,13 @@ Workflows modulares garantem qualidade antes do merge:
 
 - feat(auth): `POST /api/auth/google` validando ID token via `google-auth-library`, vinculando contas existentes e persistindo avatar/provider. Cookies httpOnly respeitam `COOKIE_DOMAIN`, `SameSite=strict`, tempo de 7 dias e logs não expõem credenciais.
 - feat(security): CORS agora usa allowlist (`FRONTEND_ORIGIN` + `CORS_ORIGINS`) com `credentials=true`, Helmet ativado com CSP liberando apenas `accounts.google.com`/`*.gstatic.com` e rota `/api/csrf-token` restabelecida para trabalhar com `csurf`.
+- feat(auth): `GET /api/auth/me` devolve o perfil autenticado a partir do access token e retorna 404 caso a conta tenha sido removida.
 
 ### Frontend
 
 - feat(login): app envolvido por `GoogleOAuthProvider`, botão do `@react-oauth/google` envia `credential` para o backend e `Login.jsx` dispara toasts para falhas locais/Google ao invés do alerta silencioso.
 - feat(UI): Avatar global exibe foto do Google quando disponível; hook `useToast` deixa de ser stub e usa `notistack` + `mapBackendError`.
+- feat(auth): o `AuthProvider` agora hidrata o usuário com `/api/auth/me` após renovar o access token, garantindo sincronismo mesmo após refresh por cookie httpOnly.
 
 ### DevEx / Manutenção
 
