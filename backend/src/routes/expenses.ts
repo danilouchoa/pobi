@@ -400,27 +400,42 @@ export default function expensesRoutes(prisma: PrismaClient) {
 
       const createData = payloads.map((payload) => buildCreateData(userId, payload));
 
-      // Detecta se é parcelado: todas as parcelas têm o mesmo valor de installments > 1
-      const isInstallment =
-        createData.length > 1 &&
-        createData.every((payload) => {
-          const installments = payload.installments ?? null;
-          return installments != null && installments > 1;
-        });
+      // Detecta se é parcelado: pelo menos uma parcela com installments > 1 em um lote
+      const installmentCandidates = createData.filter((payload) => {
+        const installments = payload.installments ?? null;
+        return installments != null && installments > 1;
+      });
+      const isInstallment = createData.length > 1 && installmentCandidates.length > 0;
 
-      // Gera um groupId se for parcelado
-      const groupId = isInstallment ? crypto.randomBytes(12).toString('hex') : null;
+      // Gera (ou reaproveita) um único groupId se for parcelado
+      const groupId = isInstallment
+        ? createData.find((payload) => payload.installmentGroupId)?.installmentGroupId ??
+          crypto.randomBytes(12).toString('hex')
+        : null;
+
+      if (isInstallment && groupId) {
+        console.info('[expenses.batch] Parcelamento detectado', {
+          parcelas: createData.length,
+          parcelasComInstallments: installmentCandidates.length,
+          installmentGroupId: groupId,
+        });
+      }
 
       const createDataWithGroup = createData.map((payload, index) => {
         const installments = payload.installments ?? null;
         const parcela = installments && installments > 1 ? `${index + 1}/${installments}` : payload.parcela;
 
         if (isInstallment && groupId) {
-          return {
+          const data = {
             ...payload,
             parcela,
-            installmentGroupId: payload.installmentGroupId ?? groupId,
+            installmentGroupId: groupId,
           };
+          console.info('[expenses.batch] Criando parcela', {
+            parcela: `${index + 1}/${createData.length}`,
+            installmentGroupId: groupId,
+          });
+          return data;
         }
 
         return { ...payload, parcela };
@@ -441,7 +456,7 @@ export default function expensesRoutes(prisma: PrismaClient) {
       });
 
       const invalidationMap = new Map<string, { month: string; mode: 'calendar' | 'billing' }>();
-  expenses.forEach((expense: Expense) => {
+      expenses.forEach((expense: Expense) => {
         const entries = buildInvalidationEntries(
           monthKeyFromInput(expense.date),
           expense.billingMonth ?? null
