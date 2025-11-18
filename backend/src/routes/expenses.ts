@@ -649,13 +649,13 @@ export default function expensesRoutes(prisma: PrismaClient) {
 
       const { id } = req.params;
 
-      const deletedExpense = await deleteExpenseById(prisma, userId, id);
+      const cascadeResult = await deleteExpenseById(prisma, userId, id);
 
-      if (!deletedExpense) {
+      if (!cascadeResult) {
         return res.status(404).json({ message: 'Despesa não encontrada.' });
       }
 
-      const invalidations = collectInvalidationTargets([deletedExpense]);
+      const invalidations = collectInvalidationTargets(cascadeResult.deleted);
 
       if (invalidations.length) {
         await invalidateExpenseCache(userId, invalidations);

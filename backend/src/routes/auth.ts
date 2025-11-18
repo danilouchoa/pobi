@@ -9,6 +9,7 @@ import { validate } from '../middlewares/validation';
 import { registerSchema, loginSchema, googleLoginSchema } from '../schemas/auth.schema';
 // import { authLimiter, authSensitiveLimiter } from '../middlewares/rateLimiter';
 import rateLimit from 'express-rate-limit';
+import { authenticate, type AuthenticatedRequest } from '../middlewares/auth';
 
 const SALT_ROUNDS = 10;
 const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -331,9 +332,43 @@ export default function authRoutes(prisma: PrismaClient) {
       });
     } catch (error) {
       console.error('[AUTH] Erro ao renovar token:', error);
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'INTERNAL_ERROR',
-        message: 'Erro interno no servidor.' 
+        message: 'Erro interno no servidor.'
+      });
+    }
+  });
+
+  // ==========================================================================
+  // GET /api/auth/me - Retorna usuário autenticado a partir do access token
+  // ==========================================================================
+  router.get('/me', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+    const userId = req.userId;
+
+    if (!userId) {
+      return res.status(401).json({
+        error: 'UNAUTHORIZED',
+        message: 'Não autorizado.'
+      });
+    }
+
+    try {
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+
+      if (!user) {
+        console.warn(`[AUTH] User not found during /me lookup: ${userId}`);
+        return res.status(404).json({
+          error: 'USER_NOT_FOUND',
+          message: 'Usuário não encontrado.'
+        });
+      }
+
+      return res.json({ user: sanitizeUser(user) });
+    } catch (error) {
+      console.error('[AUTH] Erro ao consultar perfil do usuário:', error);
+      return res.status(500).json({
+        error: 'INTERNAL_ERROR',
+        message: 'Erro interno no servidor.'
       });
     }
   });

@@ -37,14 +37,38 @@ export function AuthProvider({ children }) {
   const [authError, setAuthError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const queryClient = useQueryClient();
+
+  const resetSession = useCallback(
+    async (message = null) => {
+      setToken(null);
+      setUser(null);
+      setAuthError(message);
+      try {
+        await queryClient.clear();
+      } catch (err) {
+        console.warn("[Auth] Failed to clear query cache:", err);
+      }
+    },
+    [queryClient]
+  );
+
+  const fetchCurrentUser = useCallback(async () => {
+    try {
+      const { data } = await api.get("/api/auth/me");
+      setUser(data.user);
+      return data.user;
+    } catch (error) {
+      const message = error.response?.data?.message ?? "Sessão expirada. Faça login novamente.";
+      await resetSession(message);
+      throw error;
+    }
+  }, [resetSession]);
 
   // Definir token no axios quando mudar
   useEffect(() => {
     setAuthToken(token);
   }, [token]);
-
-  // React Query client - usado para limpar/invalidar cache entre sessões
-  const queryClient = useQueryClient();
 
   // Cachear user no localStorage (apenas para UX, não é sensível)
   useEffect(() => {
@@ -65,40 +89,33 @@ export function AuthProvider({ children }) {
       setIsRefreshing(true);
       try {
         const { data } = await api.post("/api/auth/refresh");
+        setAuthToken(data.accessToken);
         setToken(data.accessToken);
+        await fetchCurrentUser();
         return data.accessToken;
       } catch (e) {
         console.warn("[Auth] Refresh token expired or invalid, redirecting to login", e);
-        setToken(null);
-        setUser(null);
-        try {
-          await queryClient.clear();
-        } catch (err) {
-          console.warn("[Auth] Failed to clear query cache:", err);
-        }
-        setAuthError("Sessão expirada. Faça login novamente.");
+        await resetSession("Sessão expirada. Faça login novamente.");
         return null;
       } finally {
         setIsRefreshing(false);
       }
-    },
-    [isRefreshing, queryClient]
-  );
+      },
+      [isRefreshing, fetchCurrentUser, resetSession]
+    );
 
   // Registrar handler para 401 (access token expirado)
   useEffect(() => {
-    registerUnauthorizedHandler(async () => {
-      console.log("[Auth] Access token expired, attempting refresh...");
-      const newToken = await refreshAccessToken();
+      registerUnauthorizedHandler(async () => {
+        console.log("[Auth] Access token expired, attempting refresh...");
+        const newToken = await refreshAccessToken();
 
-      if (!newToken) {
-        // Refresh falhou → redirecionar para login
-        setAuthError("Sessão expirada. Faça login novamente.");
-        setToken(null);
-        setUser(null);
-      }
-    });
-  }, [refreshAccessToken]);
+        if (!newToken) {
+          // Refresh falhou → redirecionar para login
+          await resetSession("Sessão expirada. Faça login novamente.");
+        }
+      });
+    }, [refreshAccessToken, resetSession]);
 
   /**
    * Tenta restaurar sessão ao carregar app
@@ -193,17 +210,9 @@ export function AuthProvider({ children }) {
       console.error("[Auth] Error during logout:", error);
       // Mesmo com erro, limpar state local
     } finally {
-      setToken(null);
-      setUser(null);
-      setAuthError(null);
-      // Limpar cache do QueryClient para evitar que dados da sessão anterior persistam
-      try {
-        await queryClient.clear();
-      } catch (e) {
-        console.warn("[Auth] Failed to clear query cache on logout:", e);
-      }
+      await resetSession(null);
     }
-  }, [queryClient]);
+  }, [resetSession]);
 
   const value = useMemo(
     () => ({
