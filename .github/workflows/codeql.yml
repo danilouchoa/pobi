@@ -13,25 +13,23 @@ on:
   push:
     branches: [ "main" ]
     paths:
-      - 'backend/**/*.ts'
-      - 'backend/**/*.js'
-      - 'frontend/**/*.ts'
-      - 'frontend/**/*.tsx'
-      - 'frontend/**/*.jsx'
-      - 'backend/package.json'
-      - 'frontend/package.json'
+      - 'backend/**'
+      - 'frontend/**'
       - '.github/workflows/codeql.yml'
   pull_request:
     branches: [ "main" ]
+    types: [ opened, synchronize, reopened, ready_for_review ]
     paths:
-      - 'backend/**/*.ts'
-      - 'backend/**/*.js'
-      - 'frontend/**/*.ts'
-      - 'frontend/**/*.tsx'
-      - 'frontend/**/*.jsx'
+      - 'backend/**'
+      - 'frontend/**'
+      - '.github/workflows/codeql.yml'
   schedule:
     # Run weekly scan on Sundays at 9:33 PM UTC (6:33 PM BRT)
     - cron: '33 21 * * 0'
+
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   analyze:

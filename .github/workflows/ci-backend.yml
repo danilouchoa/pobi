@@ -2,9 +2,23 @@ name: CI Backend
 
 on:
   push:
-    branches: [ main, 'feature/*', 'bugfix/*', 'hotfix/*' ]
+    branches: [ main ]
+    paths:
+      - 'backend/**'
+      - 'infra/**'
+      - 'helm/**'
+      - '.github/workflows/ci-backend.yml'
   pull_request:
     branches: [ main ]
+    paths:
+      - 'backend/**'
+      - 'infra/**'
+      - 'helm/**'
+      - '.github/workflows/ci-backend.yml'
+
+concurrency:
+  group: ci-backend-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

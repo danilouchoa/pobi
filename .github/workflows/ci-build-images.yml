@@ -3,8 +3,17 @@ name: CI Build Images
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'docker-compose.yaml'
+      - 'helm/**'
+      - 'infra/**'
+      - '.github/workflows/ci-build-images.yml'
+
+concurrency:
+  group: ci-build-images-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-push:

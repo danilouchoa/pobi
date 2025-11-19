@@ -3,7 +3,8 @@ updates:
   - package-ecosystem: 'npm'
     directory: '/backend'
     schedule:
-      interval: 'daily'
+      interval: 'weekly'
+      day: 'sunday'
       time: '14:02'
       timezone: 'America/Sao_Paulo'
     target-branch: 'main'
@@ -17,7 +18,8 @@ updates:
   - package-ecosystem: 'npm'
     directory: '/frontend'
     schedule:
-      interval: 'daily'
+      interval: 'weekly'
+      day: 'sunday'
       time: '14:02'
       timezone: 'America/Sao_Paulo'
     target-branch: 'main'
