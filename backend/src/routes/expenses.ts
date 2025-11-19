@@ -582,7 +582,7 @@ export default function expensesRoutes(prisma: PrismaClient) {
         if (isInstallment) {
           dataToCreate = {
             ...dataToCreate,
-            installmentGroupId: crypto.randomBytes(12).toString('hex'),
+            installmentGroupId: generateInstallmentGroupId(),
           };
         }
       }
