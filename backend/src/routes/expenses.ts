@@ -17,7 +17,7 @@ import { publishRecurringJob, publishBulkUpdateJob } from '../lib/rabbit';
 import { applyBulkUnifiedUpdate, applyBulkDelete } from '../services/bulkUpdateService';
 import { getOrSetCache } from '../lib/redisCache';
 import { deriveBillingMonth, BillingRolloverPolicy } from '../lib/billing';
-import { deleteExpenseCascade, deleteExpenseById } from '../services/installmentDeletionService';
+import { deleteExpenseCascade, deleteSingleExpense } from '../services/installmentDeletionService';
 import {
   ExpenseViewMode,
   buildExpenseCacheKey,
@@ -686,13 +686,13 @@ export default function expensesRoutes(prisma: PrismaClient) {
 
       const { id } = req.params;
 
-      const cascadeResult = await deleteExpenseById(prisma, userId, id);
+      const deletedExpense = await deleteSingleExpense(prisma, userId, id);
 
-      if (!cascadeResult) {
+      if (!deletedExpense) {
         return res.status(404).json({ message: 'Despesa não encontrada.' });
       }
 
-      const invalidations = collectInvalidationTargets(cascadeResult.deleted);
+      const invalidations = collectInvalidationTargets([deletedExpense]);
 
       if (invalidations.length) {
         await invalidateExpenseCache(userId, invalidations);

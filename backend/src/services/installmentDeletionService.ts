@@ -23,6 +23,8 @@ type DeleteCascadeResult = {
   deleted: ExpenseRecord[];
 };
 
+type PrismaExecutor = PrismaClient | Prisma.TransactionClient;
+
 const normalizeParcela = (value: string | null | undefined) => {
   if (!value) return null;
   const trimmed = value.trim();
@@ -118,8 +120,41 @@ export async function deleteExpenseById(
   return prisma.$transaction((tx) => deleteExpenseCascade(tx, userId, expense as any));
 }
 
+export async function deleteSingleExpense(
+  prisma: PrismaExecutor,
+  userId: string,
+  target: string | ExpenseRecord
+): Promise<ExpenseRecord | null> {
+  const expense =
+    typeof target === 'string'
+      ? await prisma.expense.findFirst({
+          where: { id: target, userId },
+          select: {
+            id: true,
+            description: true,
+            parcela: true,
+            amount: true,
+            originId: true,
+            debtorId: true,
+            installments: true,
+            date: true,
+            billingMonth: true,
+            fingerprint: true,
+            installmentGroupId: true,
+          },
+        })
+      : target;
+
+  if (!expense) {
+    return null;
+  }
+
+  await prisma.expense.delete({ where: { id: expense.id } });
+  return expense as ExpenseRecord;
+}
+
 export async function deleteExpenseCascade(
-  prisma: PrismaClient | Prisma.TransactionClient,
+  prisma: PrismaExecutor,
   userId: string,
   expense: ExpenseRecord
 ): Promise<DeleteCascadeResult> {
