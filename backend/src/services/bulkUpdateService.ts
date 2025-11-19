@@ -226,9 +226,8 @@ export async function applyBulkDelete(
   });
   if (!existing.length) return { deletedCount: 0 };
 
-  const selectedIds = new Set(ids);
   const groupedSelections = new Map<string, typeof existing>();
-  const pendingSingleDeletes: typeof existing = [];
+  const pendingStandalone: typeof existing = [];
 
   for (const expense of existing) {
     if (expense.installmentGroupId) {
@@ -236,7 +235,7 @@ export async function applyBulkDelete(
       bucket.push(expense);
       groupedSelections.set(expense.installmentGroupId, bucket);
     } else {
-      pendingSingleDeletes.push(expense);
+      pendingStandalone.push(expense);
     }
   }
 
@@ -271,9 +270,12 @@ export async function applyBulkDelete(
 
   const allDeleted: typeof existing = [];
   const invalidationMap = new Map<string, { month: string; mode: 'calendar' | 'billing' }>();
+  const deletedIds = new Set<string>();
 
   const registerDeleted = (records: typeof existing) => {
     records.forEach((deletedExpense) => {
+      if (deletedIds.has(deletedExpense.id)) return;
+      deletedIds.add(deletedExpense.id);
       allDeleted.push(deletedExpense);
       const calendarMonth = monthKeyFromInput(deletedExpense.date);
       const entries = buildInvalidationEntries(
@@ -290,20 +292,39 @@ export async function applyBulkDelete(
     });
   };
 
+  const cascadeKeys = new Set<string>();
+  const buildCascadeKey = (expense: (typeof existing)[number]) =>
+    expense.installmentGroupId ||
+    expense.fingerprint?.split('-')[0] ||
+    `${expense.description}|${expense.parcela}|${expense.amount}|${expense.installments}`;
+
   for (const [groupId, selectedExpenses] of groupedSelections.entries()) {
     const fullGroup = groupExpenses.get(groupId) ?? [];
-    const isCompleteSelection =
-      fullGroup.length > 0 && fullGroup.every((expense) => selectedIds.has(expense.id));
-
-    if (isCompleteSelection) {
+    if (fullGroup.length) {
       const cascadeResult = await deleteExpenseCascade(prisma, userId, fullGroup[0] as any);
       registerDeleted(cascadeResult.deleted as typeof existing);
+      cascadeKeys.add(groupId);
     } else {
-      pendingSingleDeletes.push(...selectedExpenses);
+      pendingStandalone.push(...selectedExpenses);
     }
   }
 
-  for (const expense of pendingSingleDeletes) {
+  const INSTALLMENT_REGEX = /^\d+\s*\/\s*\d+$/;
+
+  for (const expense of pendingStandalone) {
+    const cascadeKey = buildCascadeKey(expense);
+    const isInstallmentLike =
+      !!expense.installmentGroupId ||
+      INSTALLMENT_REGEX.test(expense.parcela ?? '') ||
+      (expense.installments ?? 0) > 1;
+
+    if (isInstallmentLike && !cascadeKeys.has(cascadeKey)) {
+      const cascadeResult = await deleteExpenseCascade(prisma, userId, expense as any);
+      registerDeleted(cascadeResult.deleted as typeof existing);
+      cascadeKeys.add(cascadeKey);
+      continue;
+    }
+
     const deleted = await deleteSingleExpense(prisma, userId, expense as any);
     if (deleted) {
       registerDeleted([deleted] as typeof existing);
