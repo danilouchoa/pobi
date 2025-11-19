@@ -40,6 +40,8 @@ import {
 // Timeout para transações de batch (suporta até MAX_BATCH_SIZE parcelas)
 const BATCH_TRANSACTION_TIMEOUT_MS = 30000; // 30 segundos
 
+const generateInstallmentGroupId = () => randomBytes(12).toString('hex');
+
 type AuthenticatedRequest = Request<
   Record<string, string>,
   any,
