@@ -19,13 +19,14 @@ export default function ConfirmInstallmentDeleteModal({
 }: ConfirmInstallmentDeleteModalProps) {
   const label = count === 1 ? "parcela" : "parcelas";
   const groupLabel = groupId ? `#${groupId}` : "sem identificador";
+  const confirmationMessage = `Você confirma a exclusão de ${count} ${label}(s) do agrupamento ${groupLabel}?`;
 
   return (
     <Dialog open={open} onClose={loading ? undefined : onCancel}>
-      <DialogTitle>Confirmar exclusão</DialogTitle>
+      <DialogTitle>Excluir parcelas</DialogTitle>
       <DialogContent>
         <Typography component="p" sx={{ mb: 1.5 }}>
-          Você confirma a exclusão de <strong>{count}</strong> {label}(s) do agrupamento <strong>{groupLabel}</strong>?
+          {confirmationMessage}
         </Typography>
         <Typography component="p" color="text.secondary">
           Essa ação é irreversível.
