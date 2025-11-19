@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient, Origin, Expense, Prisma } from '@prisma/client';
-import crypto from 'crypto';
+import { randomBytes } from 'crypto';
 import { addMonths, startOfMonth, format } from 'date-fns';
 import {
   addByRecurrence,
@@ -17,7 +17,7 @@ import { publishRecurringJob, publishBulkUpdateJob } from '../lib/rabbit';
 import { applyBulkUnifiedUpdate, applyBulkDelete } from '../services/bulkUpdateService';
 import { getOrSetCache } from '../lib/redisCache';
 import { deriveBillingMonth, BillingRolloverPolicy } from '../lib/billing';
-import { deleteExpenseCascade, deleteExpenseById } from '../services/installmentDeletionService';
+import { deleteExpenseCascade, deleteSingleExpense } from '../services/installmentDeletionService';
 import {
   ExpenseViewMode,
   buildExpenseCacheKey,
@@ -39,6 +39,8 @@ import {
 
 // Timeout para transações de batch (suporta até MAX_BATCH_SIZE parcelas)
 const BATCH_TRANSACTION_TIMEOUT_MS = 30000; // 30 segundos
+
+const generateInstallmentGroupId = () => randomBytes(12).toString('hex');
 
 type AuthenticatedRequest = Request<
   Record<string, string>,
@@ -392,31 +394,66 @@ export default function expensesRoutes(prisma: PrismaClient) {
         return res.status(401).json({ message: 'Não autorizado.' });
       }
 
-  const payloads = Array.isArray(req.body) ? (req.body as ExpensePayload[]) : [];
+      const payloads = Array.isArray(req.body) ? (req.body as ExpensePayload[]) : [];
 
       if (!payloads.length) {
         return res.status(400).json({ message: 'Informe ao menos uma despesa.' });
       }
 
+      const createData = payloads.map((payload) => buildCreateData(userId, payload));
 
-      // Detecta se é parcelado: todas as parcelas têm o mesmo valor de installments > 1
-      const isInstallment =
-        payloads.length > 1 &&
-        payloads.every((payload) => {
-          const installments = payload.installments ?? null;
-          return installments != null && installments > 1;
+      // Detecta se é parcelado: pelo menos uma parcela com installments > 1 em um lote
+      const installmentCandidates = createData.filter((payload) => {
+        const installments = payload.installments ?? null;
+        return installments != null && installments > 1;
+      });
+      const hasParcelaPattern = createData.some((payload) => {
+        const normalizedParcela = typeof payload.parcela === 'string' ? payload.parcela.replace(/\s+/g, '') : '';
+        return INSTALLMENT_FORMAT_REGEX.test(normalizedParcela);
+      });
+      const isInstallment = createData.length > 1 && (installmentCandidates.length > 0 || hasParcelaPattern);
+
+      // Gera (ou reaproveita) um único groupId se for parcelado
+      const groupId = isInstallment
+        ? createData.find((payload) => payload.installmentGroupId)?.installmentGroupId ??
+          generateInstallmentGroupId()
+        : null;
+
+      if (isInstallment && groupId) {
+        console.info('[expenses.batch] Parcelamento detectado', {
+          parcelas: createData.length,
+          parcelasComInstallments: installmentCandidates.length,
+          installmentsInformados: installmentCandidates[0]?.installments ?? null,
+          parcelaPattern: hasParcelaPattern,
+          installmentGroupId: groupId,
         });
-      // Gera um groupId se for parcelado
-      const groupId = isInstallment ? crypto.randomBytes(12).toString('hex') : null;
-      const createData = payloads.map((payload) => {
-        const base = buildCreateData(userId, payload);
-        return groupId ? { ...base, installmentGroupId: groupId } : base;
+      }
+
+      const createDataWithGroup = createData.map((payload, index) => {
+        const installments = payload.installments ?? null;
+        const parcela = installments && installments > 1 ? `${index + 1}/${installments}` : payload.parcela;
+
+        if (isInstallment && groupId) {
+          const data = {
+            ...payload,
+            parcela,
+            installmentGroupId: groupId,
+          };
+          console.info('[expenses.batch] Criando parcela', {
+            parcela: `${index + 1}/${createData.length}`,
+            installmentGroupId: groupId,
+            installmentsDeclarados: payload.installments ?? null,
+          });
+          return data;
+        }
+
+        return { ...payload, parcela };
       });
       const originCache = new Map<string, Origin | null>();
 
       const expenses: Expense[] = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         const created: Expense[] = [];
-        for (const data of createData) {
+        for (const data of createDataWithGroup) {
           const billingMonth = await computeBillingMonth(tx, data.originId ?? null, data.date, originCache);
           const expense = await tx.expense.create({ data: { ...data, billingMonth } });
           created.push(expense);
@@ -428,7 +465,7 @@ export default function expensesRoutes(prisma: PrismaClient) {
       });
 
       const invalidationMap = new Map<string, { month: string; mode: 'calendar' | 'billing' }>();
-  expenses.forEach((expense: Expense) => {
+      expenses.forEach((expense: Expense) => {
         const entries = buildInvalidationEntries(
           monthKeyFromInput(expense.date),
           expense.billingMonth ?? null
@@ -545,7 +582,7 @@ export default function expensesRoutes(prisma: PrismaClient) {
         if (isInstallment) {
           dataToCreate = {
             ...dataToCreate,
-            installmentGroupId: crypto.randomBytes(12).toString('hex'),
+            installmentGroupId: generateInstallmentGroupId(),
           };
         }
       }
@@ -649,7 +686,7 @@ export default function expensesRoutes(prisma: PrismaClient) {
 
       const { id } = req.params;
 
-      const deletedExpense = await deleteExpenseById(prisma, userId, id);
+      const deletedExpense = await deleteSingleExpense(prisma, userId, id);
 
       if (!deletedExpense) {
         return res.status(404).json({ message: 'Despesa não encontrada.' });

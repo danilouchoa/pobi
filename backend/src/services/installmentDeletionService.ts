@@ -22,7 +22,8 @@ type ExpenseRecord = {
 type DeleteCascadeResult = {
   deleted: ExpenseRecord[];
 };
-type SingleDeleteResult = ExpenseRecord | null;
+
+type PrismaExecutor = PrismaClient | Prisma.TransactionClient;
 
 const normalizeParcela = (value: string | null | undefined) => {
   if (!value) return null;
@@ -94,36 +95,66 @@ export async function deleteExpenseById(
   prisma: PrismaClient,
   userId: string,
   expenseId: string
-): Promise<SingleDeleteResult> {
-  return prisma.$transaction(async (tx) => {
-    const expense = await tx.expense.findFirst({
-      where: { id: expenseId, userId },
-      select: {
-        id: true,
-        description: true,
-        parcela: true,
-        amount: true,
-        originId: true,
-        debtorId: true,
-        installments: true,
-        date: true,
-        billingMonth: true,
-        fingerprint: true,
-        installmentGroupId: true,
-      },
-    });
-
-    if (!expense) {
-      return null;
-    }
-
-    await tx.expense.delete({ where: { id: expense.id } });
-    return expense as ExpenseRecord;
+): Promise<DeleteCascadeResult | null> {
+  const expense = await prisma.expense.findFirst({
+    where: { id: expenseId, userId },
+    select: {
+      id: true,
+      description: true,
+      parcela: true,
+      amount: true,
+      originId: true,
+      debtorId: true,
+      installments: true,
+      date: true,
+      billingMonth: true,
+      fingerprint: true,
+      installmentGroupId: true,
+    },
   });
+
+  if (!expense) {
+    return null;
+  }
+
+  return prisma.$transaction((tx) => deleteExpenseCascade(tx, userId, expense as any));
+}
+
+export async function deleteSingleExpense(
+  prisma: PrismaExecutor,
+  userId: string,
+  target: string | ExpenseRecord
+): Promise<ExpenseRecord | null> {
+  const expense =
+    typeof target === 'string'
+      ? await prisma.expense.findFirst({
+          where: { id: target, userId },
+          select: {
+            id: true,
+            description: true,
+            parcela: true,
+            amount: true,
+            originId: true,
+            debtorId: true,
+            installments: true,
+            date: true,
+            billingMonth: true,
+            fingerprint: true,
+            installmentGroupId: true,
+          },
+        })
+      : target;
+
+  if (!expense) {
+    return null;
+  }
+
+  await prisma.expense.delete({ where: { id: expense.id } });
+  return expense as ExpenseRecord;
 }
 
 export async function deleteExpenseCascade(
-  prisma: PrismaClient | Prisma.TransactionClient,
+  prisma: PrismaExecutor,
   userId: string,
   expense: ExpenseRecord
 ): Promise<DeleteCascadeResult> {
@@ -201,9 +232,63 @@ export async function deleteExpenseCascade(
     },
   });
 
-  const related = candidates.filter((record) =>
+  // Se alguma das candidatas já tiver installmentGroupId definido, use-o para
+  // apagar todas as parcelas diretamente pelo agrupamento persistido em banco.
+  const candidateWithGroupId = candidates.find(
+    (record) => !!record.installmentGroupId
+  );
+
+  if (candidateWithGroupId?.installmentGroupId) {
+    const related = await prisma.expense.findMany({
+      where: { userId, installmentGroupId: candidateWithGroupId.installmentGroupId },
+      select: {
+        id: true,
+        description: true,
+        parcela: true,
+        amount: true,
+        originId: true,
+        debtorId: true,
+        installments: true,
+        date: true,
+        billingMonth: true,
+        fingerprint: true,
+        installmentGroupId: true,
+      },
+    });
+
+    if (related.length) {
+      await prisma.expense.deleteMany({
+        where: { userId, installmentGroupId: candidateWithGroupId.installmentGroupId },
+      });
+
+      return {
+        deleted: related.map((record) => ({
+          id: record.id,
+          description: record.description,
+          parcela: record.parcela,
+          amount: record.amount,
+          originId: record.originId,
+          debtorId: record.debtorId,
+          installments: record.installments,
+          date: record.date,
+          billingMonth: record.billingMonth,
+          fingerprint: record.fingerprint,
+          installmentGroupId: record.installmentGroupId,
+        })),
+      };
+    }
+  }
+
+  let related = candidates.filter((record) =>
     groupFilter.pattern.test(record.description ?? '')
   );
+
+  // Alguns lançamentos antigos podem não ter a descrição no formato "(1/12)".
+  // Se nada casar pelo padrão, caia para todos os candidatos filtrados pelo
+  // restante dos campos (parcela, amount, origem/devedor, fingerprint etc.).
+  if (!related.length && candidates.length) {
+    related = candidates;
+  }
 
   if (!related.length) {
     await prisma.expense.delete({ where: { id: expense.id } });

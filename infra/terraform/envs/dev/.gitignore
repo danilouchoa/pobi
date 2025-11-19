@@ -1,0 +1,14 @@
+# State files
+terraform.tfstate
+terraform.tfstate.backup
+*.tfstate.*
+.terraform
+# Plans
+*.tfplan
+tfplan
+
+# Backup files
+*.backup
+
+# Example/template files (descomente se quiser ignorar)
+# terraform.tfvars.example

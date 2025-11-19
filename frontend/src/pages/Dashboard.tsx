@@ -1,6 +1,8 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Box,
+  Button,
+  Checkbox,
   Chip,
   Grid,
   Stack,
@@ -20,6 +22,11 @@ import MonthNavigator from "../components/MonthNavigator";
 import { toBRL, parseNum } from "../utils/helpers";
 import { DEFAULT_SALARY_TEMPLATE } from "../hooks/useFinanceApp";
 import { formatCurrency, formatDate } from "../utils/formatters";
+import { useToast } from "../hooks/useToast";
+import ConfirmInstallmentDeleteModal from "../components/ConfirmInstallmentDeleteModal";
+import { useSelectedInstallments } from "../hooks/useSelectedInstallments";
+import { useDeleteInstallments } from "../hooks/useDeleteInstallments";
+import { validateInstallmentGroup } from "../utils/installments";
 import type { Debtor, Expense, Origin } from "../types";
 
 const palette = ["#6366f1", "#3b82f6", "#10b981", "#f97316", "#ec4899", "#0ea5e9"] as const;
@@ -65,6 +72,8 @@ const groupBySum = <T,>(
 };
 
 export default function Dashboard({ state, month, onChangeMonth, viewMode, onChangeViewMode }: DashboardProps) {
+  const toast = useToast();
+  const [deleteContext, setDeleteContext] = useState<{ ids: string[]; groupId: string | null } | null>(null);
   const originById = useMemo(
     () => Object.fromEntries(state.origins.map((origin) => [origin.id, origin])),
     [state.origins]
@@ -73,6 +82,21 @@ export default function Dashboard({ state, month, onChangeMonth, viewMode, onCha
     () => Object.fromEntries(state.debtors.map((debtor) => [debtor.id, debtor.name])),
     [state.debtors]
   );
+
+  const expensesMonth = state.expenses;
+  const myExpensesMonth = expensesMonth.filter((expense) => !expense.debtorId);
+  const debtExpensesMonth = expensesMonth.filter((expense) => Boolean(expense.debtorId));
+  const displayedExpenses = useMemo(() => expensesMonth.slice(0, 10), [expensesMonth]);
+  const {
+    selectedIds,
+    selectedCount,
+    selectedExpenses,
+    isAllSelected,
+    toggleSelection,
+    toggleAllVisible,
+    clearSelection,
+  } = useSelectedInstallments(displayedExpenses);
+  const { deleteInstallments, isDeletingInstallments } = useDeleteInstallments({ month, mode: viewMode });
 
   useEffect(() => {
     console.log("Dashboard updated", {
@@ -83,9 +107,9 @@ export default function Dashboard({ state, month, onChangeMonth, viewMode, onCha
     });
   }, [state.expenses, state.origins, state.debtors, month]);
 
-  const expensesMonth = state.expenses;
-  const myExpensesMonth = expensesMonth.filter((expense) => !expense.debtorId);
-  const debtExpensesMonth = expensesMonth.filter((expense) => Boolean(expense.debtorId));
+  useEffect(() => {
+    clearSelection();
+  }, [month, viewMode, clearSelection]);
 
   const salaryData = state.salaryHistory[month] ?? DEFAULT_SALARY_TEMPLATE;
   const hours = parseNum(salaryData?.hours);
@@ -151,9 +175,49 @@ export default function Dashboard({ state, month, onChangeMonth, viewMode, onCha
       onChangeViewMode(value);
     }
   };
+  const isIndeterminateSelection = selectedCount > 0 && !isAllSelected;
+  const deleteButtonLabel =
+    selectedCount === 0 ? null : selectedCount === 1 ? "Excluir parcela" : "Excluir parcelas";
+
+  const handleDeleteSelection = () => {
+    if (!selectedExpenses.length) return;
+    const validation = validateInstallmentGroup(selectedExpenses);
+    if (!validation.isValid) {
+      toast.warning(
+        "As parcelas selecionadas pertencem a grupos diferentes. A exclusão em massa só funciona dentro do mesmo agrupamento."
+      );
+      return;
+    }
+
+    setDeleteContext({
+      ids: selectedExpenses.map((expense) => expense.id),
+      groupId: validation.groupId,
+    });
+  };
+
+  const closeDeleteModal = () => setDeleteContext(null);
+  const confirmDeleteSelection = async () => {
+    if (!deleteContext) return;
+    try {
+      await deleteInstallments(deleteContext.ids);
+      clearSelection();
+      setDeleteContext(null);
+    } catch {
+      // toast already handled inside the hook; keep modal open
+    }
+  };
 
   return (
-    <Stack spacing={3}>
+    <>
+      <ConfirmInstallmentDeleteModal
+        open={Boolean(deleteContext)}
+        count={deleteContext?.ids.length ?? 0}
+        groupId={deleteContext?.groupId ?? null}
+        onCancel={closeDeleteModal}
+        onConfirm={confirmDeleteSelection}
+        loading={isDeletingInstallments}
+      />
+      <Stack spacing={3}>
       <Box
         sx={{
           display: "flex",
@@ -278,6 +342,26 @@ export default function Dashboard({ state, month, onChangeMonth, viewMode, onCha
       </Section>
 
       <Section title="Últimos Lançamentos (Mês)">
+        <Stack
+          direction={{ xs: "column", sm: "row" }}
+          justifyContent="space-between"
+          alignItems={{ xs: "flex-start", sm: "center" }}
+          sx={{ mb: 2 }}
+        >
+          <Typography variant="body2" color="text.secondary">
+            {selectedCount} parcelas selecionadas
+          </Typography>
+          {deleteButtonLabel && (
+            <Button
+              variant="outlined"
+              color="error"
+              size="small"
+              onClick={handleDeleteSelection}
+            >
+              {deleteButtonLabel}
+            </Button>
+          )}
+        </Stack>
         <TableContainer
           sx={{
             borderRadius: 3,
@@ -289,6 +373,14 @@ export default function Dashboard({ state, month, onChangeMonth, viewMode, onCha
           <Table size="small">
             <TableHead sx={{ bgcolor: "grey.100" }}>
               <TableRow>
+                <TableCell padding="checkbox">
+                  <Checkbox
+                    checked={isAllSelected}
+                    indeterminate={isIndeterminateSelection}
+                    onChange={(event) => toggleAllVisible(event.target.checked)}
+                    inputProps={{ "aria-label": "Selecionar todas as parcelas visíveis" }}
+                  />
+                </TableCell>
                 <TableCell align="center" sx={{ fontWeight: 600, px: 2, py: 1.5 }}>
                   Data
                 </TableCell>
@@ -310,7 +402,7 @@ export default function Dashboard({ state, month, onChangeMonth, viewMode, onCha
               </TableRow>
             </TableHead>
             <TableBody>
-              {expensesMonth.slice(0, 10).map((expense) => (
+              {displayedExpenses.map((expense) => (
                 <TableRow
                   key={expense.id}
                   hover
@@ -318,6 +410,13 @@ export default function Dashboard({ state, month, onChangeMonth, viewMode, onCha
                     "&:nth-of-type(odd)": { bgcolor: "grey.50" },
                   }}
                 >
+                  <TableCell padding="checkbox">
+                    <Checkbox
+                      checked={selectedIds.has(expense.id)}
+                      onChange={(event) => toggleSelection(expense.id, event.target.checked)}
+                      inputProps={{ "aria-label": `Selecionar parcela ${expense.description}` }}
+                    />
+                  </TableCell>
                   <TableCell align="center" sx={{ px: 2, py: 1.25 }}>
                     {formatDate(expense.date)}
                   </TableCell>
@@ -360,7 +459,7 @@ export default function Dashboard({ state, month, onChangeMonth, viewMode, onCha
               ))}
               {expensesMonth.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
+                  <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
                     <Typography variant="body2" color="text.secondary">
                       Nenhum lançamento encontrado para este mês.
                     </Typography>
@@ -372,5 +471,6 @@ export default function Dashboard({ state, month, onChangeMonth, viewMode, onCha
         </TableContainer>
       </Section>
     </Stack>
+    </>
   );
 }

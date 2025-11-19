@@ -160,3 +160,10 @@ export async function bulkExpensesAction(payload: BulkUnifiedActionPayload) {
   );
   return data;
 }
+
+export async function deleteInstallments(installmentIds: string[]) {
+  if (!Array.isArray(installmentIds) || installmentIds.length === 0) return;
+  await api.delete("/api/installments", {
+    data: { installmentIds },
+  });
+}

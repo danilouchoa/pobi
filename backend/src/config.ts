@@ -5,6 +5,7 @@ dotenv.config();
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  SECURITY_MODE: z.enum(['strict', 'relaxed']).optional(),
   PORT: z
     .string()
     .optional()
@@ -73,6 +74,13 @@ if (!parsedEnv.success) {
   throw new Error('Invalid environment configuration.');
 }
 
+const resolvedSecurityMode =
+  parsedEnv.data.SECURITY_MODE ?? (parsedEnv.data.NODE_ENV === 'production' ? 'strict' : 'relaxed');
+
+if (parsedEnv.data.NODE_ENV === 'production' && resolvedSecurityMode === 'relaxed') {
+  console.warn('⚠️ SECURITY_MODE=relaxed em produção. Habilite apenas se entender os riscos.');
+}
+
 const rawCorsOrigins =
   parsedEnv.data.CORS_ORIGINS
     ?.split(',')
@@ -93,6 +101,7 @@ export const config = {
   jwtSecret: parsedEnv.data.JWT_SECRET,
   rabbitUrl: parsedEnv.data.RABBIT_URL,
   corsOrigins: derivedCorsOrigins,
+  securityMode: resolvedSecurityMode,
   validationEnabled: parsedEnv.data.VALIDATION_ENABLED,
   frontendOrigin: parsedEnv.data.FRONTEND_ORIGIN,
   cookieDomain: parsedEnv.data.COOKIE_DOMAIN,
@@ -101,6 +110,9 @@ export const config = {
 };
 
 export const isCorsAllowed = (origin?: string): boolean => {
+  if (config.securityMode === 'relaxed') {
+    return true;
+  }
   if (!origin || derivedCorsOrigins.length === 0 || derivedCorsOrigins.includes('*')) {
     return true;
   }

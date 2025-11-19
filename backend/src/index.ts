@@ -1,4 +1,4 @@
-import express, { Request } from 'express';
+import express, { type RequestHandler } from 'express';
 import cors from 'cors';
 import helmet, { type HelmetOptions } from 'helmet';
 import cookieParser from 'cookie-parser';
@@ -15,8 +15,8 @@ import healthRoutes from './routes/health';
 import dlqRoutes from './routes/dlq';
 import { requestLogger } from './middlewares/logger';
 import { globalErrorHandler, invalidJsonHandler } from './middlewares/errorHandler';
-import { config } from './config';
-// import { apiLimiter } from './middlewares/rateLimiter';
+import { config, isCorsAllowed } from './config';
+import { authLimiter, authSensitiveLimiter } from './middlewares/rateLimiter';
 
 const app = express();
 const port = config.port;
@@ -84,7 +84,7 @@ app.use(corsMiddleware);
 
 /**
  * Cookie Parser - Milestone #13
- * 
+ *
  * Permite ler cookies do request (req.cookies)
  * Necessário para refresh token armazenado em cookie httpOnly
  */
@@ -107,9 +107,11 @@ app.get('/api/csrf-token', (req, res) => {
 // CSRF protection removido
 
 // Rotas públicas (sem autenticação)
+// ============================================================================
 app.use('/api/auth', authRoutes(prisma));
 app.use('/api/health', healthRoutes); // Health check para Docker e monitoramento
 
+// ============================================================================
 // Rotas autenticadas
 app.use('/api/expenses', authenticate, expensesRoutes(prisma));
 app.use('/api/origins', authenticate, originsRoutes(prisma));
@@ -127,18 +129,15 @@ app.get('/api/status', (req, res) => {
   });
 });
 
-// TODO:
-// 1. Adicionar rotas protegidas (/api/expenses, /api/origins, etc.)
-
 // Middleware global de erros
 app.use(globalErrorHandler);
-
 
 // Só inicia o servidor se não estiver em ambiente de teste
 if (process.env.NODE_ENV !== 'test') {
   app.listen(port, () => {
     console.log(`🚀 Backend server pronto e rodando na porta ${port}`);
     console.log(`🔗 Teste em: http://localhost:${port}/api/status`);
+    console.log(`🔒 Security mode: ${config.securityMode}`);
   });
 }
 
