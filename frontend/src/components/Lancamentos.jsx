@@ -70,7 +70,7 @@ export default function Lancamentos({
     // Pagination
     const [page, setPage] = useState(1);
     const limit = 20;
-  const { expensesQuery: paginatedQuery, pagination, bulkUpdate, bulkDelete } = useExpenses(month, {
+  const { expensesQuery: paginatedQuery, pagination, bulkUpdate } = useExpenses(month, {
       enabled: true,
       mode: "calendar",
       page,
@@ -140,6 +140,11 @@ export default function Lancamentos({
     // Selection & bulk
     const [filterType, setFilterType] = useState("all");
     const [selectedIds, setSelectedIds] = useState(new Set());
+    const [selectedExpenseMap, setSelectedExpenseMap] = useState(new Map());
+    const clearSelection = useCallback(() => {
+      setSelectedIds(new Set());
+      setSelectedExpenseMap(new Map());
+    }, []);
     const [bulkModalOpen, setBulkModalOpen] = useState(false);
     const [bulkSubmitting, setBulkSubmitting] = useState(false);
     const [actionId, setActionId] = useState(null);
@@ -420,11 +425,17 @@ export default function Lancamentos({
         return true;
       });
     }, [paginatedExpenses, filterType]);
-    const toggleSelection = (id, checked) => {
+    const toggleSelection = (expense, checked) => {
       setSelectedIds((prev) => {
         const next = new Set(prev);
-        if (checked) next.add(id);
-        else next.delete(id);
+        if (checked) next.add(expense.id);
+        else next.delete(expense.id);
+        return next;
+      });
+      setSelectedExpenseMap((prev) => {
+        const next = new Map(prev);
+        if (checked) next.set(expense.id, expense);
+        else next.delete(expense.id);
         return next;
       });
     };
@@ -440,9 +451,86 @@ export default function Lancamentos({
         filteredExpenses.forEach((ex) => next.add(ex.id));
         return next;
       });
+      setSelectedExpenseMap((prev) => {
+        const next = new Map(prev);
+        if (!checked) {
+          filteredExpenses.forEach((ex) => next.delete(ex.id));
+        } else {
+          filteredExpenses.forEach((ex) => next.set(ex.id, ex));
+        }
+        return next;
+      });
     };
     const isAllSelected = filteredExpenses.length > 0 && filteredExpenses.every((ex) => selectedIds.has(ex.id));
     const isIndeterminate = selectedIds.size > 0 && !isAllSelected;
+
+    const selectedExpenses = useMemo(
+      () => Array.from(selectedExpenseMap.values()),
+      [selectedExpenseMap]
+    );
+
+    const getInstallmentTotal = (expense) => {
+      if (typeof expense.installments === "number" && expense.installments > 0) {
+        return expense.installments;
+      }
+      if (typeof expense.parcela === "string") {
+        const match = expense.parcela.match(INSTALLMENT_PATTERN);
+        if (match) {
+          const total = Number(match[2]);
+          if (Number.isFinite(total) && total > 0) return total;
+        }
+      }
+      return null;
+    };
+
+    const selectionSummary = useMemo(() => {
+      const summary = {
+        fullySelectedGroups: [],
+        individualExpenses: [],
+      };
+      if (!selectedExpenses.length) return summary;
+
+      const grouped = new Map();
+      selectedExpenses.forEach((expense) => {
+        if (!expense.installmentGroupId) {
+          summary.individualExpenses.push(expense);
+          return;
+        }
+        const existingGroup = grouped.get(expense.installmentGroupId) ?? {
+          expenses: [],
+          total: null,
+        };
+        existingGroup.expenses.push(expense);
+        if (!existingGroup.total) {
+          const total = getInstallmentTotal(expense);
+          if (total) existingGroup.total = total;
+        }
+        grouped.set(expense.installmentGroupId, existingGroup);
+      });
+
+      grouped.forEach((info, groupId) => {
+        if (info.total && info.expenses.length === info.total) {
+          summary.fullySelectedGroups.push({ groupId, expenses: info.expenses });
+        } else {
+          summary.individualExpenses.push(...info.expenses);
+        }
+      });
+
+      return summary;
+    }, [selectedExpenses]);
+
+    const selectedCount = selectedExpenses.length;
+
+    const bulkDeleteLabel = useMemo(() => {
+      if (!selectedCount) return "Excluir selecionados";
+      if (selectedCount === 1) return "Excluir lançamento selecionado";
+      if (selectionSummary.fullySelectedGroups.length && !selectionSummary.individualExpenses.length) {
+        return selectionSummary.fullySelectedGroups.length === 1
+          ? "Excluir todas as parcelas do grupo"
+          : "Excluir grupos selecionados";
+      }
+      return "Excluir lançamentos selecionados";
+    }, [selectedCount, selectionSummary]);
 
     // Bulk ops
     const handleBulkSubmit = async (values) => {
@@ -456,7 +544,7 @@ export default function Lancamentos({
         });
         toast.success();
         if (result?.jobId) toast.info(`Job ${result.jobId} agendado para processamento.`);
-        setSelectedIds(new Set());
+        clearSelection();
         setBulkModalOpen(false);
       } catch (e) {
         toast.error(e);
@@ -465,29 +553,51 @@ export default function Lancamentos({
       }
     };
     const handleBulkDelete = async () => {
-      if (!selectedIds.size) return;
-      const count = selectedIds.size;
-      
-      // Check if any selected expense is an installment
-      const selectedExpenses = filteredExpenses.filter((ex) => selectedIds.has(ex.id));
-      const hasInstallments = selectedExpenses.some((ex) => 
-        ex.parcela && ex.parcela !== "Único" && INSTALLMENT_PATTERN.test(ex.parcela)
-      );
-      
-      let confirmMessage = `Excluir ${count} lançamento(s)?`;
-      if (hasInstallments) {
-        confirmMessage = `⚠️ ATENÇÃO: Você selecionou ${count} lançamento(s) e pelo menos um é PARCELADO.\n\nAo confirmar, TODAS as parcelas relacionadas serão excluídas automaticamente (não só as visíveis nesta página).\n\nEsta ação NÃO pode ser desfeita.\n\nDeseja continuar?`;
+      if (!selectedCount) return;
+
+      const { fullySelectedGroups, individualExpenses } = selectionSummary;
+      const isSingleSelection = selectedCount === 1;
+      const singleExpense = selectedExpenses[0];
+
+      let confirmMessage = "";
+      if (isSingleSelection) {
+        confirmMessage = singleExpense.installmentGroupId
+          ? "Excluir somente esta parcela selecionada? Esta ação não pode ser desfeita."
+          : "Excluir o lançamento selecionado? Esta ação não pode ser desfeita.";
+      } else if (fullySelectedGroups.length && individualExpenses.length) {
+        confirmMessage = `Você está prestes a excluir ${fullySelectedGroups.length} grupo(s) completo(s) de parcelas e ${individualExpenses.length} lançamento(s) individual(is). Esta ação não pode ser desfeita.`;
+      } else if (fullySelectedGroups.length) {
+        confirmMessage =
+          fullySelectedGroups.length === 1
+            ? "Excluir todas as parcelas do grupo selecionado? Esta ação não pode ser desfeita."
+            : `Excluir todas as parcelas dos ${fullySelectedGroups.length} grupos selecionados? Esta ação não pode ser desfeita.`;
       } else {
-        confirmMessage += " Esta ação não pode ser desfeita.";
+        confirmMessage = `Excluir ${individualExpenses.length} lançamento(s) selecionado(s)? Esta ação não pode ser desfeita.`;
       }
-      
+
       if (!window.confirm(confirmMessage)) return;
-      
+
       setBulkSubmitting(true);
       try {
-        await bulkDelete(Array.from(selectedIds));
-        toast.success(`${count} lançamento(s) excluído(s).`);
-        setSelectedIds(new Set());
+        if (isSingleSelection) {
+          await deleteExpense(singleExpense.id);
+          toast.success(singleExpense.installmentGroupId ? "Parcela excluída." : "Lançamento excluído.");
+        } else {
+          const deletions = [];
+          const handledGroups = new Set();
+          fullySelectedGroups.forEach(({ groupId }) => {
+            if (!handledGroups.has(groupId)) {
+              handledGroups.add(groupId);
+              deletions.push(deleteExpenseGroup(groupId));
+            }
+          });
+          individualExpenses.forEach((expense) => {
+            deletions.push(deleteExpense(expense.id));
+          });
+          await Promise.all(deletions);
+          toast.success(`${selectedCount} lançamento(s) processado(s) para exclusão.`);
+        }
+        clearSelection();
       } catch (e) {
         toast.error(e);
       } finally {
@@ -757,7 +867,7 @@ export default function Lancamentos({
                   onClick={handleBulkDelete}
                   disabled={selectedIds.size === 0 || bulkSubmitting}
                 >
-                  {bulkSubmitting ? "Removendo..." : "Excluir selecionados"}
+                  {bulkSubmitting ? "Removendo..." : bulkDeleteLabel}
                 </Button>
               </Stack>
             </Stack>
@@ -797,7 +907,7 @@ export default function Lancamentos({
                       <TableCell padding="checkbox">
                         <Checkbox
                           checked={selectedIds.has(ex.id)}
-                          onChange={(e) => toggleSelection(ex.id, e.target.checked)}
+                          onChange={(e) => toggleSelection(ex, e.target.checked)}
                         />
                       </TableCell>
                       <TableCell>{ex.date}</TableCell>

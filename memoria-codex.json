@@ -1,520 +1,425 @@
 {
   "codex_memory": {
     "project": "Finance App Project",
-    "version": "v6.3.0 (Auth httpOnly Cookies - Segurança Aprimorada)",
-    "description": "Aplicação fullstack de controle financeiro (React + Express + Prisma + MongoDB + RabbitMQ + Upstash Redis + httpOnly Cookies), com foco em modularização, segurança, resiliência, validação robusta e autenticação segura.",
+    "version": "v6.6.0 (CI/CD Seguro + Scanners SAST/DAST + GitOps Futuro)",
+    "description": "Aplicação fullstack de controle financeiro (React + Express + Prisma + MongoDB + RabbitMQ + Upstash Redis + httpOnly Cookies) com pipelines CI/CD integradas, automação de deploy (Vercel + Render / Kubernetes), segurança contínua (Qodana, Semgrep, Snyk, OWASP ZAP) e planejamento de GitOps/Canary.",
     "milestones": [
       {
-        "codex_memory": {
-          "project": "Finance App Project",
-          "version": "v6.6.0 (CI/CD Seguro + Scanners SAST/DAST + GitOps Futuro)",
-          "description": "Aplicação fullstack de controle financeiro (React + Express + Prisma + MongoDB + RabbitMQ + Upstash Redis + httpOnly Cookies) com pipelines CI/CD integradas, automação de deploy (Vercel + Render), segurança contínua (Qodana, Semgrep, Snyk, OWASP ZAP) e planejamento de GitOps/Canary.",
-          "milestones": [
-              {
-                "id": 21,
-                "tag": "[Security/DX] Qodana, Semgrep, Snyk e OWASP ZAP Integrados",
-                "status": "🟡 Em progresso (Qodana ✅, demais configurando)",
-                "summary": "Integração das ferramentas de análise estática e dinâmica de segurança (SAST/DAST) nos pipelines GitHub Actions.",
-                "notes": [
-                  "✅ Qodana JS ativo com workflow qodana.yml (CI Security Analysis)",
-                  "✅ 116 findings iniciais (76 ESLint, 4 hardcoded passwords, demais warnings de import e redundância)",
-                  "✅ Comentários automáticos em PR via Qodana Bot",
-                  "🟡 Semgrep configurado para detectar injeções, SSRF, secrets e XSS em JS/TS",
-                  "🟡 Snyk integrado para auditoria de vulnerabilidades npm/yarn (package.json + lockfiles)",
-                  "🟡 OWASP ZAP configurado para varredura DAST no ambiente staging (Kubernetes OKE) - detectando headers inseguros e endpoints expostos",
-                  "🔒 Severities High/Critical bloqueiam merge automático via required checks",
-                  "📊 Security Dashboard consolidando métricas por scanner e PR",
-                  "📘 Documentação: SECURITY_SCANNERS.md"
-
-                    "Regenerate actionable SARIF (≤30 min)
-
-                    Download the latest artifact from the GitHub Action or rerun qodana scan locally with --output sarif.
-                    Outcome: concrete file/line references so we aren’t chasing abstract rule names.
-                    Batch-fix EditorConfig violations (≈45 min)
-
-                    Normalize .editorconfig: keep a single root = true, collapse duplicate glob patterns, align indentation defaults.
-                    Run eslint --fix / prettier --write across the repo to flush formatting drift.
-                    Impact: clears 12 Critical findings and prevents repeated noise in future scans.
-                    Triage Angular template hot spots (≈1 h)
-
-                    Use the refreshed SARIF to list offending templates, then fix structural directive stacking, ambiguous template refs, or incorrect *ng usage.
-                    Validate via unit tests or Storybook snapshots where available.
-                    Impact: removes the largest Critical cluster (27 rules) tied to customer-facing UI.
-                    Validate CSS/PostCSS definitions (≈45 min)
-
-                    Focus on CssInvalidPropertyValue/CssInvalidFunction violations: verify custom properties exist, drop experimental syntax not supported by our browser targets, lint with stylelint --fix.
-                    Impact: 12 Critical issues with fast fixes and immediate UX improvement.
-                    Re-run Qodana + wire the gate (≤30 min)
-
-                    Execute the workflow after fixes; archive the SARIF to confirm Critical/High totals drop to zero.
-                    Ensure the Qodana check stays blocking for severity ≥ High (already enforced per codex notes)."
-                ]
-              },
-              {
-                "id": 22,
-                "tag": "[Security] Gestão de Secrets e ENVs",
-                "status": "🟢 Concluído (Fase 1)",
-                "summary": "Cadastro de variáveis sensíveis e tokens nos GitHub Secrets e ocultação de valores em logs/pipelines.",
-                "notes": [
-                  "✅ Todos os tokens, keys e conexões (.env) migrados para GitHub Secrets (org-level e repositório)",
-                  "✅ Workflows atualizados para ler via secrets.GITHUB_TOKEN e secrets.PRODUCTION_ENV",
-                  "✅ Repositório configurado com ENV placeholders (template .env.example atualizado)",
-                  "✅ Logs ofuscados em CI (masks adicionadas via core.setSecret)",
-                  "🟡 Próxima etapa: refatorar pipelines para injetar secrets diretamente em manifests Kubernetes (kubectl set env / kustomize patches)",
-                  "📘 Documentação: ENV_SECURITY_GUIDE.md"
-                ]
-              },
-              {
-                "id": 23,
-                "tag": "[CI/CD] Continuous Deployment no Kubernetes (OCI OKE)",
-                "status": "🟡 Em Progresso",
-                "summary": "Implementação de CD automatizado com deploy seguro no cluster Kubernetes gratuito da Oracle Cloud (OKE).",
-                "notes": [
-                  "🧩 Deploy automatizado via GitHub Actions → kubectl apply com contexto configurado (OCI CLI + kubeconfig)",
-                  "🧩 Imagens publicadas no OCIR (Oracle Container Registry) com autenticação via GitHub Secrets",
-                  "✅ Ambientes configurados: staging (namespace staging) e production (namespace production)",
-                  "✅ Branch main → production | feature/* → staging",
-                  "⚙️ Deploy automatizado no merge com CI verde e scanners sem falhas críticas",
-                  "📦 Rollback via Helm history / kubectl rollout undo",
-                  "🟡 Planejamento GitOps → Canary Deploy (progressive rollout via tags e auto-promotion)",
-                  "📘 Documentação: DEPLOY_PIPELINE_K8S_GUIDE.md"
-                ]
-              },
-              {
-                "id": 24,
-                "tag": "[Security] GitOps & Canary Strategy (Planejado)",
-                "status": "🟡 Planejado",
-                "summary": "Planejar e aplicar práticas GitOps com fluxos de Canary Deploy no Kubernetes de produção.",
-                "notes": [
-                  "🎯 Meta: adotar GitOps (ArgoCD ou FluxCD) para sincronização declarativa de ambientes",
-                  "🎯 Deploy Canary para validação progressiva de novas versões",
-                  "🎯 Automatizar rollback baseado em métricas de healthcheck, logs e Prometheus metrics",
-                  "🎯 Integrar com observabilidade futura (Grafana/Loki/Prometheus)",
-                  "🎯 Documentar padrões: PR → Deploy Canary → Promoção automática após 95% sucesso",
-                  "📘 Documentação: GITOPS_CANARY_PLAN.md"
-                ]
-              },
-              {
-                "id": 25,
-                "tag": "[DX/Security] Código Seguro e Ocultação de Variáveis",
-                "status": "🟢 Concluído",
-                "summary": "Melhorias estruturais para ocultar variáveis e segredos no código e pipelines.",
-                "notes": [
-                  "✅ Substituição completa de variáveis hardcoded por process.env.*",
-                  "✅ Removidas credenciais mock de testes e substituídas por fixtures seguras",
-                  "✅ Código revisado pelo Qodana e Semgrep (nenhum secret em plaintext)",
-                  "✅ README atualizado com diretrizes de .env seguro e máscaras de logs",
-                  "✅ Histórico das branches main e ci/qodana-environment reescrito via branch órfã sanitized-* com secrets removidos e tags de backup (pre-sanitize-main / pre-sanitize-ci-qodana) em Nov/2025",
-                  "🟡 Pendência: propagar alterações de variáveis para workflows CI/CD (não aplicado ainda)",
-                  "📘 Documentação: SAFE_ENV_CODING_GUIDE.md"
-                ]
-              },
-              {
-                "id": 20,
-                "tag": "[DX] CI Pipeline (Backend & Frontend)",
-                "status": "🟢 Concluído",
-                "summary": "Pipelines GitHub Actions para backend e frontend garantindo lint, build, testes, cobertura e proteção de branch.",
-                "notes": [
-                  "✅ Workflows ci-backend.yml e ci-frontend.yml ativos (push e PR para main)",
-                  "✅ Node 20 + cache npm (setup-node)",
-                  "✅ Etapas: install, lint, build/tsc, vitest + cobertura, upload artifacts",
-                  "✅ Status checks requeridos antes de merge em main",
-                  "✅ Auto-merge de Dependabot depende dos checks verdes",
-                  "📊 Métrica alvo: execução <5min total cada pipeline",
-                  "🧪 Cobertura publicada como artifact para inspeção",
-                  "🔒 Branch protection configurada (GH006 aplicado em push direto)"
-                ]
-              },
-              {
-                "id": 19,
-                "tag": "[DX] Atualização Automática de Dependências",
-                "status": "🟢 Concluído",
-                "summary": "Dependabot diário para backend e frontend com auto-label e auto-merge condicional.",
-                "notes": [
-                  "✅ Arquivo dependabot.yml configurado (interval daily 14:02 BRT, timezone America/Sao_Paulo)",
-                  "✅ Labels automáticas: dependencies, auto-update",
-                  "✅ Workflow dependabot-auto-merge.yml para fusão automática com CI verde",
-                  "✅ PRs recentes: bump express-rate-limit 8.2.1",
-                  "✅ Branch main protegida - merges apenas via PR",
-                  "📌 Objetivo: nenhuma dependência crítica >1 versão minor atrasada",
-                  "🛡️ Segurança: patches aplicados em <24h",
-                  "🗂️ Documentação no README (seção Milestone #19)"
-                ]
-              },
-              {
-                "id": 9,
-                "tag": "[FE] Toasts & Empty States",
-                "status": "🟢 Concluído",
-                "summary": "Feedbacks visuais consistentes (toasts) e placeholders de listas vazias (empty states) implementados em todas as telas CRUD, com código totalmente documentado.",
-                "notes": [
-                  "✅ notistack instalado e SnackbarProvider configurado globalmente (top-right, max 3, 3s duration)",
-                  "✅ Hook useToast() criado com success/error/info/warning e prevenção de duplicidade (debounce 2s + timestamp)",
-                  "✅ Componente EmptyState.tsx (MUI) com props title/description/ctaLabel/onCtaClick/icon",
-                  "✅ mapBackendError() traduzindo códigos técnicos (E_VALIDATION, E_DUPLICATE, etc) em mensagens legíveis",
-                  "✅ Toasts integrados em Lancamentos (5 operações), Cadastros (7 operações), Salário (2 operações)",
-                  "✅ EmptyStates integrados: Lancamentos (1), Categorias (1), Origens (1), Devedores (1)",
-                  "✅ 100% do código comentado com JSDoc e documentação inline",
-                  "✅ Critérios de aceite: 14 operações com toasts, 4 empty states, zero erros console",
-                  "✅ Documento completo: MILESTONE_9_COMPLETE.md com arquitetura e exemplos"
-                ]
-              },
-              {
-                "id": 17,
-                "tag": "[DX] Storybook",
-                "status": "� Concluído",
-                "summary": "Storybook configurado com tema MUI, stories reais para MonthNavigator, KPI e EmptyState, sem exemplos quebrados.",
-                "notes": [
-                  "✅ Storybook 10.x com Vite e ThemeProvider global",
-                  "✅ Stories reais: MonthNavigator, KPI, EmptyState",
-                  "✅ Remoção de exemplos quebrados",
-                  "✅ Zero warnings/erros no build",
-                  "✅ Critérios de aceite: stories reais, tema aplicado, sem exemplos quebrados"
-                ]
-              },
-              {
-                "id": 14,
-                "tag": "[BE] Dead Letter Queue (DLQ)",
-                "status": "🟢 Concluído",
-                "summary": "DLQ implementada no RabbitMQ com retry, backoff, endpoints admin e integração nos workers.",
-                "notes": [
-                  "✅ DLQ via dead-letter-exchange e argumentos de fila",
-                  "✅ Retry automático com backoff exponencial",
-                  "✅ Endpoints admin: /api/dlq/stats, /api/dlq/messages, /api/dlq/reprocess/:id, /api/dlq/purge",
-                  "✅ Proteção JWT nos endpoints",
-                  "✅ Logs detalhados de falhas e reprocessamentos",
-                  "✅ Workers bulk/recurring integrados com DLQ",
-                  "✅ Critérios de aceite: mensagens na DLQ após retries, admin funcional, testes manuais"
-                ]
-              },
-              {
-                "id": 10,
-                "tag": "[DX] Healthchecks e Docker Prod",
-                "status": "🟢 Concluído",
-                "summary": "Aprimorar observabilidade e robustez de execução em contêineres com healthchecks completos.",
-                "notes": [
-                  "✅ Endpoint /api/health: Verifica Mongo (ping), Redis (PING) e RabbitMQ (connect+channel)",
-                  "✅ Retorna JSON com status, uptime, latência de cada dependência",
-                  "✅ Status HTTP: 200 (ok) | 503 (unhealthy/degraded)",
-                  "✅ Script health:db (check-db.ts): Verificação standalone do MongoDB com output detalhado",
-                  "✅ Healthcheck Docker backend: curl -f http://localhost:4000/api/health (interval: 30s)",
-                  "✅ Healthcheck Docker workers: kill -0 1 (verifica se PID 1 está vivo)",
-                  "✅ Healthcheck Docker mongo: mongosh --eval 'db.adminCommand(ping)'",
-                  "✅ Depends_on com condition: service_healthy - workers só iniciam após backend healthy",
-                  "✅ Frontend depende de backend healthy - evita erros de conexão",
-                  "✅ Dockerfile: curl instalado no stage runtime para healthchecks",
-                  "✅ Todos os containers com STATUS=healthy validados via docker ps",
-                  "✅ Endpoint /ready: Readiness probe para compatibilidade futura com Kubernetes"
-                ]
-              },
-              {
-                "id": 11,
-                "tag": "[Security] Validação de Rota (Zod)",
-                "status": "🟢 Concluído",
-                "summary": "Sistema completo de validação de entrada (body/query/params) usando Zod, com middleware genérica, schemas por recurso, feature flag e logs limpos.",
-                "notes": [
-                  "✅ 5 schemas criados: expense (180L), origin (160L), auth (80L), salary (100L), catalog (90L)",
-                  "✅ Middleware validation.ts (290L): aceita body/query/params, retorna 400 padronizado, respeita VALIDATION_ENABLED",
-                  "✅ Formato de erro: { error, message, details: [{ field, message }] } - sem stack-trace",
-                  "✅ Feature flag VALIDATION_ENABLED no config.ts (default: true, permite rollback)",
-                  "✅ 18 rotas validadas: expenses (4), origins (4), auth (2), salary (4), debtors (4)",
-                  "✅ Validações monetárias: string formato '0.00' com regex /^\\d+\\.\\d{2}$/",
-                  "✅ Validações de datas: z.coerce.date() para ISO 8601, ranges validados",
-                  "✅ Validações de IDs: ObjectId MongoDB (24 chars hex) com regex",
-                  "✅ Validação condicional: closingDay obrigatório quando type='Cartão'",
-                  "✅ Segurança: .strict() rejeita campos extras (previne mass assignment)",
-                  "✅ Telemetria: contadores validationFailures (por rota) e validationFailuresByField",
-                  "✅ Função getValidationMetrics() para debugging e monitoramento",
-                  "✅ Logs nível 'warn' SEM stack-trace para erros esperados de validação",
-                  "✅ Convenções: createXxxSchema, updateXxxSchema (.partial()), queryXxxSchema, idParamSchema",
-                  "✅ Documentação completa consolidada no README.md (seção Milestone #11)",
-                  "🐛 v6.2.1 FIX: queryExpenseSchema ajustado para aceitar mode=calendar, year, limit=1000 (compatibilidade frontend)",
-                  "🐛 v6.2.1 FIX: Middleware corrigido para não sobrescrever req.query (read-only no Express)",
-                  "✅ v6.2.1 TEST: Todas as rotas validadas retornando 200 OK (expenses, origins, salary, debtors)",
-                  "✅ v6.2.1 STATUS: Sistema 100% funcional em produção sem erros 400/500"
-                ]
-              },
-              {
-                "id": 13,
-                "tag": "[Security] Auth httpOnly Cookies",
-                "status": "🟢 Concluído",
-                "summary": "Migração de localStorage (vulnerável a XSS) para cookies httpOnly + tokens em memória, com refresh automático e validação real de credenciais.",
-                "notes": [
-                  "✅ Arquitetura de 2 tokens: Access Token (15min, memória) + Refresh Token (7d, cookie httpOnly)",
-                  "✅ Backend: 4 endpoints (login, register, refresh, logout) com bcrypt + JWT",
-                  "✅ Cookies httpOnly: secure (HTTPS prod), sameSite: strict (previne CSRF), inacessível via JS",
-                  "✅ Validação real: bcrypt.compare() para senhas, mensagens genéricas (previne enumeração)",
-                  "✅ Auto-refresh: Frontend intercepta 401, chama /auth/refresh automaticamente",
-                  "✅ CORS: credentials: true no backend + withCredentials: true no frontend",
-                  "✅ cookie-parser: Instalado no backend para ler req.cookies",
-                  "✅ Logs seguros: Login success/fail com email/IP (SEM senha/token)",
-                  "✅ Frontend: Token em memória (state), user cacheado (localStorage), logout chama backend",
-                  "✅ Testes: register, login, refresh, logout, credenciais inválidas - TODOS PASSANDO",
-                  "✅ Breaking change: Usuários precisam fazer login novamente (tokens antigos inválidos)",
-                  "✅ Documentação: 1000+ linhas no README com diagramas, fluxos, troubleshooting",
-                  "✅ Segurança: XSS prevenido (httpOnly), CSRF prevenido (sameSite: strict)",
-                  "✅ Dependências: cookie-parser@1.4.6 + @types/cookie-parser@1.4.7"
-                ]
-              },
-              {
-                "id": 11,
-                "tag": "[Security] Validação de Rota (Zod)",
-                "status": "� Concluído",
-                "summary": "Sistema completo de validação de entrada (body/query/params) usando Zod, com middleware genérica, schemas por recurso, feature flag e logs limpos.",
-                "notes": [
-                  "✅ 5 schemas criados: expense (180L), origin (160L), auth (80L), salary (100L), catalog (90L)",
-                  "✅ Middleware validation.ts (290L): aceita body/query/params, retorna 400 padronizado, respeita VALIDATION_ENABLED",
-                  "✅ Formato de erro: { error, message, details: [{ field, message }] } - sem stack-trace",
-                  "✅ Feature flag VALIDATION_ENABLED no config.ts (default: true, permite rollback)",
-                  "✅ 18 rotas validadas: expenses (4), origins (4), auth (2), salary (4), debtors (4)",
-                  "✅ Validações monetárias: string formato '0.00' com regex /^\\d+\\.\\d{2}$/",
-                  "✅ Validações de datas: z.coerce.date() para ISO 8601, ranges validados",
-                  "✅ Validações de IDs: ObjectId MongoDB (24 chars hex) com regex",
-                  "✅ Validação condicional: closingDay obrigatório quando type='Cartão'",
-                  "✅ Segurança: .strict() rejeita campos extras (previne mass assignment)",
-                  "✅ Telemetria: contadores validationFailures (por rota) e validationFailuresByField",
-                  "✅ Função getValidationMetrics() para debugging e monitoramento",
-                  "✅ Logs nível 'warn' SEM stack-trace para erros esperados de validação",
-                  "✅ Convenções: createXxxSchema, updateXxxSchema (.partial()), queryXxxSchema, idParamSchema",
-                  "✅ Documentação completa consolidada no README.md (seção Milestone #11)",
-                  "🐛 v6.2.1 FIX: queryExpenseSchema ajustado para aceitar mode=calendar, year, limit=1000 (compatibilidade frontend)",
-                  "🐛 v6.2.1 FIX: Middleware corrigido para não sobrescrever req.query (read-only no Express)",
-                  "✅ v6.2.1 TEST: Todas as rotas validadas retornando 200 OK (expenses, origins, salary, debtors)",
-                  "✅ v6.2.1 STATUS: Sistema 100% funcional em produção sem erros 400/500"
-                ]
-              },
-              {
-                "id": 16,
-                "tag": "[DX] Testes Automatizados",
-                "status": "� Concluído",
-                "summary": "Cobertura de testes automatizados (unitários e integração) para backend (Vitest + Supertest) e frontend (RTL), garantindo estabilidade, confiança e CI/CD robusta.",
-                "notes": [
-                  "✅ Backend: Vitest + Supertest para rotas, services, workers, helpers (auth, expenses, billing, validation)",
-                  "✅ Testes de integração: /auth/login, /auth/refresh, /auth/logout (cookies), CRUD /expenses, filtros UTC, billingMonth",
-                  "✅ Testes unitários: deriveBillingMonth(), adjustToBusinessDay(), workers (ACK/NACK, reconexão)",
-                  "✅ Mock global de clock (UTC fixo)",
-                  "✅ Seeds determinísticos (seed=42), banco in-memory/mocks, sem tocar produção",
-                  "✅ Mocks centralizados (__mocks__/), reset antes de cada teste",
-                  "✅ Rodar via npm run test:backend, logs enxutos (--silent)",
-                  "✅ Frontend: React Testing Library (RTL) + Vitest",
-                  "✅ Testes de componentes: MonthNavigator (troca mês, labels, animação), EmptyState (renderização, CTA)",
-                  "✅ Testes de hooks: useExpenses (fetch/mutation, toasts), useToast (debounce/chave única)",
-                  "✅ Testes de contexto: AuthContext (login/logout, mock cookies)",
-                  "✅ Providers mockados: QueryClient, Theme, Toast",
-                  "✅ Mocks de API: MSW ou axios-mock-adapter",
-                  "✅ Rodar via npm run test:frontend, cobertura >80% em /hooks e /components/ui",
-                  "✅ Cobertura mínima 80% linhas/branches backend (src/services, src/routes, src/utils) e frontend (src/hooks, src/components/ui)",
-                  "✅ CI executa npm run test:backend e npm run test:frontend, falha se cobertura <80%",
-                  "✅ Relatório HTML (coverage/index.html)",
-                  "✅ Nomes descritivos, mocks centralizados, clock global, seeds fixos, testes idempotentes",
-                  "✅ Nenhum teste depende de latência real, logs silenciosos, scripts package.json comentados",
-                  "✅ TESTING_GUIDE.md: estrutura, comandos, troubleshooting, tabela módulos↔testes, boas práticas",
-                  "✅ Critérios de aceite: tudo acima implementado, sem flakiness, cobertura >80%, documentação completa"
-                ]
-              },
-              {
-                "id": 0,
-                "tag": "[BUG] Fatura de Cartão (closingDay + dia útil + billingMonth)",
-                "status": "🟢 Concluído (Backend)",
-                "summary": "Classificar despesas de cartão pela fatura correta com base no dia de fechamento (ajustado para dia útil), gravando billingMonth automaticamente.",
-                "notes": [
-                  "✅ Schema atualizado: Origin.closingDay (Int), Origin.billingRolloverPolicy (NEXT|PREVIOUS), Expense.billingMonth (YYYY-MM) + índice @@index([userId, billingMonth])",
-                  "✅ Helpers implementados: deriveBillingMonth(txDate, closingDay, policy) e adjustToBusinessDay() em backend/src/utils/billingHelpers.ts com 235 linhas de JSDoc",
-                  "✅ API atualizada: POST/PUT /api/expenses calculam billingMonth automaticamente; GET /api/expenses?mode=billing&month=YYYY-MM funcional",
-                  "✅ Validação 422: Retorna erro se cartão não tem closingDay configurado",
-                  "✅ Backfill: Script backend/scripts/backfill-billing-month.ts (152 linhas) para preencher billingMonth retroativo",
-                  "✅ Redis: Cache por billingMonth integrado; invalidação em mutações",
-                  "✅ Docker: Build estável com enum atualizado (NEXT/PREVIOUS)",
-                  "✅ Testes: billing.test.ts atualizado para novos valores de enum",
-                  "✅ Documentação completa: MILESTONE_0_COMPLETE.md com 600+ linhas detalhando implementação",
-                  "✅ Script de migração: migrate-billing-enum.ts criado para converter dados antigos",
-                  "✅ Migração executada: 5 cartões atualizados de PREVIOUS_BUSINESS_DAY → PREVIOUS no MongoDB",
-                  "✅ Dockerfile atualizado: scripts/ e package.json copiados para runtime",
-                  "✅ API Backend: GET /api/origins funcionando sem erros de enum",
-                  "✅ Frontend atualizado: schemas.ts, types/index.ts e Cadastros.jsx com NEXT/PREVIOUS",
-                  "✅ Guia de migração: MIGRATION_ENUM_BILLING.md com 250+ linhas e checklist completo",
-                  "🟡 Frontend pendente: useExpenses mode=billing e UI de agrupamento por fatura (Todo #8)"
-                ]
-              },
-              {
-                "id": 14,
-                "tag": "[BE] Dead Letter Queue (DLQ)",
-                "status": "� Concluído",
-                "summary": "DLQ implementada no RabbitMQ com retry, backoff, endpoints admin e integração nos workers.",
-                "notes": [
-                  "✅ DLQ via dead-letter-exchange e argumentos de fila",
-                  "✅ Retry automático com backoff exponencial",
-                  "✅ Endpoints admin: /api/dlq/stats, /api/dlq/messages, /api/dlq/reprocess/:id, /api/dlq/purge",
-                  "✅ Proteção JWT nos endpoints",
-                  "✅ Logs detalhados de falhas e reprocessamentos",
-                  "✅ Workers bulk/recurring integrados com DLQ",
-                  "✅ Critérios de aceite: mensagens na DLQ após retries, admin funcional, testes manuais"
-                ]
-              },
-              {
-                "id": 15,
-                "tag": "[Refactor] Service/Repository Layer",
-                "status": "🟡 Planejado (NOVO)",
-                "summary": "Separar responsabilidades em três camadas para clareza, testes e evolução segura.",
-                "notes": [
-                  "Routes: validação + orquestração; Services: regras; Repositories: Prisma-only.",
-                  "Injeção de dependência para facilitar mocks nos testes.",
-                  "Critérios de aceite: rotas finas; services sem import de Prisma.",
-                  "Riscos: refator parcelado; mitigar com feature toggles e suíte de testes (#16)."
-                ]
-              },
-              {
-                "id": 13,
-                "tag": "[Security] Auth httpOnly Cookies",
-                "status": "� Concluído",
-                "summary": "Migração de localStorage (vulnerável a XSS) para cookies httpOnly + tokens em memória, com refresh automático e validação real de credenciais.",
-                "notes": [
-                  "✅ Arquitetura de 2 tokens: Access Token (15min, memória) + Refresh Token (7d, cookie httpOnly)",
-                  "✅ Backend: 4 endpoints (login, register, refresh, logout) com bcrypt + JWT",
-                  "✅ Cookies httpOnly: secure (HTTPS prod), sameSite: strict (previne CSRF), inacessível via JS",
-                  "✅ Validação real: bcrypt.compare() para senhas, mensagens genéricas (previne enumeração)",
-                  "✅ Auto-refresh: Frontend intercepta 401, chama /auth/refresh automaticamente",
-                  "✅ CORS: credentials: true no backend + withCredentials: true no frontend",
-                  "✅ cookie-parser: Instalado no backend para ler req.cookies",
-                  "✅ Logs seguros: Login success/fail com email/IP (SEM senha/token)",
-                  "✅ Frontend: Token em memória (state), user cacheado (localStorage), logout chama backend",
-                  "✅ Testes: register, login, refresh, logout, credenciais inválidas - TODOS PASSANDO",
-                  "✅ Breaking change: Usuários precisam fazer login novamente (tokens antigos inválidos)",
-                  "✅ Documentação: 1000+ linhas no README com diagramas, fluxos, troubleshooting",
-                  "✅ Segurança: XSS prevenido (httpOnly), CSRF prevenido (sameSite: strict)",
-                  "✅ Dependências: cookie-parser@1.4.6 + @types/cookie-parser@1.4.7"
-                ]
-              },
-              {
-                "id": 18,
-                "tag": "[Security] Autenticação Avançada (MFA + Google Login)",
-                "status": "🟡 Planejado (NOVO)",
-                "summary": "Adicionar MFA via Resend (OTP) e login social Google OAuth2, incluindo botão 'Entrar com o Google' na tela de login e fluxo completo de autenticação.",
-                "notes": [
-                  "✅ Botão 'Entrar com o Google' exibido na tela de login (frontend)",
-                  "✅ Integração com biblioteca oficial Google Sign-In (@react-oauth/google ou similar)",
-                  "✅ client_id configurado via env frontend",
-                  "✅ Ao clicar, inicia fluxo OAuth2 do Google e recebe token/código",
-                  "✅ Frontend envia token/código para backend em /auth/google",
-                  "✅ Backend valida token, autentica/cria usuário e retorna access/refresh token",
-                  "✅ Tokens: refresh em cookie httpOnly, access em memória (state)",
-                  "✅ MFA opcional: envio e validação de OTP via Resend (ou similar)",
-                  "✅ Rotas: /auth/register, /auth/login, /auth/refresh, /auth/logout, /auth/resend, /auth/google",
-                  "✅ Critérios de aceite: login Google end-to-end funcional, MFA opcional, UX fluida",
-                  "Riscos: fluxo OAuth mal configurado; mitigar com testes em sandbox, logs detalhados e validação de estado/nonce"
-                ]
-              },
-              {
-                "id": 5,
-                "tag": "[API] Índices e filtros UTC",
-                "status": "🟢 Implementado",
-                "summary": "Normalizar consultas mensais por UTC para evitar desvios de timezone.",
-                "notes": [
-                  "@@index([userId, date]) e range por Date.UTC em filtros.",
-                  "Critérios de aceite: mesma query retorna os mesmos itens independente de TZ do host.",
-                  "Riscos: dados legados com TZ local; mitigado por conversão centralizada."
-                ]
-              },
-              {
-                "id": 6,
-                "tag": "[FE] MUI Only Theme",
-                "status": "🟢 Implementado",
-                "summary": "Unificar design system em MUI e remover resíduos de Tailwind.",
-                "notes": [
-                  "ThemeProvider central; paleta/tipografia padronizadas.",
-                  "Critérios de aceite: nenhuma classe Tailwind ativa; UI consistente.",
-                  "Riscos: regressões visuais; mitigar com verificação manual das principais telas."
-                ]
-              },
-              {
-                "id": 7,
-                "tag": "[FE] Hooks Tipados + Query Cache",
-                "status": "🟢 Concluído",
-                "summary": "Refatorar useFinanceApp em hooks modulares com TanStack Query e serviços REST tipados.",
-                "notes": [
-                  "useExpenses/useCatalogs/useSalary + Query Keys centralizadas.",
-                  "Axios com interceptors; tipagem de payloads/DTOs.",
-                  "Critérios de aceite: cache por mês, invalidação após mutações; zero acesso a LocalStorage.",
-                  "Riscos: chaves inconsistentes; mitigado por queryKeys.ts."
-                ]
-              },
-              {
-                "id": 8,
-                "tag": "[FE/BE] Navegação mensal + Cache Redis + Build Estabilizado",
-                "status": "🟢 Concluído (Validação Final OK)",
-                "summary": "UX de navegação temporal suave, cache distribuído Redis e build Docker multi-stage estável com Prisma.",
-                "notes": [
-                  "MonthNavigator com Framer Motion; integração useFinanceApp.",
-                  "Upstash Redis por usuário/mês e invalidation pós-mutation.",
-                  "Docker: prisma generate no builder; cópia de .prisma para runtime.",
-                  "Critérios de aceite: logs com [CACHE HIT/MISS]; containers healthy.",
-                  "Riscos: WSL1; mitigar executando build em WSL2/Docker."
-                ]
-              },
-              {
-                "id": 4,
-                "tag": "[Worker] RabbitMQ Robustness",
-                "status": "🟢 Concluído",
-                "summary": "Resiliência no processamento assíncrono de jobs de recorrência.",
-                "notes": [
-                  "Reconexão com backoff, prefetch(10), ConfirmChannel, shutdown limpo.",
-                  "Critérios de aceite: worker permanece estável em reconexões.",
-                  "Riscos: mensagens venenosas; mitigação futura com DLQ (#14)."
-                ]
-              },
-              {
-                "id": 3,
-                "tag": "[API] Security & Config ENV",
-                "status": "🟢 Concluído",
-                "summary": "Endurecer configuração e headers de segurança na API.",
-                "notes": [
-                  "Zod para ENVs críticos; Helmet e CORS dinâmico.",
-                  "Critérios de aceite: boot falha sem ENVs; headers presentes.",
-                  "Riscos: CORS mal configurado; mitigar com allowlist por ambiente."
-                ]
-              },
-              {
-                "id": 2,
-                "tag": "[DB] Float → String precision",
-                "status": "🟢 Concluído",
-                "summary": "Evitar erros de arredondamento em valores monetários.",
-                "notes": [
-                  "Valores monetários como string + coerções nos helpers.",
-                  "Critérios de aceite: comparação monetária determinística.",
-                  "Riscos: parsing negligenciado; mitigado em helpers centralizados."
-                ]
-              },
-              {
-                "id": 1,
-                "tag": "[BUG] Replicação e idempotência",
-                "status": "🟢 Resolvido",
-                "summary": "Eliminar duplicações de recorrentes por meio de fingerprint único.",
-                "notes": [
-                  "Índice único por fingerprint + backfill idempotente.",
-                  "Critérios de aceite: nenhuma duplicidade em replays.",
-                  "Riscos: colisão de fingerprint; mitigado com sal e campos chave."
-                ]
-              }
-            ],
-            "last_action": "Sessão 10/11/2025: integração Qodana (ativo), início da configuração Semgrep, Snyk e ZAP, registro dos GitHub Secrets e template .env.example revisado. CD iniciado (Vercel + Render) e GitOps planejado.",
-            "session_achievements": [
-              "✅ Qodana integrado e executando automaticamente em cada PR (com comentários no diff)",
-              "✅ Secrets e variáveis sensíveis migrados para GitHub Secrets (sem leaks em logs)",
-              "✅ .env.example padronizado e revisado",
-              "✅ Render backend e Vercel frontend configurados com deploy manual pós-CI",
-              "🟡 Semgrep, Snyk e ZAP configurando alertas e thresholds de bloqueio",
-              "🟡 Início da estruturação de CD automatizado e futura arquitetura GitOps"
-            ],
-            "next_steps": [
-              "Finalizar integração dos scanners Semgrep, Snyk e OWASP ZAP no CI Security Analysis",
-              "Refatorar workflows para consumir secrets via matrix/env-file",
-              "Habilitar CD completo (auto deploy staging → production via Render e Vercel)",
-              "Implementar rollback automatizado e healthcheck de deploy",
-              "Estruturar planejamento GitOps com Canary Deploy (v7.0 milestone)",
-              "Atualizar documentação dos fluxos de segurança e CI/CD"
-            ],
-            "commit_template": "• [Feature/Refactor/Fix/Security] Descrição da mudança.\n• Relacionado ao(s) Milestone(s): #[ID]\n• Verificado por: Qodana/Snyk/Semgrep/ZAP"
-          }
-        }
-      ]
-    }
+        "id": 21,
+        "tag": "[Security/DX] Qodana, Semgrep, Snyk e OWASP ZAP Integrados",
+        "status": "🟡 Em progresso (Qodana ✅, demais configurando)",
+        "summary": "Integração das ferramentas de análise estática e dinâmica de segurança (SAST/DAST) nos pipelines GitHub Actions.",
+        "notes": [
+          "✅ Qodana JS ativo com workflow qodana.yml (CI Security Analysis)",
+          "✅ 116 findings iniciais (76 ESLint, 4 hardcoded passwords, demais warnings de import e redundância)",
+          "✅ Comentários automáticos em PR via Qodana Bot",
+          "🟡 Semgrep configurado para detectar injeções, SSRF, secrets e XSS em JS/TS",
+          "🟡 Snyk integrado para auditoria de vulnerabilidades npm/yarn (package.json + lockfiles)",
+          "🟡 OWASP ZAP configurado para varredura DAST no ambiente staging (Kubernetes OKE) - detectando headers inseguros e endpoints expostos",
+          "🔒 Severities High/Critical bloqueiam merge automático via required checks",
+          "📊 Security Dashboard consolidando métricas por scanner e PR",
+          "📘 Documentação: SECURITY_SCANNERS.md",
+          "🔧 Plano de ação Qodana: regenerar SARIF, corrigir EditorConfig, ajustar templates Angular e CSS/PostCSS, reexecutar Qodana e manter o gate bloqueando severidades High/Critical"
+        ]
+      },
+      {
+        "id": 22,
+        "tag": "[Security] Gestão de Secrets e ENVs",
+        "status": "🟢 Concluído (Fase 1)",
+        "summary": "Cadastro de variáveis sensíveis e tokens nos GitHub Secrets e ocultação de valores em logs/pipelines.",
+        "notes": [
+          "✅ Todos os tokens, keys e conexões (.env) migrados para GitHub Secrets (org-level e repositório)",
+          "✅ Workflows atualizados para ler via secrets.GITHUB_TOKEN e secrets.PRODUCTION_ENV",
+          "✅ Repositório configurado com ENV placeholders (template .env.example atualizado)",
+          "✅ Logs ofuscados em CI (masks adicionadas via core.setSecret)",
+          "🟡 Próxima etapa: refatorar pipelines para injetar secrets diretamente em manifests Kubernetes (kubectl set env / kustomize patches)",
+          "📘 Documentação: ENV_SECURITY_GUIDE.md"
+        ]
+      },
+      {
+        "id": 23,
+        "tag": "[CI/CD] Continuous Deployment no Kubernetes (OCI OKE)",
+        "status": "🟡 Em Progresso",
+        "summary": "Implementação de CD automatizado com deploy seguro no cluster Kubernetes gratuito da Oracle Cloud (OKE).",
+        "notes": [
+          "🧩 Deploy automatizado via GitHub Actions → kubectl apply com contexto configurado (OCI CLI + kubeconfig)",
+          "🧩 Imagens publicadas no OCIR (Oracle Container Registry) com autenticação via GitHub Secrets",
+          "✅ Ambientes configurados: staging (namespace staging) e production (namespace production)",
+          "✅ Branch main → production | feature/* → staging",
+          "⚙️ Deploy automatizado no merge com CI verde e scanners sem falhas críticas",
+          "📦 Rollback via Helm history / kubectl rollout undo",
+          "🟡 Planejamento GitOps → Canary Deploy (progressive rollout via tags e auto-promotion)",
+          "📘 Documentação: DEPLOY_PIPELINE_K8S_GUIDE.md"
+        ]
+      },
+      {
+        "id": 24,
+        "tag": "[Security] GitOps & Canary Strategy (Planejado)",
+        "status": "🟡 Planejado",
+        "summary": "Planejar e aplicar práticas GitOps com fluxos de Canary Deploy no Kubernetes de produção.",
+        "notes": [
+          "🎯 Meta: adotar GitOps (ArgoCD ou FluxCD) para sincronização declarativa de ambientes",
+          "🎯 Deploy Canary para validação progressiva de novas versões",
+          "🎯 Automatizar rollback baseado em métricas de healthcheck, logs e Prometheus metrics",
+          "🎯 Integrar com observabilidade futura (Grafana/Loki/Prometheus)",
+          "🎯 Documentar padrões: PR → Deploy Canary → Promoção automática após 95% sucesso",
+          "📘 Documentação: GITOPS_CANARY_PLAN.md"
+        ]
+      },
+      {
+        "id": 25,
+        "tag": "[DX/Security] Código Seguro e Ocultação de Variáveis",
+        "status": "🟢 Concluído",
+        "summary": "Melhorias estruturais para ocultar variáveis e segredos no código e pipelines.",
+        "notes": [
+          "✅ Substituição completa de variáveis hardcoded por process.env.*",
+          "✅ Removidas credenciais mock de testes e substituídas por fixtures seguras",
+          "✅ Código revisado pelo Qodana e Semgrep (nenhum secret em plaintext)",
+          "✅ README atualizado com diretrizes de .env seguro e máscaras de logs",
+          "✅ Histórico das branches main e ci/qodana-environment reescrito via branch órfã sanitized-* com secrets removidos e tags de backup (pre-sanitize-main / pre-sanitize-ci-qodana) em Nov/2025",
+          "🟡 Pendência: propagar alterações de variáveis para workflows CI/CD (não aplicado ainda)",
+          "📘 Documentação: SAFE_ENV_CODING_GUIDE.md"
+        ]
+      },
+      {
+        "id": 20,
+        "tag": "[DX] CI Pipeline (Backend & Frontend)",
+        "status": "🟢 Concluído",
+        "summary": "Pipelines GitHub Actions para backend e frontend garantindo lint, build, testes, cobertura e proteção de branch.",
+        "notes": [
+          "✅ Workflows ci-backend.yml e ci-frontend.yml ativos (push e PR para main)",
+          "✅ Node 20 + cache npm (setup-node)",
+          "✅ Etapas: install, lint, build/tsc, vitest + cobertura, upload artifacts",
+          "✅ Status checks requeridos antes de merge em main",
+          "✅ Auto-merge de Dependabot depende dos checks verdes",
+          "📊 Métrica alvo: execução <5min total cada pipeline",
+          "🧪 Cobertura publicada como artifact para inspeção",
+          "🔒 Branch protection configurada (GH006 aplicado em push direto)"
+        ]
+      },
+      {
+        "id": 19,
+        "tag": "[DX] Atualização Automática de Dependências",
+        "status": "🟢 Concluído",
+        "summary": "Dependabot diário para backend e frontend com auto-label e auto-merge condicional.",
+        "notes": [
+          "✅ Arquivo dependabot.yml configurado (interval daily 14:02 BRT, timezone America/Sao_Paulo)",
+          "✅ Labels automáticas: dependencies, auto-update",
+          "✅ Workflow dependabot-auto-merge.yml para fusão automática com CI verde",
+          "✅ PRs recentes: bump express-rate-limit 8.2.1",
+          "✅ Branch main protegida - merges apenas via PR",
+          "📌 Objetivo: nenhuma dependência crítica >1 versão minor atrasada",
+          "🛡️ Segurança: patches aplicados em <24h",
+          "🗂️ Documentação no README (seção Milestone #19)"
+        ]
+      },
+      {
+        "id": 9,
+        "tag": "[FE] Toasts & Empty States",
+        "status": "🟢 Concluído",
+        "summary": "Feedbacks visuais consistentes (toasts) e placeholders de listas vazias (empty states) implementados em todas as telas CRUD, com código totalmente documentado.",
+        "notes": [
+          "✅ notistack instalado e SnackbarProvider configurado globalmente (top-right, max 3, 3s duration)",
+          "✅ Hook useToast() criado com success/error/info/warning e prevenção de duplicidade (debounce 2s + timestamp)",
+          "✅ Componente EmptyState.tsx (MUI) com props title/description/ctaLabel/onCtaClick/icon",
+          "✅ mapBackendError() traduzindo códigos técnicos (E_VALIDATION, E_DUPLICATE, etc) em mensagens legíveis",
+          "✅ Toasts integrados em Lancamentos (5 operações), Cadastros (7 operações), Salário (2 operações)",
+          "✅ EmptyStates integrados: Lancamentos (1), Categorias (1), Origens (1), Devedores (1)",
+          "✅ 100% do código comentado com JSDoc e documentação inline",
+          "✅ Critérios de aceite: 14 operações com toasts, 4 empty states, zero erros console",
+          "✅ Documento completo: MILESTONE_9_COMPLETE.md com arquitetura e exemplos"
+        ]
+      },
+      {
+        "id": 17,
+        "tag": "[DX] Storybook",
+        "status": "🟢 Concluído",
+        "summary": "Storybook configurado com tema MUI, stories reais para MonthNavigator, KPI e EmptyState, sem exemplos quebrados.",
+        "notes": [
+          "✅ Storybook 10.x com Vite e ThemeProvider global",
+          "✅ Stories reais: MonthNavigator, KPI, EmptyState",
+          "✅ Remoção de exemplos quebrados",
+          "✅ Zero warnings/erros no build",
+          "✅ Critérios de aceite: stories reais, tema aplicado, sem exemplos quebrados"
+        ]
+      },
+      {
+        "id": 14,
+        "tag": "[BE] Dead Letter Queue (DLQ)",
+        "status": "🟢 Concluído",
+        "summary": "DLQ implementada no RabbitMQ com retry, backoff, endpoints admin e integração nos workers.",
+        "notes": [
+          "✅ DLQ via dead-letter-exchange e argumentos de fila",
+          "✅ Retry automático com backoff exponencial",
+          "✅ Endpoints admin: /api/dlq/stats, /api/dlq/messages, /api/dlq/reprocess/:id, /api/dlq/purge",
+          "✅ Proteção JWT nos endpoints",
+          "✅ Logs detalhados de falhas e reprocessamentos",
+          "✅ Workers bulk/recurring integrados com DLQ",
+          "✅ Critérios de aceite: mensagens na DLQ após retries, admin funcional, testes manuais"
+        ]
+      },
+      {
+        "id": 10,
+        "tag": "[DX] Healthchecks e Docker Prod",
+        "status": "🟢 Concluído",
+        "summary": "Aprimorar observabilidade e robustez de execução em contêineres com healthchecks completos.",
+        "notes": [
+          "✅ Endpoint /api/health: Verifica Mongo (ping), Redis (PING) e RabbitMQ (connect+channel)",
+          "✅ Retorna JSON com status, uptime, latência de cada dependência",
+          "✅ Status HTTP: 200 (ok) | 503 (unhealthy/degraded)",
+          "✅ Script health:db (check-db.ts): Verificação standalone do MongoDB com output detalhado",
+          "✅ Healthcheck Docker backend: curl -f http://localhost:4000/api/health (interval: 30s)",
+          "✅ Healthcheck Docker workers: kill -0 1 (verifica se PID 1 está vivo)",
+          "✅ Healthcheck Docker mongo: mongosh --eval 'db.adminCommand(ping)'",
+          "✅ Depends_on com condition: service_healthy - workers só iniciam após backend healthy",
+          "✅ Frontend depende de backend healthy - evita erros de conexão",
+          "✅ Dockerfile: curl instalado no stage runtime para healthchecks",
+          "✅ Todos os containers com STATUS=healthy validados via docker ps",
+          "✅ Endpoint /ready: Readiness probe para compatibilidade futura com Kubernetes"
+        ]
+      },
+      {
+        "id": 11,
+        "tag": "[Security] Validação de Rota (Zod)",
+        "status": "🟢 Concluído",
+        "summary": "Sistema completo de validação de entrada (body/query/params) usando Zod, com middleware genérica, schemas por recurso, feature flag e logs limpos.",
+        "notes": [
+          "✅ 5 schemas criados: expense (180L), origin (160L), auth (80L), salary (100L), catalog (90L)",
+          "✅ Middleware validation.ts (290L): aceita body/query/params, retorna 400 padronizado, respeita VALIDATION_ENABLED",
+          "✅ Formato de erro: { error, message, details: [{ field, message }] } - sem stack-trace",
+          "✅ Feature flag VALIDATION_ENABLED no config.ts (default: true, permite rollback)",
+          "✅ 18 rotas validadas: expenses (4), origins (4), auth (2), salary (4), debtors (4)",
+          "✅ Validações monetárias: string formato '0.00' com regex /^\\d+\\.\\d{2}$/",
+          "✅ Validações de datas: z.coerce.date() para ISO 8601, ranges validados",
+          "✅ Validações de IDs: ObjectId MongoDB (24 chars hex) com regex",
+          "✅ Validação condicional: closingDay obrigatório quando type='Cartão'",
+          "✅ Segurança: .strict() rejeita campos extras (previne mass assignment)",
+          "✅ Telemetria: contadores validationFailures (por rota) e validationFailuresByField",
+          "✅ Função getValidationMetrics() para debugging e monitoramento",
+          "✅ Logs nível 'warn' SEM stack-trace para erros esperados de validação",
+          "✅ Convenções: createXxxSchema, updateXxxSchema (.partial()), queryXxxSchema, idParamSchema",
+          "✅ Documentação completa consolidada no README.md (seção Milestone #11)",
+          "🐛 v6.2.1 FIX: queryExpenseSchema ajustado para aceitar mode=calendar, year, limit=1000 (compatibilidade frontend)",
+          "🐛 v6.2.1 FIX: Middleware corrigido para não sobrescrever req.query (read-only no Express)",
+          "✅ v6.2.1 TEST: Todas as rotas validadas retornando 200 OK (expenses, origins, salary, debtors)",
+          "✅ v6.2.1 STATUS: Sistema 100% funcional em produção sem erros 400/500"
+        ]
+      },
+      {
+        "id": 13,
+        "tag": "[Security] Auth httpOnly Cookies",
+        "status": "🟢 Concluído",
+        "summary": "Migração de localStorage (vulnerável a XSS) para cookies httpOnly + tokens em memória, com refresh automático e validação real de credenciais.",
+        "notes": [
+          "✅ Arquitetura de 2 tokens: Access Token (15min, memória) + Refresh Token (7d, cookie httpOnly)",
+          "✅ Backend: 4 endpoints (login, register, refresh, logout) com bcrypt + JWT",
+          "✅ Cookies httpOnly: secure (HTTPS prod), sameSite: strict (previne CSRF), inacessível via JS",
+          "✅ Validação real: bcrypt.compare() para senhas, mensagens genéricas (previne enumeração)",
+          "✅ Auto-refresh: Frontend intercepta 401, chama /auth/refresh automaticamente",
+          "✅ CORS: credentials: true no backend + withCredentials: true no frontend",
+          "✅ cookie-parser: Instalado no backend para ler req.cookies",
+          "✅ Logs seguros: Login success/fail com email/IP (SEM senha/token)",
+          "✅ Frontend: Token em memória (state), user cacheado (localStorage), logout chama backend",
+          "✅ Testes: register, login, refresh, logout, credenciais inválidas - TODOS PASSANDO",
+          "✅ Breaking change: Usuários precisam fazer login novamente (tokens antigos inválidos)",
+          "✅ Documentação: 1000+ linhas no README com diagramas, fluxos, troubleshooting",
+          "✅ Segurança: XSS prevenido (httpOnly), CSRF prevenido (sameSite: strict)",
+          "✅ Dependências: cookie-parser@1.4.6 + @types/cookie-parser@1.4.7"
+        ]
+      },
+      {
+        "id": 16,
+        "tag": "[DX] Testes Automatizados",
+        "status": "🟢 Concluído",
+        "summary": "Cobertura de testes automatizados (unitários e integração) para backend (Vitest + Supertest) e frontend (RTL), garantindo estabilidade, confiança e CI/CD robusta.",
+        "notes": [
+          "✅ Backend: Vitest + Supertest para rotas, services, workers, helpers (auth, expenses, billing, validation)",
+          "✅ Testes de integração: /auth/login, /auth/refresh, /auth/logout (cookies), CRUD /expenses, filtros UTC, billingMonth",
+          "✅ Testes unitários: deriveBillingMonth(), adjustToBusinessDay(), workers (ACK/NACK, reconexão)",
+          "✅ Mock global de clock (UTC fixo)",
+          "✅ Seeds determinísticos (seed=42), banco in-memory/mocks, sem tocar produção",
+          "✅ Mocks centralizados (__mocks__/), reset antes de cada teste",
+          "✅ Rodar via npm run test:backend, logs enxutos (--silent)",
+          "✅ Frontend: React Testing Library (RTL) + Vitest",
+          "✅ Testes de componentes: MonthNavigator (troca mês, labels, animação), EmptyState (renderização, CTA)",
+          "✅ Testes de hooks: useExpenses (fetch/mutation, toasts), useToast (debounce/chave única)",
+          "✅ Testes de contexto: AuthContext (login/logout, mock cookies)",
+          "✅ Providers mockados: QueryClient, Theme, Toast",
+          "✅ Mocks de API: MSW ou axios-mock-adapter",
+          "✅ Rodar via npm run test:frontend, cobertura >80% em /hooks e /components/ui",
+          "✅ Cobertura mínima 80% linhas/branches backend (src/services, src/routes, src/utils) e frontend (src/hooks, src.components.ui)",
+          "✅ CI executa npm run test:backend e npm run test:frontend, falha se cobertura <80%",
+          "✅ Relatório HTML (coverage/index.html)",
+          "✅ Nomes descritivos, mocks centralizados, clock global, seeds fixos, testes idempotentes",
+          "✅ Nenhum teste depende de latência real, logs silenciosos, scripts package.json comentados",
+          "✅ TESTING_GUIDE.md: estrutura, comandos, troubleshooting, tabela módulos↔testes, boas práticas",
+          "✅ Critérios de aceite: tudo acima implementado, sem flakiness, cobertura >80%, documentação completa"
+        ]
+      },
+      {
+        "id": 0,
+        "tag": "[BUG] Fatura de Cartão (closingDay + dia útil + billingMonth)",
+        "status": "🟢 Concluído (Backend)",
+        "summary": "Classificar despesas de cartão pela fatura correta com base no dia de fechamento (ajustado para dia útil), gravando billingMonth automaticamente.",
+        "notes": [
+          "✅ Schema atualizado: Origin.closingDay (Int), Origin.billingRolloverPolicy (NEXT|PREVIOUS), Expense.billingMonth (YYYY-MM) + índice @@index([userId, billingMonth])",
+          "✅ Helpers implementados: deriveBillingMonth(txDate, closingDay, policy) e adjustToBusinessDay() em backend/src/utils/billingHelpers.ts com 235 linhas de JSDoc",
+          "✅ API atualizada: POST/PUT /api/expenses calculam billingMonth automaticamente; GET /api/expenses?mode=billing&month=YYYY-MM funcional",
+          "✅ Validação 422: Retorna erro se cartão não tem closingDay configurado",
+          "✅ Backfill: Script backend/scripts/backfill-billing-month.ts (152 linhas) para preencher billingMonth retroativo",
+          "✅ Redis: Cache por billingMonth integrado; invalidação em mutações",
+          "✅ Docker: Build estável com enum atualizado (NEXT/PREVIOUS)",
+          "✅ Testes: billing.test.ts atualizado para novos valores de enum",
+          "✅ Documentação completa: MILESTONE_0_COMPLETE.md com 600+ linhas detalhando implementação",
+          "✅ Script de migração: migrate-billing-enum.ts criado para converter dados antigos",
+          "✅ Migração executada: 5 cartões atualizados de PREVIOUS_BUSINESS_DAY → PREVIOUS no MongoDB",
+          "✅ Dockerfile atualizado: scripts/ e package.json copiados para runtime",
+          "✅ API Backend: GET /api/origins funcionando sem erros de enum",
+          "✅ Frontend atualizado: schemas.ts, types/index.ts e Cadastros.jsx com NEXT/PREVIOUS",
+          "✅ Guia de migração: MIGRATION_ENUM_BILLING.md com 250+ linhas e checklist completo",
+          "🟡 Frontend pendente: useExpenses mode=billing e UI de agrupamento por fatura (Todo #8)"
+        ]
+      },
+      {
+        "id": 15,
+        "tag": "[Refactor] Service/Repository Layer",
+        "status": "🟡 Planejado (NOVO)",
+        "summary": "Separar responsabilidades em três camadas para clareza, testes e evolução segura.",
+        "notes": [
+          "Routes: validação + orquestração; Services: regras; Repositories: Prisma-only.",
+          "Injeção de dependência para facilitar mocks nos testes.",
+          "Critérios de aceite: rotas finas; services sem import de Prisma.",
+          "Riscos: refator parcelado; mitigar com feature toggles e suíte de testes (#16)."
+        ]
+      },
+      {
+        "id": 18,
+        "tag": "[Security] Autenticação Avançada (MFA + Google Login)",
+        "status": "🟡 Planejado (NOVO)",
+        "summary": "Adicionar MFA via Resend (OTP) e login social Google OAuth2, incluindo botão 'Entrar com o Google' na tela de login e fluxo completo de autenticação.",
+        "notes": [
+          "✅ Botão 'Entrar com o Google' exibido na tela de login (frontend)",
+          "✅ Integração com biblioteca oficial Google Sign-In (@react-oauth/google ou similar)",
+          "✅ client_id configurado via env frontend",
+          "✅ Ao clicar, inicia fluxo OAuth2 do Google e recebe token/código",
+          "✅ Frontend envia token/código para backend em /auth/google",
+          "✅ Backend valida token, autentica/cria usuário e retorna access/refresh token",
+          "✅ Tokens: refresh em cookie httpOnly, access em memória (state)",
+          "✅ MFA opcional: envio e validação de OTP via Resend (ou similar)",
+          "✅ Rotas: /auth/register, /auth/login, /auth/refresh, /auth/logout, /auth/resend, /auth/google",
+          "✅ Critérios de aceite: login Google end-to-end funcional, MFA opcional, UX fluida",
+          "Riscos: fluxo OAuth mal configurado; mitigar com testes em sandbox, logs detalhados e validação de estado/nonce"
+        ]
+      },
+      {
+        "id": 5,
+        "tag": "[API] Índices e filtros UTC",
+        "status": "🟢 Implementado",
+        "summary": "Normalizar consultas mensais por UTC para evitar desvios de timezone.",
+        "notes": [
+          "@@index([userId, date]) e range por Date.UTC em filtros.",
+          "Critérios de aceite: mesma query retorna os mesmos itens independente de TZ do host.",
+          "Riscos: dados legados com TZ local; mitigado por conversão centralizada."
+        ]
+      },
+      {
+        "id": 6,
+        "tag": "[FE] MUI Only Theme",
+        "status": "🟢 Implementado",
+        "summary": "Unificar design system em MUI e remover resíduos de Tailwind.",
+        "notes": [
+          "ThemeProvider central; paleta/tipografia padronizadas.",
+          "Critérios de aceite: nenhuma classe Tailwind ativa; UI consistente.",
+          "Riscos: regressões visuais; mitigar com verificação manual das principais telas."
+        ]
+      },
+      {
+        "id": 7,
+        "tag": "[FE] Hooks Tipados + Query Cache",
+        "status": "🟢 Concluído",
+        "summary": "Refatorar useFinanceApp em hooks modulares com TanStack Query e serviços REST tipados.",
+        "notes": [
+          "useExpenses/useCatalogs/useSalary + Query Keys centralizadas.",
+          "Axios com interceptors; tipagem de payloads/DTOs.",
+          "Critérios de aceite: cache por mês, invalidação após mutações; zero acesso a LocalStorage.",
+          "Riscos: chaves inconsistentes; mitigado por queryKeys.ts."
+        ]
+      },
+      {
+        "id": 8,
+        "tag": "[FE/BE] Navegação mensal + Cache Redis + Build Estabilizado",
+        "status": "🟢 Concluído (Validação Final OK)",
+        "summary": "UX de navegação temporal suave, cache distribuído Redis e build Docker multi-stage estável com Prisma.",
+        "notes": [
+          "MonthNavigator com Framer Motion; integração useFinanceApp.",
+          "Upstash Redis por usuário/mês e invalidation pós-mutation.",
+          "Docker: prisma generate no builder; cópia de .prisma para runtime.",
+          "Critérios de aceite: logs com [CACHE HIT/MISS]; containers healthy.",
+          "Riscos: WSL1; mitigar executando build em WSL2/Docker."
+        ]
+      },
+      {
+        "id": 4,
+        "tag": "[Worker] RabbitMQ Robustness",
+        "status": "🟢 Concluído",
+        "summary": "Resiliência no processamento assíncrono de jobs de recorrência.",
+        "notes": [
+          "Reconexão com backoff, prefetch(10), ConfirmChannel, shutdown limpo.",
+          "Critérios de aceite: worker permanece estável em reconexões.",
+          "Riscos: mensagens venenosas; mitigação futura com DLQ (#14)."
+        ]
+      },
+      {
+        "id": 3,
+        "tag": "[API] Security & Config ENV",
+        "status": "🟢 Concluído",
+        "summary": "Endurecer configuração e headers de segurança na API.",
+        "notes": [
+          "Zod para ENVs críticos; Helmet e CORS dinâmico.",
+          "Critérios de aceite: boot falha sem ENVs; headers presentes.",
+          "Riscos: CORS mal configurado; mitigar com allowlist por ambiente."
+        ]
+      },
+      {
+        "id": 2,
+        "tag": "[DB] Float → String precision",
+        "status": "🟢 Concluído",
+        "summary": "Evitar erros de arredondamento em valores monetários.",
+        "notes": [
+          "Valores monetários como string + coerções nos helpers.",
+          "Critérios de aceite: comparação monetária determinística.",
+          "Riscos: parsing negligenciado; mitigado em helpers centralizados."
+        ]
+      },
+      {
+        "id": 1,
+        "tag": "[BUG] Replicação e idempotência",
+        "status": "🟢 Resolvido",
+        "summary": "Eliminar duplicações de recorrentes por meio de fingerprint único.",
+        "notes": [
+          "Índice único por fingerprint + backfill idempotente.",
+          "Critérios de aceite: nenhuma duplicidade em replays.",
+          "Riscos: colisão de fingerprint; mitigado com sal e campos chave."
+        ]
+      }
+    ],
+    "last_action": "Sessão 10/11/2025: integração Qodana (ativo), início da configuração Semgrep, Snyk e ZAP, registro dos GitHub Secrets e template .env.example revisado. CD iniciado (Vercel + Render / Kubernetes OKE) e GitOps planejado.",
+    "session_achievements": [
+      "✅ Qodana integrado e executando automaticamente em cada PR (com comentários no diff)",
+      "✅ Secrets e variáveis sensíveis migrados para GitHub Secrets (sem leaks em logs)",
+      "✅ .env.example padronizado e revisado",
+      "✅ Render backend e Vercel frontend configurados com deploy manual pós-CI",
+      "🟡 Semgrep, Snyk e ZAP configurando alertas e thresholds de bloqueio",
+      "🟡 Início da estruturação de CD automatizado e futura arquitetura GitOps"
+    ],
+    "next_steps": [
+      "Finalizar integração dos scanners Semgrep, Snyk e OWASP ZAP no CI Security Analysis",
+      "Refatorar workflows para consumir secrets via matrix/env-file",
+      "Habilitar CD completo (auto deploy staging → production via Render, Vercel e/ou Kubernetes)",
+      "Implementar rollback automatizado e healthcheck de deploy",
+      "Estruturar planejamento GitOps com Canary Deploy (v7.0 milestone)",
+      "Atualizar documentação dos fluxos de segurança e CI/CD"
+    ],
+    "commit_template": "• [Feature/Refactor/Fix/Security] Descrição da mudança.\n• Relacionado ao(s) Milestone(s): #[ID]\n• Verificado por: Qodana/Snyk/Semgrep/ZAP"
   }
+}

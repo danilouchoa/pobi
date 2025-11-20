@@ -2,37 +2,92 @@ name: CI Frontend
 
 on:
   push:
-    branches: [ main, 'feature/*', 'bugfix/*', 'hotfix/*' ]
+    branches: [ main ]
+    paths:
+      - 'frontend/**'
+      - 'infra/**'
+      - 'helm/**'
+      - '.github/workflows/ci-frontend.yml'
   pull_request:
     branches: [ main ]
+    paths:
+      - 'frontend/**'
+      - 'infra/**'
+      - 'helm/**'
+      - '.github/workflows/ci-frontend.yml'
+
+concurrency:
+  group: ci-frontend-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
 
 permissions:
+  actions: write
   contents: read
   pull-requests: read
 
 jobs:
+  changes:
+    name: Detect frontend changes
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Filter frontend paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+              - 'infra/**'
+              - 'helm/**'
+              - '.github/workflows/ci-frontend.yml'
+
   build-test-frontend:
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    strategy:
+      matrix:
+        node-version: [20]
     env:
       VITE_GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID != '' && secrets.GOOGLE_CLIENT_ID || 'test-google-client-id' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Setup Node and cache deps/artifacts
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: 'npm'
+          node-version: ${{ matrix.node-version }}
+          cache: npm
           cache-dependency-path: frontend/package-lock.json
+
+      - name: Cache npm and Vite outputs
+        uses: actions/cache@v4
+        with:
+          path: |
+            frontend/node_modules
+            frontend/.vite
+          key: frontend-${{ runner.os }}-${{ matrix.node-version }}-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            frontend-${{ runner.os }}-${{ matrix.node-version }}-
+            frontend-${{ runner.os }}-
+          save-always: true
+          retention-days: 7
 
       - name: Ensure npm cache dir
         run: mkdir -p ~/.npm
 
       - name: Install dependencies
         working-directory: frontend
-        run: npm ci || npm install
+        run: npm ci
 
+      # Lint gate
       - name: Lint
         working-directory: frontend
         run: |
@@ -40,16 +95,18 @@ jobs:
             npm run lint || echo 'Lint falhou'
           fi
 
-      - name: Build
-        working-directory: frontend
-        run: npm run build
-
+      # Unit and component tests
       - name: Unit & Component Tests
         working-directory: frontend
         run: |
           if grep -q 'vitest' package.json; then
             npm run coverage || npm run test:unit || echo 'Tests skipped'
           fi
+
+      # Build after tests
+      - name: Build
+        working-directory: frontend
+        run: npm run build
 
       - name: Upload coverage artifact
         if: always()
@@ -58,3 +115,141 @@ jobs:
           name: frontend-coverage
           path: frontend/coverage
           if-no-files-found: warn
+
+      - name: Prune old caches
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const retention = 5; // keep only 5 most recent caches per key prefix
+            const resp = await github.rest.actions.getActionsCacheList({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            const caches = resp.data.actions_caches;
+
+            const groups = {};
+            for (const c of caches) {
+              const prefix = c.key.split('-').slice(0,2).join('-');
+              if (!groups[prefix]) groups[prefix] = [];
+              groups[prefix].push(c);
+            }
+
+            for (const prefix of Object.keys(groups)) {
+              const sorted = groups[prefix].sort((a,b) => new Date(b.last_accessed_at) - new Date(a.last_accessed_at));
+              const remove = sorted.slice(retention);
+              for (const old of remove) {
+                await github.rest.actions.deleteActionsCacheById({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  cache_id: old.id
+                });
+              }
+            }
+
+  deploy-frontend-dev:
+    name: Deploy Frontend Dev (EKS + ArgoCD)
+    needs: build-test-frontend
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # OIDC to AWS
+      contents: read
+    env:
+      AWS_REGION: us-east-1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          tags: |
+            ${{ secrets.AWS_ECR_REGISTRY }}/pobi-frontend:${{ github.sha }}
+
+      - name: Install ArgoCD CLI
+        run: |
+          curl -sSL -o argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+          sudo install -m 0755 argocd /usr/local/bin/argocd
+          argocd version --client
+
+      - name: ArgoCD Login
+        env:
+          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+          ARGOCD_USERNAME: ${{ secrets.ARGOCD_USERNAME }}
+          ARGOCD_PASSWORD: ${{ secrets.ARGOCD_PASSWORD }}
+        run: |
+          argocd login "$ARGOCD_SERVER" \
+            --username "$ARGOCD_USERNAME" \
+            --password "$ARGOCD_PASSWORD" \
+            --insecure
+
+      - name: Update frontend image values
+        env:
+          REGISTRY: ${{ secrets.AWS_ECR_REGISTRY }}
+          TAG: ${{ github.sha }}
+        run: |
+          argocd app set finfy-frontend \
+            --helm-set image.repository=${REGISTRY}/pobi-frontend \
+            --helm-set image.tag=${TAG}
+
+      - name: Sync and wait frontend
+        run: |
+          argocd app sync finfy-frontend
+          argocd app wait finfy-frontend --health --timeout 600
+
+      - name: Smoke test UI
+        run: |
+          set -euo pipefail
+          for i in {1..10}; do
+            echo "[Attempt $i] GET /login";
+            if curl -fsS --retry 4 --retry-all-errors --connect-timeout 5 https://app.finfy.me/login >/dev/null; then
+              echo OK; break; fi; sleep 5; done
+
+  prune-caches-frontend:
+    name: Prune caches (frontend)
+    needs: build-test-frontend
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prune old caches
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const retention = 5; // keep only 5 most recent caches per key prefix
+            const resp = await github.rest.actions.getActionsCacheList({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            const caches = resp.data.actions_caches;
+
+            const groups = {};
+            for (const c of caches) {
+              const prefix = c.key.split('-').slice(0,2).join('-');
+              if (!groups[prefix]) groups[prefix] = [];
+              groups[prefix].push(c);
+            }
+
+            for (const prefix of Object.keys(groups)) {
+              const sorted = groups[prefix].sort((a,b) => new Date(b.last_accessed_at) - new Date(a.last_accessed_at));
+              const remove = sorted.slice(retention);
+              for (const old of remove) {
+                await github.rest.actions.deleteActionsCacheById({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  cache_id: old.id
+                });
+              }
+            }
