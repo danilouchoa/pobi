@@ -24,16 +24,15 @@ Monorepo de controle financeiro com frontend React/Vite e backend Node/Express +
 
 ## 2. Arquitetura do Monorepo
 ```
-frontend (Vite + React + MUI)
-        │
-        ▼
-backend API (Express + Prisma)
-        │  ├─ MongoDB (dados financeiros)
-        │  ├─ Redis (cache mensal por usuário)
-        │  ├─ RabbitMQ (fila principal)
-        │  └─ DLQ (dead-letter-queue)
-        ▼
-Workers (recurringWorker.ts | bulkWorker.ts)
+[Frontend (Vite + React + MUI)] --HTTPS /api--> [Backend API (Express + Prisma)]
+        |                    |--> MongoDB (dados financeiros)
+        |                    |--> Redis (cache per-user/per-month + billingMonth)
+        |                    |--> RabbitMQ (fila principal + DLQ)
+        |                                |--> Workers recurring (consumo/cron)
+        |                                |--> Workers bulk (lotes/importações)
+        |                    |--> BillingMonth flow (derivação + cache)
+        |                    |--> Docker local (compose: frontend/backend/workers/Mongo/Redis/RabbitMQ)
+        |                    └--> [EKS/ArgoCD - espaço reservado para GitOps/CD futuro]
 ```
 - Docker multi-stage para backend e frontend, publicando imagens leves para runtime.
 - Workers compartilham o mesmo build do backend e consomem filas específicas para recorrência e operações em lote.
