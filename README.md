@@ -23,16 +23,21 @@
 Monorepo de controle financeiro com frontend React/Vite e backend Node/Express + Prisma para MongoDB, enriquecido por workers assíncronos via RabbitMQ, cache Redis por usuário/mês e autenticação com tokens em memória + refresh em cookie httpOnly. O projeto prioriza validação robusta (Zod), segurança de sessão, observabilidade por healthchecks e pipelines CI/CD maduros.
 
 ## 2. Arquitetura do Monorepo
-```
-[Frontend (Vite + React + MUI)] --HTTPS /api--> [Backend API (Express + Prisma)]
-        |                    |--> MongoDB (dados financeiros)
-        |                    |--> Redis (cache per-user/per-month + billingMonth)
-        |                    |--> RabbitMQ (fila principal + DLQ)
-        |                                |--> Workers recurring (consumo/cron)
-        |                                |--> Workers bulk (lotes/importações)
-        |                    |--> BillingMonth flow (derivação + cache)
-        |                    |--> Docker local (compose: frontend/backend/workers/Mongo/Redis/RabbitMQ)
-        |                    └--> [EKS/ArgoCD - espaço reservado para GitOps/CD futuro]
+```mermaid
+flowchart LR
+    FE[Frontend (Vite + React + MUI)] -->|HTTPS /api| BE[Backend API (Express + Prisma)]
+    BE -->|CRUD + cache mensal| Mongo[(MongoDB)]
+    BE -->|Cache per-user/per-month| Redis[(Redis)]
+    BE -->|Publica jobs + DLQ| RMQ[(RabbitMQ)]
+    RW[Workers Recurring] --> RMQ
+    BW[Workers Bulk] --> RMQ
+    BE -->|Deriva e grava billingMonth| BM[billingMonth flow]
+    DC[Docker local (compose)] -. orquestra .-> FE
+    DC -.-> BE
+    DC -.-> Mongo
+    DC -.-> Redis
+    DC -.-> RMQ
+    BE -. GitOps futuro .-> EKS[(EKS / ArgoCD - reservado)]
 ```
 - Docker multi-stage para backend e frontend, publicando imagens leves para runtime.
 - Workers compartilham o mesmo build do backend e consomem filas específicas para recorrência e operações em lote.

@@ -1,155 +1,173 @@
 # Workflows GitHub Actions
 
-Documentação dos pipelines ativos, seguindo o padrão corporativo do monorepo. Labels automáticas (`labeler.yml`) e a validação de checks (`label-ready.yml`) orientam o fluxo de aprovação: PRs recebem labels de escopo e só ganham `Ready to Merge` quando CI essencial estiver verde.
+Documentação dos pipelines ativos do repositório. Labels automáticas (`labeler.yml`) classificam PRs por escopo e o `label-ready.yml` aplica `Ready to Merge` somente após os checks críticos `build-test-backend` e `build-test-frontend` concluírem com sucesso.
 
-## ci-frontend.yml — CI Frontend
-- **Objetivo:** lint, build e testes do frontend em Node 20, com deploy automatizado para EKS/ArgoCD na `main`.
-- **Gatilhos:** `push` e `pull_request` para `main` com paths `frontend/`, `infra/`, `helm/` e o próprio workflow.
-- **Escopo:** executa apenas em alterações do frontend/infra/helm. Deploy só em `push` para `main`.
-- **Dependências:** Node 20, cache npm/Vite, VITE_GOOGLE_CLIENT_ID (fallback), AWS IAM role (`AWS_IAM_ROLE`), ECR (`AWS_ECR_REGISTRY`), ArgoCD (`ARGOCD_*`).
-- **Regras de aprovação:** usado como check obrigatório para o label `Ready to Merge`.
-- **Jobs:** `build-test-frontend` (lint, build, tests + coverage), `deploy-frontend-dev` (build/push imagem + sync ArgoCD + smoke test UI), `prune-caches-frontend`.
-- **Observações:** cancela execuções concorrentes; artefato de cobertura; limpeza de caches GHA.
+## Visão Geral
+- Branch protegida: `main` exige CI verde (backend/frontend) e validações adicionais conforme política de segurança.
+- Concurrency: todos os fluxos de CI/SAST usam cancelamento de execuções concorrentes por branch/commit.
+- Cache: npm/Vite/ Docker layer caches persistidos com retenção curta e rotina de limpeza (`cache-cleanup.yml`).
+- Segurança: uso de OIDC para AWS/ECR, tokens mínimos necessários e mascaramento de segredos.
 
-| Trigger | Jobs | Duração | Notes |
-| --- | --- | --- | --- |
-| push/pull_request (main; paths restritos) | build-test-frontend → deploy-frontend-dev (apenas push main) → prune-caches-frontend | Variável, dominada por build Docker e sync ArgoCD | Requer AWS/ArgoCD; alimenta `label-ready.yml` |
+## Workflows
 
-## ci-backend.yml — CI Backend
-- **Objetivo:** lint, `tsc --noEmit`, testes e cobertura do backend em Node 20, com deploy automatizado para EKS/ArgoCD na `main`.
-- **Gatilhos:** `push` e `pull_request` para `main` com paths `backend/`, `infra/`, `helm/` e o próprio workflow.
-- **Escopo:** roda somente em mudanças do backend/infra/helm. Deploy apenas em `push` para `main`.
-- **Dependências:** Node 20, cache npm, envs de frontend e OAuth (fallback), AWS (`AWS_IAM_ROLE`, `AWS_ECR_REGISTRY`), ArgoCD (`ARGOCD_*`).
-- **Regras de aprovação:** check obrigatório para o label `Ready to Merge`.
-- **Jobs:** `build-test-backend` (lint, `tsc`, tests + coverage), `deploy-backend-dev` (build/push imagem + sync ArgoCD + smoke test health), `prune-caches-backend`.
-- **Observações:** cancela concorrência; artefato de cobertura; limpa caches GHA.
+### ci-frontend.yml — CI Frontend
+| Aspecto | Detalhes |
+| --- | --- |
+| Objetivo | Lint, build e testes/cobertura do frontend; publicar imagem e sincronizar ArgoCD na `main`. |
+| Gatilhos | `push` e `pull_request` em `main` com paths `frontend/**`, `infra/**`, `helm/**`, `.github/workflows/ci-frontend.yml`. |
+| Quando roda/não roda | Executa apenas se houver alterações nos paths monitorados; deploy só em `push` para `main`. PRs sem mudanças nesses caminhos não disparam. |
+| Jobs | `build-test-frontend` (npm ci, lint, build, Vitest/coverage, artifact de cobertura); `deploy-frontend-dev` (build/push imagem para ECR, atualizar Helm via ArgoCD, smoke test `/login`); `prune-caches-frontend` (limpeza de caches). |
+| Restrições de branch | CI em `main`; deploy gated por `github.ref == refs/heads/main`. |
+| Regras de aprovação | Check `build-test-frontend` requerido por `label-ready.yml` para liberar `Ready to Merge`. |
+| Observações | Cache compartilhado com retenção de 7 dias; fallback de `VITE_GOOGLE_CLIENT_ID`; concorrência por branch; depende de AWS/ArgoCD. |
+| Relação com labels | Garante check verde consumido por `label-ready.yml`; labels de escopo via `labeler.yml` não influenciam a execução. |
 
-| Trigger | Jobs | Duração | Notes |
-| --- | --- | --- | --- |
-| push/pull_request (main; paths restritos) | build-test-backend → deploy-backend-dev (apenas push main) → prune-caches-backend | Variável, dominada por build Docker e sync ArgoCD | Check requerido por `label-ready.yml`; depende de AWS/ArgoCD |
+### ci-backend.yml — CI Backend
+| Aspecto | Detalhes |
+| --- | --- |
+| Objetivo | Lint, `tsc --noEmit`, testes/cobertura do backend; build/push de imagem e sync ArgoCD na `main`. |
+| Gatilhos | `push` e `pull_request` em `main` com paths `backend/**`, `infra/**`, `helm/**`, `.github/workflows/ci-backend.yml`. |
+| Quando roda/não roda | Apenas quando há mudanças nos paths monitorados; deploy exclusivo para `push` na `main`. |
+| Jobs | `build-test-backend` (npm ci, lint, TypeScript, Vitest/coverage, artifact); `deploy-backend-dev` (build/push imagem para ECR, atualizar Helm via ArgoCD, smoke test `/api/health`); `prune-caches-backend`. |
+| Restrições de branch | CI em `main`; deploy bloqueado para outros branches. |
+| Regras de aprovação | `build-test-backend` é check requerido para `Ready to Merge`. |
+| Observações | Envs fallback para OAuth/CORS em PRs; concorrência por branch; cache npm/Vite com retenção curta. |
+| Relação com labels | Resultado usado pelo `label-ready.yml`; labels automáticas não bloqueiam execução. |
 
-## ci-build-images.yml — Build de Imagens
-- **Objetivo:** build e push de imagens Docker do backend e frontend para ECR.
-- **Gatilhos:** `push` para `main` com alterações em backend/frontend/docker-compose/helm/infra ou no próprio workflow.
-- **Escopo:** apenas branch `main`.
-- **Dependências:** Docker + AWS OIDC (`AWS_GITHUB_OIDC_ROLE_ARN`), ECR repos `finfy-backend` e `finfy-frontend`.
-- **Jobs:** `build-and-push` (build com caches GHA, tags SHA+latest, push, export de artifact `image-tags`).
-- **Observações:** fornece artifact consumido por `cd-argocd-sync.yml`; limpa caches GHA.
+### ci-build-images.yml — Build de Imagens
+| Aspecto | Detalhes |
+| --- | --- |
+| Objetivo | Build e push das imagens Docker do backend e frontend para ECR com tags `latest` e SHA curto; exporta artifact `image-tags`. |
+| Gatilhos | `push` na `main` com alterações em backend/frontend/docker-compose/helm/infra ou no próprio workflow. |
+| Quando roda/não roda | Apenas em `main` e somente se paths relevantes forem alterados. |
+| Jobs | `build-and-push` (build com cache GHA, push para ECR, gera artifact `image-tags`, prune caches). |
+| Restrições de branch | Somente `main`. |
+| Regras de aprovação | Não é check obrigatório para merge; alimenta CD. |
+| Observações | Usa OIDC para AWS; cache GHA por escopo; artifact consumido por `cd-argocd-sync.yml`. |
+| Relação com labels | Independente de labels, mas facilita merges de PRs de release ao prover imagens atuais. |
 
-| Trigger | Jobs | Duração | Notes |
-| --- | --- | --- | --- |
-| push (main; paths restritos) | build-and-push | Variável, dominada por build Docker | Produz `image-tags` para CD; depende de login ECR |
+### cd-argocd-sync.yml — Sync pós-build
+| Aspecto | Detalhes |
+| --- | --- |
+| Objetivo | Aplicar tags de imagem geradas pelo CI de build nas aplicações ArgoCD (backend/front). |
+| Gatilhos | `workflow_run` concluído de "CI Build Images" com conclusão `success`. |
+| Quando roda/não roda | Só executa se o workflow anterior terminar com sucesso; não roda em execuções falhas ou canceladas. |
+| Jobs | `sync` (baixar `image-tags`, autenticar no ArgoCD via token SSO, aplicar `helm-set` de tags e sincronizar/aguardar apps). |
+| Restrições de branch | Herdadas do gatilho (apenas builds da `main`). |
+| Regras de aprovação | Não requerido para merge; integra fluxo de CD. |
+| Observações | Usa `workflow_run`, evitando rebuilds; depende de `ARGOCD_AUTH_TOKEN`. |
+| Relação com labels | Não aplica labels; mantém ambiente atualizado para PRs já aprovados. |
 
-## cd-argocd-sync.yml — Sync pós-build
-- **Objetivo:** sincronizar ArgoCD após imagens publicadas.
-- **Gatilhos:** `workflow_run` concluído com sucesso do workflow **CI Build Images**.
-- **Escopo:** somente quando o build de imagens termina em `success`.
-- **Dependências:** ArgoCD server/token (`ARGOCD_SERVER`, `ARGOCD_AUTH_TOKEN`), artifact `image-tags`.
-- **Jobs:** `sync` (download artifact, extrai tags, ajusta `finfy-backend`/`finfy-frontend` via `helm-set`, `argocd app sync/wait`).
-- **Observações:** usa login via token SSO; atualiza apenas tags, não builda imagens.
+### deploy-dev.yaml — Deploy Dev direto
+| Aspecto | Detalhes |
+| --- | --- |
+| Objetivo | Pipeline de deploy contínuo para ambiente dev (build/push de imagens e sync ArgoCD) disparado diretamente pela branch protegida. |
+| Gatilhos | `push` para `main` (sem filtro de paths). |
+| Quando roda/não roda | Sempre que há push na `main`; não executa em PRs. |
+| Jobs | `build-and-push` (Docker build/push backend e frontend, tags SHA, outputs); `deploy-argocd` (login ArgoCD, `helm-set` de repos/tag, sync/wait, smoke tests). |
+| Restrições de branch | Exclusivo para `main`. |
+| Regras de aprovação | Não atua em PRs; depende de proteção da `main`. |
+| Observações | Usa environment `dev`; OIDC para AWS; smoke tests de UI e API. |
+| Relação com labels | Fora do fluxo de labels; mantém ambiente dev alinhado com `main`. |
 
-| Trigger | Jobs | Duração | Notes |
-| --- | --- | --- | --- |
-| workflow_run (CI Build Images = success) | sync | Curta; limitada ao sync ArgoCD | Consumidor direto do artifact `image-tags` |
+### codeql.yml — CodeQL Security Analysis
+| Aspecto | Detalhes |
+| --- | --- |
+| Objetivo | SAST (security-extended + security-and-quality) para backend e frontend. |
+| Gatilhos | `push`/`pull_request` em `main` (opened/synchronize/reopened/ready_for_review) com paths backend/frontend/workflow; `schedule` semanal (domingo 21:33 UTC). |
+| Quando roda/não roda | Não executa se PR não tocar paths monitorados; agenda roda sempre. |
+| Jobs | `analyze` (matriz backend/frontend, Node 20, init/analyze CodeQL com paths-ignore). |
+| Restrições de branch | Monitoramento focado na `main`. |
+| Regras de aprovação | Job `analyze` monitorado por `label-ready.yml`, mas não é marcado como required check adicional. |
+| Observações | Timeout 360 min; usa cache npm; cancela execuções concorrentes. |
+| Relação com labels | Eventos `workflow_run` alimentam `label-ready.yml` para checar conclusão antes de aplicar `Ready to Merge`. |
 
-## deploy-dev.yaml — Deploy Dev direto
-- **Objetivo:** build/push de imagens e atualização de ArgoCD para ambiente dev diretamente na branch `main`.
-- **Gatilhos:** `push` para `main`.
-- **Escopo:** sempre executa nas pushes para `main` (independente de paths).
-- **Dependências:** AWS IAM role (`AWS_IAM_ROLE`), ECR (`AWS_ECR_REGISTRY`), ArgoCD (`ARGOCD_*`).
-- **Jobs:** `build-and-push` (Docker build/push backend e frontend), `deploy-argocd` (login ArgoCD, `helm-set` e `app sync/wait`, smoke tests HTTP).
-- **Observações:** usa environment `dev`; complementa ci-build-images quando necessário.
+### qodana_code_quality.yml — Qodana
+| Aspecto | Detalhes |
+| --- | --- |
+| Objetivo | Análise estática Qodana Cloud para backend e frontend. |
+| Gatilhos | `pull_request` em `main` (opened/synchronize/reopened/ready_for_review) com paths monitorados; `workflow_dispatch` manual. |
+| Quando roda/não roda | Não roda em PR draft; só dispara se paths incluídos forem alterados ou via execução manual. |
+| Jobs | `qodana` (checkout na ref do PR, scan cloud, publicação de comentários/checks). |
+| Restrições de branch | Focado em PRs contra `main`. |
+| Regras de aprovação | Não bloqueia merge por padrão; resultados exibidos em checks. |
+| Observações | Requer `QODANA_TOKEN_739358186`; permissões de escrita em checks/PR. |
+| Relação com labels | Complementa revisão; labels não alteram execução. |
 
-| Trigger | Jobs | Duração | Notes |
-| --- | --- | --- | --- |
-| push (main) | build-and-push → deploy-argocd | Variável, dominada por build e sync | Usa OIDC para AWS; executa smoke tests básicos |
+### dependabot-auto-merge.yml — Auto-approve Dependabot
+| Aspecto | Detalhes |
+| --- | --- |
+| Objetivo | Aprovar automaticamente PRs gerados pelo Dependabot (sem auto-merge). |
+| Gatilhos | `pull_request_target` (opened/synchronize/reopened). |
+| Quando roda/não roda | Só executa quando `github.actor == dependabot[bot]`; não roda em PRs de humanos. |
+| Jobs | `approve` (checkout, `dependabot/fetch-metadata`, aprovação automática). |
+| Restrições de branch | Depende do branch alvo do Dependabot (padrão `main`). |
+| Regras de aprovação | Apenas registra aprovação; merge continua condicionado aos checks/labels usuais. |
+| Observações | Usa `SECRET_GITHUB_TOKEN`; não realiza merge automático. |
+| Relação com labels | PRs recebem labels de dependência via configuração do Dependabot; `labeler.yml` pode complementar. |
 
-## codeql.yml — CodeQL Security Analysis
-- **Objetivo:** varredura SAST (security-extended + security-and-quality) para backend e frontend.
-- **Gatilhos:** `push`/`pull_request` para `main`; `schedule` semanal (domingo 21:33 UTC).
-- **Escopo:** paths backend/frontend e próprio workflow.
-- **Dependências:** Node 20, cache npm, CodeQL init/analyze.
-- **Regras de aprovação:** listado como workflow monitorado por `label-ready.yml` (verifica conclusão do job `analyze`).
-- **Jobs:** `analyze` matriz (backend/frontend) com install leve, init CodeQL, analyze SARIF.
-- **Observações:** timeout 360 min; paths-ignore para testes/coverage/dist/stories.
+### labeler.yml — Pull Request Labeler
+| Aspecto | Detalhes |
+| --- | --- |
+| Objetivo | Aplicar labels conforme `.github/labeler.yml` para classificar PRs. |
+| Gatilhos | `pull_request` (opened/synchronize/reopened/ready_for_review). |
+| Quando roda/não roda | Ignora PRs em rascunho (`draft == true`). |
+| Jobs | `labeler` (actions/labeler com `sync-labels: false`). |
+| Restrições de branch | Nenhuma específica além do PR aberto. |
+| Regras de aprovação | Não bloqueia merge; fornece metadados para revisão. |
+| Observações | Usa `SECRET_GITHUB_TOKEN`; não remove labels manualmente ajustadas. |
+| Relação com labels | É o gerador principal de labels de escopo consumidos por revisores e automações. |
 
-| Trigger | Jobs | Duração | Notes |
-| --- | --- | --- | --- |
-| push/pull_request (main) + schedule semanal | analyze (matriz backend/frontend) | Prolongada, depende do tamanho do scan | Results enviados como SARIF; integra com `label-ready.yml` |
+### label-ready.yml — Label Ready to Merge
+| Aspecto | Detalhes |
+| --- | --- |
+| Objetivo | Aplicar label `Ready to Merge` quando checks obrigatórios estiverem verdes. |
+| Gatilhos | `workflow_run` (completed) dos workflows CI Backend, CI Frontend e CodeQL Security Analysis. |
+| Quando roda/não roda | Apenas para eventos originados de `pull_request`; ignora execuções sem PR associado ou com checks pendentes/falhos. |
+| Jobs | `label-ready` (localiza PR pelo SHA/branch, verifica check runs `build-test-backend` e `build-test-frontend`, aplica label se `success`). |
+| Restrições de branch | Segue branches dos workflows de origem (principalmente `main`). |
+| Regras de aprovação | Atua como gate de merge ao adicionar `Ready to Merge` somente com CI verde. |
+| Observações | Evita duplicar label; não força remoção se checks falham após aplicação. |
+| Relação com labels | Usa labels existentes e adiciona `Ready to Merge`; depende indiretamente do `labeler.yml` para contexto do PR. |
 
-## qodana_code_quality.yml — Qodana
-- **Objetivo:** análise Qodana Cloud para frontend e backend.
-- **Gatilhos:** `pull_request` para `main` (inclusive `ready_for_review`) e `workflow_dispatch` manual.
-- **Escopo:** paths backend/frontend e próprio workflow.
-- **Dependências:** JetBrains Qodana action, `QODANA_TOKEN_739358186`, endpoint cloud.
-- **Jobs:** `qodana` (checkout com ref do PR, scan, comentários/checks em PR).
-- **Observações:** permissões de escrita em checks/PRs; usa `pr-mode: false`.
+### cache-cleanup.yml — Limpeza de caches
+| Aspecto | Detalhes |
+| --- | --- |
+| Objetivo | Remover caches antigos do GitHub Actions, mantendo no máximo 5 por prefixo. |
+| Gatilhos | `schedule` semanal (domingo 03:00 UTC) e `workflow_dispatch`. |
+| Quando roda/não roda | Sempre nas janelas agendadas ou quando acionado manualmente; independente de alterações de código. |
+| Jobs | `prune-caches` (percorre caches e deleta excedentes). |
+| Restrições de branch | Não se aplica; atua no repositório inteiro. |
+| Regras de aprovação | Não é check requerido. |
+| Observações | Minimiza storage e falhas por cache corrompido. |
+| Relação com labels | Nenhuma interação. |
 
-| Trigger | Jobs | Duração | Notes |
-| --- | --- | --- | --- |
-| pull_request (main) + workflow_dispatch | qodana | Variável, depende do scan na cloud | Necessita token Qodana; escreve comentários/checks |
+### stale.yml — Stale Issues/PRs
+| Aspecto | Detalhes |
+| --- | --- |
+| Objetivo | Sinalizar e fechar issues/PRs inativos. |
+| Gatilhos | `schedule` diário (09:00 UTC). |
+| Quando roda/não roda | Executa diariamente; não depende de alterações. |
+| Jobs | `stale` (actions/stale, aplica labels `no-issue-activity`/`no-pr-activity`, fecha após 7 dias). |
+| Restrições de branch | Não aplicável. |
+| Regras de aprovação | Não impacta merge; organiza backlog. |
+| Observações | Usa `SECRET_GITHUB_TOKEN`; mensagens em português. |
+| Relação com labels | Gera labels de inatividade visíveis no triage. |
 
-## dependabot-auto-merge.yml — Auto-approve Dependabot
-- **Objetivo:** aprovar automaticamente PRs do Dependabot (sem auto-merge).
-- **Gatilhos:** `pull_request_target` (opened/synchronize/reopened).
-- **Escopo:** apenas quando `github.actor` é `dependabot[bot]`.
-- **Dependências:** `SECRET_GITHUB_TOKEN` para metadata e aprovação.
-- **Jobs:** `approve` (checkout, fetch-metadata, auto-approve action).
-- **Observações:** não faz merge automático; segue branch protection padrão.
+### Dependabot — Updates semanais
+| Aspecto | Detalhes |
+| --- | --- |
+| Objetivo | Gerar PRs automáticos de atualização de dependências para backend e frontend. |
+| Gatilhos | Configuração em `.github/dependabot.yml`: `schedule` semanal (domingo 14:02 America/Sao_Paulo) para `npm` em `/backend` e `/frontend`. |
+| Quando roda/não roda | Executado pelo serviço Dependabot, independentemente de workflows; limitado a `main`. |
+| Jobs | Serviço nativo (não há workflow dedicado). |
+| Restrições de branch | PRs direcionados à `main`. |
+| Regras de aprovação | PRs recebem labels `dependencies` e `auto-update`; podem ser aprovados automaticamente pelo workflow `dependabot-auto-merge.yml`. |
+| Observações | Limite de 10 PRs abertos por diretório. |
+| Relação com labels | Labels automáticos auxiliam revisão e automações de merge. |
 
-| Trigger | Jobs | Duração | Notes |
-| --- | --- | --- | --- |
-| pull_request_target (Dependabot) | approve | Curta | Aprova PRs de dependência sem merge automático |
-
-## labeler.yml — Pull Request Labeler
-- **Objetivo:** aplicar labels automáticas conforme o arquivo `.github/labeler.yml`.
-- **Gatilhos:** `pull_request` (opened/synchronize/reopened/ready_for_review), exceto rascunhos.
-- **Escopo:** qualquer PR não-draft.
-- **Dependências:** `SECRET_GITHUB_TOKEN`.
-- **Jobs:** `labeler` (actions/labeler com config do PR).
-- **Observações:** mantém labels de escopo que orientam revisões e triagem; não sincroniza labels removidas manualmente.
-
-| Trigger | Jobs | Duração | Notes |
-| --- | --- | --- | --- |
-| pull_request (não draft) | labeler | Curta | Alimenta classificação usada na revisão e no fluxo de merge |
-
-## label-ready.yml — Label Ready to Merge
-- **Objetivo:** aplicar label `Ready to Merge` quando checks críticos estiverem verdes.
-- **Gatilhos:** `workflow_run` concluído de **CI Backend**, **CI Frontend** e **CodeQL Security Analysis**.
-- **Escopo:** apenas eventos originados de `pull_request`.
-- **Dependências:** Github Script API, checks `build-test-backend` e `build-test-frontend` bem-sucedidos.
-- **Regras de aprovação:** valida required checks antes de marcar PR; evita duplicidade de label.
-- **Jobs:** `label-ready` (busca PR pelo commit/branch, verifica check runs, aplica label se sucesso).
-- **Observações:** integra com branch protection; ignora PRs sem todos os checks completos.
-
-| Trigger | Jobs | Duração | Notes |
-| --- | --- | --- | --- |
-| workflow_run (CI Backend/Frontend/CodeQL) | label-ready | Curta | Controla aplicação de `Ready to Merge` |
-
-## cache-cleanup.yml — Limpeza de Caches
-- **Objetivo:** higienizar caches antigos do GitHub Actions.
-- **Gatilhos:** `schedule` semanal (domingo 03:00 UTC) e `workflow_dispatch`.
-- **Escopo:** repositório inteiro.
-- **Dependências:** permissões de `actions` write.
-- **Jobs:** `prune-caches` (apaga caches antigos mantendo 5 mais recentes por prefixo).
-- **Observações:** reduz consumo de storage e falhas por cache corrompido.
-
-| Trigger | Jobs | Duração | Notes |
-| --- | --- | --- | --- |
-| schedule semanal + manual | prune-caches | Curta | Remove caches excedentes, preservando 5 por prefixo |
-
-## stale.yml — Stale Issues/PRs
-- **Objetivo:** marcar e fechar issues/PRs inativos.
-- **Gatilhos:** `schedule` diário (09:00 UTC).
-- **Escopo:** issues e PRs com inatividade >30 dias.
-- **Dependências:** `SECRET_GITHUB_TOKEN`.
-- **Jobs:** `stale` (actions/stale com mensagens em português, labels `no-issue-activity`/`no-pr-activity`).
-- **Observações:** fecha itens após 7 dias se não houver atividade pós-label.
-
-| Trigger | Jobs | Duração | Notes |
-| --- | --- | --- | --- |
-| schedule diário | stale | Curta | Automatiza marcação/fechamento de itens inativos |
-
-## Outros apontamentos
-- Workflows ausentes do repositório no momento: `dependabot-updates.yml` e `copilot-pull-request-reviewer.yml` (mencionados na política, mas não versionados). Caso sejam adicionados, devem seguir este padrão de documentação.
-- Todos os workflows utilizam cancelamento de concorrência quando aplicável e respeitam labels automáticas para guiar o fluxo de revisão/merge.
+## Referências
+- Configuração de updates: `.github/dependabot.yml`.
+- Labeling automático: `.github/labeler.yml`.
+- Políticas de proteção de branch: ver configurações do repositório (checks requeridos: `build-test-backend`, `build-test-frontend`).
+- CD ArgoCD e imagens: `ci-build-images.yml`, `cd-argocd-sync.yml`, `deploy-dev.yaml`.
