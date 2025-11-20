@@ -50,11 +50,23 @@ jobs:
 
       - name: Build backend image
         run: |
-          docker build -f backend/Dockerfile -t "${{ steps.meta.outputs.backend_tag }}" -t "$BACKEND_IMAGE_REPO:latest" .
+          docker build \
+            --file backend/Dockerfile \
+            --cache-from=type=gha,scope=finfy-backend \
+            --cache-to=type=gha,scope=finfy-backend,mode=max \
+            -t "${{ steps.meta.outputs.backend_tag }}" \
+            -t "$BACKEND_IMAGE_REPO:latest" \
+            .
 
       - name: Build frontend image
         run: |
-          docker build -f frontend/Dockerfile -t "${{ steps.meta.outputs.frontend_tag }}" -t "$FRONTEND_IMAGE_REPO:latest" .
+          docker build \
+            --file frontend/Dockerfile \
+            --cache-from=type=gha,scope=finfy-frontend \
+            --cache-to=type=gha,scope=finfy-frontend,mode=max \
+            -t "${{ steps.meta.outputs.frontend_tag }}" \
+            -t "$FRONTEND_IMAGE_REPO:latest" \
+            .
 
       - name: Push images
         run: |
@@ -73,3 +85,34 @@ jobs:
         with:
           name: image-tags
           path: image-tags.env
+
+      - name: Prune old caches
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const retention = 5; // keep only 5 most recent caches per key prefix
+            const resp = await github.rest.actions.getActionsCacheList({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            const caches = resp.data.actions_caches;
+
+            const groups = {};
+            for (const c of caches) {
+              const prefix = c.key.split('-').slice(0,2).join('-');
+              if (!groups[prefix]) groups[prefix] = [];
+              groups[prefix].push(c);
+            }
+
+            for (const prefix of Object.keys(groups)) {
+              const sorted = groups[prefix].sort((a,b) => new Date(b.last_accessed_at) - new Date(a.last_accessed_at));
+              const remove = sorted.slice(retention);
+              for (const old of remove) {
+                await github.rest.actions.deleteActionsCacheById({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  cache_id: old.id
+                });
+              }
+            }

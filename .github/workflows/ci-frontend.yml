@@ -27,6 +27,9 @@ permissions:
 jobs:
   build-test-frontend:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [20]
     env:
       VITE_GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID != '' && secrets.GOOGLE_CLIENT_ID || 'test-google-client-id' }}
     steps:
@@ -36,9 +39,19 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
+          node-version: ${{ matrix.node-version }}
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            frontend/node_modules
+            frontend/.vite
+          key: frontend-${{ runner.os }}-${{ matrix.node-version }}-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            frontend-${{ runner.os }}-${{ matrix.node-version }}-
+            frontend-${{ runner.os }}-
+          save-always: true
+          retention-days: 7
 
       - name: Ensure npm cache dir
         run: mkdir -p ~/.npm
@@ -72,6 +85,37 @@ jobs:
           name: frontend-coverage
           path: frontend/coverage
           if-no-files-found: warn
+
+      - name: Prune old caches
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const retention = 5; // keep only 5 most recent caches per key prefix
+            const resp = await github.rest.actions.getActionsCacheList({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            const caches = resp.data.actions_caches;
+
+            const groups = {};
+            for (const c of caches) {
+              const prefix = c.key.split('-').slice(0,2).join('-');
+              if (!groups[prefix]) groups[prefix] = [];
+              groups[prefix].push(c);
+            }
+
+            for (const prefix of Object.keys(groups)) {
+              const sorted = groups[prefix].sort((a,b) => new Date(b.last_accessed_at) - new Date(a.last_accessed_at));
+              const remove = sorted.slice(retention);
+              for (const old of remove) {
+                await github.rest.actions.deleteActionsCacheById({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  cache_id: old.id
+                });
+              }
+            }
 
   deploy-frontend-dev:
     name: Deploy Frontend Dev (EKS + ArgoCD)
@@ -143,3 +187,39 @@ jobs:
             echo "[Attempt $i] GET /login";
             if curl -fsS --retry 4 --retry-all-errors --connect-timeout 5 https://app.finfy.me/login >/dev/null; then
               echo OK; break; fi; sleep 5; done
+
+  prune-caches-frontend:
+    name: Prune caches (frontend)
+    needs: build-test-frontend
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prune old caches
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const retention = 5; // keep only 5 most recent caches per key prefix
+            const resp = await github.rest.actions.getActionsCacheList({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            const caches = resp.data.actions_caches;
+
+            const groups = {};
+            for (const c of caches) {
+              const prefix = c.key.split('-').slice(0,2).join('-');
+              if (!groups[prefix]) groups[prefix] = [];
+              groups[prefix].push(c);
+            }
+
+            for (const prefix of Object.keys(groups)) {
+              const sorted = groups[prefix].sort((a,b) => new Date(b.last_accessed_at) - new Date(a.last_accessed_at));
+              const remove = sorted.slice(retention);
+              for (const old of remove) {
+                await github.rest.actions.deleteActionsCacheById({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  cache_id: old.id
+                });
+              }
+            }
