@@ -37,15 +37,26 @@ jobs:
       GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET != '' && secrets.GOOGLE_CLIENT_SECRET || 'test-google-client-secret' }}
       COOKIE_DOMAIN: ${{ secrets.COOKIE_DOMAIN != '' && secrets.COOKIE_DOMAIN || 'localhost' }}
     steps:
+      # Checkout and detect backend changes early (path filter avoids unnecessary work)
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Detect backend changes
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+
+      # Toolchain setup and cache (kept only when backend files change)
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
 
       - uses: actions/cache@v4
+        if: steps.changes.outputs.backend == 'true'
         with:
           path: |
             backend/node_modules
@@ -58,35 +69,41 @@ jobs:
           retention-days: 7
 
       - name: Ensure npm cache dir
+        if: steps.changes.outputs.backend == 'true'
         run: mkdir -p ~/.npm
 
-      - name: Install dependencies
+      - name: Install dependencies (npm ci)
+        if: steps.changes.outputs.backend == 'true'
         working-directory: backend
         run: npm ci
 
+      # Lint → Test → Build (deterministic order)
       - name: Lint
+        if: steps.changes.outputs.backend == 'true'
         working-directory: backend
         run: |
           if [ -f package.json ]; then
             npm run lint || echo 'Lint falhou (eslint ausente?)'
           fi
 
-      - name: Build TypeScript
-        working-directory: backend
-        run: |
-          if [ -f tsconfig.json ]; then
-            npx tsc --noEmit
-          fi
-
       - name: Test & Coverage
+        if: steps.changes.outputs.backend == 'true'
         working-directory: backend
         run: |
           if grep -q 'vitest' package.json; then
             npm run coverage || npm run test || echo 'Tests skipped'
           fi
 
+      - name: Build TypeScript
+        if: steps.changes.outputs.backend == 'true'
+        working-directory: backend
+        run: |
+          if [ -f tsconfig.json ]; then
+            npx tsc --noEmit
+          fi
+
       - name: Upload coverage artifact
-        if: always()
+        if: always() && steps.changes.outputs.backend == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: backend-coverage
