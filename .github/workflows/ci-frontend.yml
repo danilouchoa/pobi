@@ -26,8 +26,30 @@ permissions:
   pull-requests: read
 
 jobs:
+  changes:
+    name: Detect frontend changes
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Filter frontend paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+              - 'infra/**'
+              - 'helm/**'
+              - '.github/workflows/ci-frontend.yml'
+
   build-test-frontend:
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     strategy:
       matrix:
         node-version: [20]
@@ -37,12 +59,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Setup Node and cache deps/artifacts
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
-      - uses: actions/cache@v4
+      - name: Cache npm and Vite outputs
+        uses: actions/cache@v4
         with:
           path: |
             frontend/node_modules
@@ -59,8 +85,9 @@ jobs:
 
       - name: Install dependencies
         working-directory: frontend
-        run: npm ci || npm install
+        run: npm ci
 
+      # Lint gate
       - name: Lint
         working-directory: frontend
         run: |
@@ -68,16 +95,18 @@ jobs:
             npm run lint || echo 'Lint falhou'
           fi
 
-      - name: Build
-        working-directory: frontend
-        run: npm run build
-
+      # Unit and component tests
       - name: Unit & Component Tests
         working-directory: frontend
         run: |
           if grep -q 'vitest' package.json; then
             npm run coverage || npm run test:unit || echo 'Tests skipped'
           fi
+
+      # Build after tests
+      - name: Build
+        working-directory: frontend
+        run: npm run build
 
       - name: Upload coverage artifact
         if: always()
