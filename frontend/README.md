@@ -1,70 +1,93 @@
-### Bulk actions (update/delete)
+# Frontend · Finance App (F0-02)
 
-O frontend agora suporta ações em massa usando o mesmo endpoint unificado no backend (`POST /api/expenses/bulk`).
+## Tabela de Conteúdos
+- [1. Overview](#1-overview)
+- [2. Stack](#2-stack)
+- [3. Scripts](#3-scripts)
+- [4. Estrutura de Pastas](#4-estrutura-de-pastas)
+- [5. Convenções de UI e Estado](#5-convenções-de-ui-e-estado)
+- [6. Autenticação](#6-autenticação)
+- [7. Consumo da API](#7-consumo-da-api)
+- [8. Navegação Mensal e Billing](#8-navegação-mensal-e-billing)
+- [9. Testes](#9-testes)
+- [10. Troubleshooting](#10-troubleshooting)
+- [11. Roadmap](#11-roadmap)
 
-Exemplos de payload:
+## 1. Overview
+Frontend em React 18 + Vite com design system MUI, controle de estado remoto via TanStack Query e autenticação segura baseada em access token em memória e refresh token em cookie httpOnly. O projeto segue organização por feature, com services REST tipados, interceptors Axios e toasts globais pelo notistack. Storybook cobre componentes de UI e a suíte de testes roda em Vitest + React Testing Library.
 
-- Delete em massa
+## 2. Stack
+- **React 18 + Vite**: build rápido, HMR e bundling otimizado.
+- **MUI Design System**: componentes padronizados com tema unificado.
+- **TanStack Query**: cache e sincronização de dados por chave (`queryKeys` centralizado).
+- **Autenticação httpOnly**: access token mantido em memória; refresh token persistido em cookie httpOnly.
+- **Axios + interceptors**: injeção automática de headers, renovação de token e tratamento uniforme de erros.
+- **notistack**: toasts globais com `SnackbarProvider` e helpers de feedback.
+- **Storybook**: catálogo interativo de componentes e variações de estado.
+- **Testes**: Vitest + React Testing Library com cobertura de hooks e componentes.
 
-```
-{ "action": "delete", "ids": ["abc123", "def456"] }
-```
+## 3. Scripts
+- `npm run dev`: inicia Vite com HMR.
+- `npm run build`: gera build de produção.
+- `npm run preview`: serve o build gerado para validação.
+- `npm run test:unit`: executa testes unitários (Vitest).
+- `npm run coverage`: executa testes com cobertura.
+- `npm run lint`: analisa linting com ESLint.
+- `npm run storybook`: sobe Storybook em desenvolvimento.
+- `npm run build-storybook`: gera Storybook estático para publicação.
 
-- Update item-a-item
+## 4. Estrutura de Pastas
+Organização feature-based, mantendo isolamento de UI, hooks e serviços. Pastas principais:
+- `src/pages/`: páginas de alto nível por feature.
+- `src/components/`: componentes compartilhados (ex.: `components/ui`, `components/feedback`).
+- `src/hooks/`: hooks reutilizáveis por domínio (ex.: auth, expenses, billing).
+- `src/services/`: clientes REST tipados por feature (expenses, catalogs, salary, auth).
+- `src/context/`: providers de sessão e cache.
+- `src/lib/` e `src/utils/`: helpers de datas, billing e formatação.
+- `src/ui/`: átomos e padrões de feedback.
+- `src/types/`: DTOs e contratos de API.
+- `src/stories/`: Storybook organizado por componente/feature.
 
-```
-{ "action": "update", "items": [ { "id": "abc123", "category": "Food" }, { "id": "def456", "fixed": true } ] }
-```
+## 5. Convenções de UI e Estado
+- **Organização por features**: páginas e serviços seguem o mesmo domínio para facilitar descoberta.
+- **`components/` e `hooks/`**: UI reutilizável fica em `components/`; lógica de dados/efeitos em `hooks/` para testabilidade.
+- **`queryKeys` centralizado**: arquivo único define chaves de cache; todas as queries/mutações reutilizam o prefixo para garantir invalidação consistente.
+- **UX de exclusão de parcelas**:
+  - **Bulk**: só permitido quando todas as parcelas selecionadas compartilham o mesmo `installment_group_id`; modal informa quantidade e confirma ação agrupada.
+  - **Single**: ação direta na linha, mantendo o restante do grupo intacto; toasts refletem sucesso/erro e instruem recarregar cache quando necessário.
+- **Feedback**: notistack padrão para sucesso/erro/info com mensagens legíveis vindas do backend.
 
-No hook `useExpenses` foram adicionadas as funções:
+## 6. Autenticação
+- Login retorna access token (mantido em memória) e refresh token em cookie httpOnly (SameSite/secure conforme ambiente).
+- Interceptor Axios injeta o access token nas chamadas autenticadas; em `401`, tenta refresh via cookie e repete a requisição original.
+- Logout limpa tokens em memória e invalida o refresh cookie no backend; queries sensíveis são invalidadas após logout.
 
-- `bulkDelete(ids: string[])`
-- `bulkUpdateInline(items: { id: string; category?; originId?; fixed?; recurring?; recurrenceType? }[])`
+## 7. Consumo da API
+- **Services REST tipados**: cada domínio expõe funções de fetch/mutation com DTOs em `src/services/*`.
+- **Interceptors**: tratam baseURL, headers de auth, serialização de erros e mapeamento para mensagens de UI.
+- **TanStack Query**: queries usam `queryKeys` e `select` para normalizar; mutações invocam `invalidateQueries` por `billingMonth` após alterações.
 
-E na tela `Lancamentos` foi adicionado o botão “Excluir selecionados”.
+## 8. Navegação Mensal e Billing
+- **MonthNavigator**: componente controla navegação temporal (NEXT/PREVIOUS) e sincroniza `billingMonth` global.
+- **billingMonth**: propagado para hooks (`useExpenses`, `useCatalogs`, etc.) como chave de cache e parâmetro de API; mudanças disparam refetch e sincronizam withCredentials.
 
-# Finance App Frontend
+## 9. Testes
+- Instale dependências e execute:
+  ```bash
+  npm ci
+  npm run lint
+  npm run coverage
+  ```
+- Testes cobrem componentes, hooks (incluindo fluxos de seleção/exclusão de parcelas) e serviços tipados.
 
-This frontend consumes the REST API exposed by `VITE_API_URL` (default `http://localhost:4000`). React Query v5 orchestrates all remote state, with runtime validation and optimistic flows tuned for month-to-month navigation.
+## 10. Troubleshooting
+- **Erro 401 recorrente**: verifique se o domínio do cookie permite `withCredentials`; rode login novamente para renovar refresh.
+- **Cache desatualizado após deleção**: confirme que o `installment_group_id` das parcelas selecionadas é único e que a mutação invalidou o `queryKey` do `billingMonth` corrente.
+- **Storybook não inicia**: cheque porta 6006 livre e execute `npm run storybook` após `npm ci`.
+- **Build falha em CI**: execute `npm run lint` localmente; garanta variáveis `VITE_API_URL` e `VITE_AUTH_ORIGIN` configuradas.
 
-## React Query setup
-- Every query/mutation uses `queryKey` objects when cancelling or invalidating.
-- `keepPreviousData`, `placeholderData`, and `staleTime` keep the UI stable when the reference month changes.
-- Expense mutations (create/update/delete) run fully optimistic, revert on failure, and fall back to a server refresh via `invalidateQueries` on settle.
-- React Query DevTools are automatically mounted in development builds to simplify diagnostics.
-
-## API client & auth hardening
-- `api.ts` attaches `Authorization: Bearer <token>` whenever an auth token exists.
-- HTTP 401 responses now purge the cached token (localStorage + in-memory) and trigger the global unauthorized handler so the user is redirected to the login screen.
-- Responses are validated through [Zod](https://zod.dev); corrupted payloads fail fast before poisoning the query cache.
-
-## Runtime schemas
-All REST responses pass through Zod schemas (`src/lib/schemas.ts`). The schemas normalize optional fields (e.g. nullable IDs, installments, shared amounts) so hooks/components can rely on consistent shapes without defensive checks.
-
-## Migration blueprint: LocalStorage ➜ REST
-1. **Read-first** – gradually swap direct `localStorage` reads for `useExpenses/useCatalogs/useSalary` selectors so components depend on React Query only.
-2. **Write-through** – route create/edit/delete flows via mutations (already wired with optimistic updates) to keep the UI responsive.
-3. **Feature flag** – introduce an env toggle such as `VITE_USE_REST=true` to gate REST usage while legacy storage is still around. Flip it off to fall back when migrating feature-by-feature.
-4. **Cleanup** – once the flag stays on, remove bespoke providers, reducers, or helper abstractions that existed solely for `localStorage` synchronization.
-
-## Smoke tests
-Run these endpoints (replace the month when necessary) to verify the backend contract quickly:
-```sh
-# Expenses
-curl -i "$VITE_API_URL/expenses"
-
-# Salary history
-curl -i "$VITE_API_URL/salaryHistory?month=2025-11"
-
-# Catalogs
-curl -i "$VITE_API_URL/origins"
-curl -i "$VITE_API_URL/debtors"
-```
-
-## Getting started
-```sh
-cd frontend
-cp .env.example .env # define VITE_API_URL / VITE_USE_REST when needed
-npm install
-npm run dev
-```
+## 11. Roadmap
+- Ampliar cobertura de testes para fluxos de deleção agrupada e seleção parcial.
+- Documentar exemplos avançados no Storybook (estados de erro e loading das tabelas de despesas).
+- Adicionar monitoramento de performance com Web Vitals e traços de navegação por mês.
+- Consolidar guia de migração para React 19 e futuras versões do MUI.
