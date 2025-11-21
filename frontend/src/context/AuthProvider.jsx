@@ -91,7 +91,11 @@ export function AuthProvider({ children }) {
         const { data } = await api.post("/api/auth/refresh");
         setAuthToken(data.accessToken);
         setToken(data.accessToken);
-        await fetchCurrentUser();
+        if (data.user) {
+          setUser(data.user);
+        } else {
+          await fetchCurrentUser();
+        }
         return data.accessToken;
       } catch (e) {
         console.warn("[Auth] Refresh token expired or invalid, redirecting to login", e);
@@ -170,6 +174,33 @@ export function AuthProvider({ children }) {
   }, [queryClient]);
 
   /**
+   * Cadastro com email/senha
+   */
+  const registerLocal = useCallback(async ({ name, email, password }) => {
+    setLoading(true);
+    setAuthError(null);
+    try {
+      const { data } = await api.post("/api/auth/register", { name, email, password });
+
+      try {
+        await queryClient.clear();
+      } catch (e) {
+        console.warn("[Auth] Failed to clear query cache before register:", e);
+      }
+
+      setToken(data.accessToken);
+      setUser(data.user);
+      return data;
+    } catch (error) {
+      const message = error.response?.data?.message ?? "Não foi possível criar sua conta.";
+      setAuthError(message);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  }, [queryClient]);
+
+  /**
    * Login via Google credential (ID token)
    * Backend expects { credential }
    */
@@ -190,6 +221,63 @@ export function AuthProvider({ children }) {
       return data;
     } catch (error) {
       const message = error.response?.data?.message ?? 'Não foi possível autenticar com Google.';
+      setAuthError(message);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  }, [queryClient]);
+
+  /**
+   * Resolve conflito de conta LOCAL x GOOGLE com Google como canônico
+   */
+  const resolveGoogleConflict = useCallback(async ({ credential }) => {
+    setLoading(true);
+    setAuthError(null);
+    try {
+      const { data } = await api.post('/api/auth/google/resolve-conflict', {
+        credential,
+        strategy: 'merge_using_google_as_canonical',
+      });
+
+      try {
+        await queryClient.clear();
+      } catch (e) {
+        console.warn('[Auth] Failed to clear query cache after google conflict resolution:', e);
+      }
+
+      setToken(data.accessToken);
+      setUser(data.user);
+      return data;
+    } catch (error) {
+      const message = error.response?.data?.message ?? 'Não foi possível unificar as contas.';
+      setAuthError(message);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  }, [queryClient]);
+
+  /**
+   * Vincula uma conta Google a um usuário autenticado
+   */
+  const linkGoogleAccount = useCallback(async ({ credential }) => {
+    setLoading(true);
+    setAuthError(null);
+    try {
+      const { data } = await api.post('/api/auth/link/google', { credential });
+
+      try {
+        await queryClient.clear();
+      } catch (e) {
+        console.warn('[Auth] Failed to clear query cache after linking google:', e);
+      }
+
+      setToken(data.accessToken);
+      setUser(data.user);
+      return data;
+    } catch (error) {
+      const message = error.response?.data?.message ?? 'Não foi possível vincular sua conta Google.';
       setAuthError(message);
       throw error;
     } finally {
@@ -219,14 +307,17 @@ export function AuthProvider({ children }) {
       token,
       user,
       login,
+      register: registerLocal,
       loginWithGoogle,
+      resolveGoogleConflict,
+      linkGoogleAccount,
       logout,
       authError,
       loading,
       isAuthenticated: Boolean(token),
       refreshAccessToken,
     }),
-    [token, user, authError, loading, refreshAccessToken, login, loginWithGoogle, logout]
+    [token, user, authError, loading, refreshAccessToken, login, registerLocal, loginWithGoogle, resolveGoogleConflict, linkGoogleAccount, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

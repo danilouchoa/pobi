@@ -89,14 +89,14 @@ describe('POST /api/auth/google', () => {
     expect(refreshCookie).toContain('SameSite=Strict');
   });
 
-  it('vincula usuário existente pelo email quando já cadastrado', async () => {
+  it('atualiza usuário GOOGLE existente pelo email quando googleId está vazio', async () => {
     prisma.user.findUnique.mockResolvedValueOnce(null); // by googleId
 
     const existingUser = {
       id: 'existing-user-1',
       email: 'existing.user@finance.app',
       name: '',
-      provider: 'LOCAL',
+      provider: 'GOOGLE',
       googleId: null,
       avatar: null,
     };
@@ -147,6 +147,41 @@ describe('POST /api/auth/google', () => {
       avatar: updatedUser.avatar,
       provider: 'GOOGLE',
     });
+  });
+
+  it('retorna conflito quando já existe usuário LOCAL com mesmo email', async () => {
+    prisma.user.findUnique.mockResolvedValueOnce(null); // by googleId
+
+    const localUser = {
+      id: 'local-user-1',
+      email: 'conflict.user@finance.app',
+      name: 'Local User',
+      provider: 'LOCAL',
+      googleId: null,
+      avatar: null,
+    };
+
+    prisma.user.findUnique.mockResolvedValueOnce(localUser); // by email
+
+    mockVerifyIdToken.mockResolvedValueOnce({
+      getPayload: () => createPayload({
+        email: localUser.email,
+        sub: 'google-conflict-1',
+      }),
+    });
+
+    const { csrfToken, csrfCookie } = await getCsrfToken();
+
+    const res = await request(app)
+      .post('/api/auth/google')
+      .set('Cookie', csrfCookie)
+      .set('X-CSRF-Token', csrfToken)
+      .send({ credential: 'conflict-token' });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe('ACCOUNT_CONFLICT');
+    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(prisma.user.create).not.toHaveBeenCalled();
   });
 
   it('retorna 401 quando verifyIdToken lança erro', async () => {

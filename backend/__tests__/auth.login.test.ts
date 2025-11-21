@@ -1,30 +1,22 @@
-
 import request from 'supertest';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { PrismaClient } from '@prisma/client';
-import bcrypt from 'bcryptjs';
 import app from '../src/index';
 import { getCsrfToken } from './utils/csrf';
-
-const prisma = new PrismaClient() as any;
+import { resetUserFactory, createLocalUser } from './factories/userFactory';
 
 describe('POST /api/auth/login', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetUserFactory();
   });
 
   it('deve autenticar com credenciais válidas e retornar cookie httpOnly', async () => {
-    // Mockar usuário existente no banco
-    const mockUser = {
+    await createLocalUser({
       id: 'user-123',
       email: 'danilo.uchoa@finance.app',
       name: 'Danilo Uchoa',
-      passwordHash: await bcrypt.hash('finance123', 10),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    prisma.user.findUnique.mockResolvedValue(mockUser);
+      password: 'finance123',
+    });
 
     const { csrfToken, csrfCookie } = await getCsrfToken();
     const res = await request(app)
@@ -41,9 +33,6 @@ describe('POST /api/auth/login', () => {
   });
 
   it('deve rejeitar login com credenciais inválidas', async () => {
-    // Mockar usuário não encontrado
-    prisma.user.findUnique.mockResolvedValue(null);
-
     const { csrfToken, csrfCookie } = await getCsrfToken();
     const res = await request(app)
       .post('/api/auth/login')
@@ -57,16 +46,13 @@ describe('POST /api/auth/login', () => {
   });
 
   it('deve rejeitar login se usuario nao tem passwordHash', async () => {
-    // Mockar usuário existente sem passwordHash
-    const mockUser = {
+    await createLocalUser({
       id: 'user-456',
       email: 'sem.senha@finance.app',
       name: 'Sem Senha',
-      passwordHash: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    prisma.user.findUnique.mockResolvedValue(mockUser);
+      passwordHash: null as any,
+      password: undefined,
+    });
 
     const { csrfToken, csrfCookie } = await getCsrfToken();
     const res = await request(app)

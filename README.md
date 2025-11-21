@@ -59,6 +59,7 @@ flowchart LR
 - **Cache de consultas mensais**: cache Redis por usuário/mês em modo `billing`, com logs `[CACHE HIT/MISS]` e invalidação após mutações.
 - **Dead Letter Queue (DLQ)**: filas configuradas com retry + backoff e roteamento de mensagens falhas para `dead-letter-queue`.
 - **Segurança**: validação Zod em rotas, cookies httpOnly para refresh token, access token somente em memória e CORS dinâmico baseado em envs.
+- **Auth stateless**: login local + Google, refresh em cookie httpOnly, flags `AUTH_GOOGLE_ENABLED`/`AUTH_ACCOUNT_LINK_ENABLED` e fluxo de merge canônico pelo Google (ver `docs/AUTH_FLOW.md`).
 
 ## 5. Tecnologias
 - **Frontend**: React 19, Vite 7, MUI 6, TanStack Query 5, Axios com interceptors, Storybook 10 (upgrade para v17 em análise).
@@ -79,6 +80,7 @@ flowchart LR
    - Frontend: `http://localhost:5173`
    - MongoDB: `localhost:27017`
 4. Healthcheck disponível em `/api/health` garante readiness antes de subir frontend/workers.
+5. Seed Prisma é apenas para DEV: execute `ENABLE_DEV_SEED=true npx prisma db seed` se precisar de usuário local temporário. Testes/CI não dependem desse seed.
 
 ## 7. Fluxo de desenvolvimento (branching + commits padronizados)
 - Branch `main` protegida por pipelines verdes (backend/frontend/build-images/qodana/codeql).

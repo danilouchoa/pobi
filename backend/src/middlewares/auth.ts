@@ -1,8 +1,14 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
+import jwt, { JwtPayload } from 'jsonwebtoken';
 
 export interface AuthenticatedRequest extends Request {
-  userId?: string;
+  auth?: {
+    userId: string;
+    email?: string;
+    provider?: string;
+    googleLinked?: boolean;
+  };
+  userId?: string; // legado: mantido para compatibilidade com handlers antigos
 }
 
 export const authenticate = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
@@ -25,8 +31,24 @@ export const authenticate = (req: AuthenticatedRequest, res: Response, next: Nex
       throw new Error('JWT_SECRET não definido. Configure no arquivo .env');
     }
 
-    const payload = jwt.verify(token, secret) as { userId: string };
-    req.userId = payload.userId;
+    const payload = jwt.verify(token, secret) as JwtPayload & { userId?: string; tokenType?: string; provider?: string; email?: string; googleLinked?: boolean };
+    const tokenType = payload.tokenType || (payload as any).type;
+    if (tokenType && tokenType !== 'access') {
+      return res.status(401).json({ message: 'Token inválido.' });
+    }
+
+    const userId = typeof payload.sub === 'string' ? payload.sub : payload.userId;
+    if (!userId) {
+      return res.status(401).json({ message: 'Token inválido.' });
+    }
+
+    req.auth = {
+      userId,
+      email: payload.email,
+      provider: (payload.provider as string | undefined) ?? undefined,
+      googleLinked: typeof payload.googleLinked === 'boolean' ? payload.googleLinked : undefined,
+    };
+    req.userId = userId;
 
     next();
   } catch (error) {

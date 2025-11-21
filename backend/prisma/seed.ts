@@ -5,10 +5,16 @@ import { PrismaClient } from '@prisma/client';
 dotenv.config();
 
 const prisma = new PrismaClient();
+const ENABLE_DEV_SEED = process.env.ENABLE_DEV_SEED === 'true';
 const DEFAULT_PASSWORD = process.env.SEED_USER_PASSWORD ?? 'finance123';
 const email = 'danilo.uchoa@finance.app';
 
 async function main() {
+  if (!ENABLE_DEV_SEED) {
+    console.log('⚠️ Seed abortado: defina ENABLE_DEV_SEED=true para executar este seed de desenvolvimento.');
+    return;
+  }
+
   const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, 10);
 
   const user = await prisma.user.upsert({
