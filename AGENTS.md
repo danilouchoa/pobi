@@ -144,6 +144,6 @@ g
 | | | | | | | |Garantir CORS+helmet funcionais em modo relaxado sem quebrar build.| |Necessário aplicar CORS global sem app.options(*).|Implementar SECURITY_MODE="relaxed" (CORS aberto) e "strict" (CORS restrito + rate limiting).| |
 
 ## 2025-11-22 - Mongo replica set para Prisma
-- MongoDB agora inicia com `--replSet rs0` e serviço de init idempotente compartilhando o namespace da instância para rodar `rs.initiate`.
-- `DATABASE_URL` aponta para `mongo:27017` com `replicaSet=rs0&retryWrites=true&w=majority`, habilitando transações do Prisma.
+- MongoDB agora inicia como replica set rs0 (3 nós host: 27017/27018/27019) com serviço de init idempotente compartilhando o namespace da instância para rodar `rs.initiate`.
+- `DATABASE_URL` aponta para `localhost:27017,localhost:27018,localhost:27019` com `replicaSet=rs0&retryWrites=true&w=majority`, habilitando transações do Prisma.
 - Seed (`npm run seed`) validado para usuário padrão `danilo.uchoa@finance.app` / `finance123` em ambiente com rede de containers funcional, permitindo login.

@@ -12,7 +12,7 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       - NODE_ENV=development
-      - DATABASE_URL=mongodb://localhost:27017/finance_app_db?replicaSet=rs0&retryWrites=true&w=majority
+      - DATABASE_URL=mongodb://localhost:27017,localhost:27018,localhost:27019/finance_app_db?replicaSet=rs0&retryWrites=true&w=majority
       - RABBIT_URL=amqp://localhost:5672
       - REDIS_URL=redis://localhost:6379
     healthcheck:
@@ -22,7 +22,11 @@ services:
       retries: 3
       start_period: 15s
     depends_on:
-      mongo:
+      mongo1:
+        condition: service_healthy
+      mongo2:
+        condition: service_healthy
+      mongo3:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -43,7 +47,7 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       - NODE_ENV=development
-      - DATABASE_URL=mongodb://localhost:27017/finance_app_db?replicaSet=rs0&retryWrites=true&w=majority
+      - DATABASE_URL=mongodb://localhost:27017,localhost:27018,localhost:27019/finance_app_db?replicaSet=rs0&retryWrites=true&w=majority
       - RABBIT_URL=amqp://localhost:5672
       - REDIS_URL=redis://localhost:6379
     healthcheck:
@@ -53,7 +57,11 @@ services:
       retries: 3
       start_period: 10s
     depends_on:
-      mongo:
+      mongo1:
+        condition: service_healthy
+      mongo2:
+        condition: service_healthy
+      mongo3:
         condition: service_healthy
       backend:
         condition: service_healthy
@@ -76,7 +84,7 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       - NODE_ENV=development
-      - DATABASE_URL=mongodb://localhost:27017/finance_app_db?replicaSet=rs0&retryWrites=true&w=majority
+      - DATABASE_URL=mongodb://localhost:27017,localhost:27018,localhost:27019/finance_app_db?replicaSet=rs0&retryWrites=true&w=majority
       - RABBIT_URL=amqp://localhost:5672
       - REDIS_URL=redis://localhost:6379
     healthcheck:
@@ -86,7 +94,11 @@ services:
       retries: 3
       start_period: 10s
     depends_on:
-      mongo:
+      mongo1:
+        condition: service_healthy
+      mongo2:
+        condition: service_healthy
+      mongo3:
         condition: service_healthy
       backend:
         condition: service_healthy
@@ -111,18 +123,48 @@ services:
         condition: service_healthy
 
   # ====================================================================
-  # MONGODB - Instância única para DEV
+  # MONGODB - Replica set (3 nodes) para DEV
   # ====================================================================
-  mongo:
+  mongo1:
     image: mongo:7
-    container_name: finance_mongo
+    container_name: finance_mongo1
     restart: unless-stopped
     network_mode: host
-    command: ["mongod", "--bind_ip_all", "--replSet", "rs0"]
+    command: ["mongod", "--bind_ip_all", "--replSet", "rs0", "--port", "27017"]
     volumes:
-      - mongo_data:/data/db
+      - mongo1_data:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD", "mongosh", "--quiet", "--port", "27017", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  mongo2:
+    image: mongo:7
+    container_name: finance_mongo2
+    restart: unless-stopped
+    network_mode: host
+    command: ["mongod", "--bind_ip_all", "--replSet", "rs0", "--port", "27018"]
+    volumes:
+      - mongo2_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--port", "27018", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  mongo3:
+    image: mongo:7
+    container_name: finance_mongo3
+    restart: unless-stopped
+    network_mode: host
+    command: ["mongod", "--bind_ip_all", "--replSet", "rs0", "--port", "27019"]
+    volumes:
+      - mongo3_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--port", "27019", "--eval", "db.adminCommand('ping')"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -135,13 +177,17 @@ services:
     image: mongo:7
     network_mode: host
     depends_on:
-      mongo:
+      mongo1:
+        condition: service_healthy
+      mongo2:
+        condition: service_healthy
+      mongo3:
         condition: service_healthy
     entrypoint:
       [
         "sh",
         "-c",
-        "until mongosh --quiet --host localhost:27017 --eval \"db.adminCommand('ping')\"; do sleep 2; done; mongosh --quiet --host localhost:27017 --eval \"try { rs.status() } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'localhost:27017' }] }) }\"",
+        "for p in 27017 27018 27019; do until mongosh --quiet --host localhost:$p --eval \"db.adminCommand('ping')\"; do sleep 2; done; done; mongosh --quiet --host localhost:27017 --eval \"const cfg={ _id:'rs0', members:[{ _id:0, host:'localhost:27017' },{ _id:1, host:'localhost:27018' },{ _id:2, host:'localhost:27019' }]}; try { const status=rs.status(); if(status.ok===1 && status.members && status.members.length===3) { quit(0); } } catch(err) {} try { rs.initiate(cfg) } catch(e) { try { rs.reconfig(cfg,{ force:true }) } catch(err2) { print(err2); quit(1); } }\"",
       ]
 
   # ====================================================================
@@ -178,5 +224,7 @@ services:
       start_period: 10s
 
 volumes:
-  mongo_data:
+  mongo1_data:
+  mongo2_data:
+  mongo3_data:
   redis_data:
