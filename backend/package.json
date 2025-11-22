@@ -4,6 +4,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon --watch 'src/**/*.ts' --exec 'ts-node' src/index.ts",
+    "debug:login": "tsx scripts/debug-login.ts",
     "build": "tsc",
     "postinstall": "prisma generate",
     "start": "node dist/index.js",
