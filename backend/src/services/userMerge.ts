@@ -1,16 +1,16 @@
 import { PrismaClient, Provider, type User } from '@prisma/client';
 
 type MergeStats = {
-  origins: number;
-  debtors: number;
-  expenses: number;
-  salaryHistory: number;
-  jobs: number;
+  movedOrigins: number;
+  movedDebtors: number;
+  movedExpenses: number;
+  movedSalaryHistory: number;
+  movedJobs: number;
 };
 
 export type MergeResult = {
-  user: User;
-  moved: MergeStats;
+  canonicalUser: User;
+  stats: MergeStats;
 };
 
 /**
@@ -61,13 +61,13 @@ export async function mergeUsersUsingGoogleAsCanonical(
     await tx.user.delete({ where: { id: localUser.id } });
 
     return {
-      user: updatedGoogleUser,
-      moved: {
-        origins: origins.count,
-        debtors: debtors.count,
-        expenses: expenses.count,
-        salaryHistory: salaryHistory.count,
-        jobs: jobs.count,
+      canonicalUser: updatedGoogleUser,
+      stats: {
+        movedOrigins: origins.count,
+        movedDebtors: debtors.count,
+        movedExpenses: expenses.count,
+        movedSalaryHistory: salaryHistory.count,
+        movedJobs: jobs.count,
       },
     };
   });

@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt, { JwtPayload } from 'jsonwebtoken';
+import { Provider } from '@prisma/client';
 
 export interface AuthenticatedRequest extends Request {
   auth?: {
@@ -31,7 +32,14 @@ export const authenticate = (req: AuthenticatedRequest, res: Response, next: Nex
       throw new Error('JWT_SECRET não definido. Configure no arquivo .env');
     }
 
-    const payload = jwt.verify(token, secret) as JwtPayload & { userId?: string; tokenType?: string; provider?: string; email?: string; googleLinked?: boolean };
+    const payload = jwt.verify(token, secret) as JwtPayload & {
+      sub?: string;
+      userId?: string;
+      tokenType?: string;
+      provider?: Provider | string;
+      email?: string;
+      googleLinked?: boolean;
+    };
     const tokenType = payload.tokenType || (payload as any).type;
     if (tokenType && tokenType !== 'access') {
       return res.status(401).json({ message: 'Token inválido.' });

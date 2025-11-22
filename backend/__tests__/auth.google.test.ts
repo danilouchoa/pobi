@@ -149,7 +149,7 @@ describe('POST /api/auth/google', () => {
     });
   });
 
-  it('retorna conflito quando já existe usuário LOCAL com mesmo email', async () => {
+  it('atualiza usuário LOCAL existente ao logar com Google com mesmo email', async () => {
     prisma.user.findUnique.mockResolvedValueOnce(null); // by googleId
 
     const localUser = {
@@ -178,10 +178,14 @@ describe('POST /api/auth/google', () => {
       .set('X-CSRF-Token', csrfToken)
       .send({ credential: 'conflict-token' });
 
-    expect(res.status).toBe(409);
-    expect(res.body.error).toBe('ACCOUNT_CONFLICT');
-    expect(prisma.user.update).not.toHaveBeenCalled();
-    expect(prisma.user.create).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: localUser.id },
+      data: expect.objectContaining({
+        googleId: 'google-conflict-1',
+        provider: 'GOOGLE',
+      }),
+    });
   });
 
   it('retorna 401 quando verifyIdToken lança erro', async () => {

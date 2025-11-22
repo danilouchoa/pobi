@@ -11,6 +11,8 @@ services:
       - ./backend/.env
     environment:
       - NODE_ENV=production
+      - RABBIT_URL=amqp://rabbitmq:5672
+      - REDIS_URL=redis://redis:6379
     networks:
       - finance_net
     # HEALTHCHECK para Docker Compose
@@ -43,6 +45,8 @@ services:
     # Só inicia após MongoDB estar UP (mas não espera estar healthy)
     depends_on:
       - mongo
+      - rabbitmq
+      - redis
 
   # ====================================================================
   # WORKER - Processamento de jobs recorrentes
@@ -53,6 +57,9 @@ services:
     command: ["node", "dist/workers/recurringWorker.js"]
     env_file:
       - ./backend/.env
+    environment:
+      - RABBIT_URL=amqp://rabbitmq:5672
+      - REDIS_URL=redis://redis:6379
     networks:
       - finance_net
     # Worker não tem endpoint HTTP, então verificamos se processo está vivo
@@ -71,6 +78,10 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   # ====================================================================
   # BULK-WORKER - Processamento de operações em lote
@@ -81,6 +92,9 @@ services:
     command: ["node", "dist/workers/bulkWorker.js"]
     env_file:
       - ./backend/.env
+    environment:
+      - RABBIT_URL=amqp://rabbitmq:5672
+      - REDIS_URL=redis://redis:6379
     networks:
       - finance_net
     healthcheck:
@@ -91,6 +105,10 @@ services:
       start_period: 10s
     depends_on:
       backend:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   # ====================================================================
@@ -135,8 +153,48 @@ services:
       retries: 5
       start_period: 10s
 
+  # ====================================================================
+  # RABBITMQ - Message Broker
+  # ====================================================================
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: finance_rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - finance_net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  # ====================================================================
+  # REDIS - Cache
+  # ====================================================================
+  redis:
+    image: redis:7
+    container_name: finance_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - finance_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
 volumes:
   mongo_data:
+  redis_data:
 
 
 networks:

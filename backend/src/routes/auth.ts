@@ -15,6 +15,16 @@ const SALT_ROUNDS = 10;
 const ACCESS_TOKEN_EXPIRES_IN = '15m';
 const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
+type TokenType = 'access' | 'refresh';
+
+interface AuthTokenPayload {
+  sub: string;
+  email: string;
+  provider: Provider;
+  googleLinked: boolean;
+  tokenType: TokenType;
+}
+
 class GoogleTokenError extends Error {
   status: number;
   code: string;
@@ -453,15 +463,6 @@ export default function authRoutes(prisma: PrismaClient) {
       if (!user) {
         const byEmail = await prisma.user.findUnique({ where: { email: normalizedEmail } });
         if (byEmail) {
-          if (byEmail.provider === Provider.LOCAL) {
-            logAuthEvent('auth.google.conflict', { email: normalizedEmail, localUserId: byEmail.id });
-            return res.status(409).json({
-              error: 'ACCOUNT_CONFLICT',
-              code: 'ACCOUNT_CONFLICT',
-              message: 'Já existe conta local para este e-mail. Use o fluxo de unificação.',
-              data: { email: normalizedEmail, hasLocal: true, hasGoogle: false },
-            });
-          }
           const updateData = {
             googleId: profile.googleId,
             provider: Provider.GOOGLE,
@@ -574,20 +575,20 @@ export default function authRoutes(prisma: PrismaClient) {
         });
       }
 
-      const { user: mergedUser, moved } = await mergeUsersUsingGoogleAsCanonical(prisma, {
+      const { canonicalUser, stats } = await mergeUsersUsingGoogleAsCanonical(prisma, {
         localUserId: userLocal.id,
         googleUserId: googleUser.id,
       });
 
       logAuthEvent('auth.account.merge', {
-        userId: mergedUser.id,
+        userId: canonicalUser.id,
         localUserId: userLocal.id,
         googleUserId: googleUser.id,
-        email: mergedUser.email,
-        moved,
+        email: canonicalUser.email,
+        stats,
       });
 
-      return issueSession(res, mergedUser);
+      return issueSession(res, canonicalUser);
     } catch (error) {
       console.error('[AUTH] Erro ao resolver conflito Google:', error);
       return res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Erro interno no servidor.' });
@@ -661,19 +662,19 @@ export default function authRoutes(prisma: PrismaClient) {
       });
 
       if (existingGoogle && existingGoogle.id !== currentUser.id) {
-        const { user: mergedUser, moved } = await mergeUsersUsingGoogleAsCanonical(prisma, {
+        const { canonicalUser, stats } = await mergeUsersUsingGoogleAsCanonical(prisma, {
           localUserId: currentUser.id,
           googleUserId: existingGoogle.id,
         });
         logAuthEvent('auth.account.linked', {
-          userId: mergedUser.id,
+          userId: canonicalUser.id,
           localUserId: currentUser.id,
           googleUserId: existingGoogle.id,
-          email: mergedUser.email,
+          email: canonicalUser.email,
           origin: 'link-google-endpoint',
-          moved,
+          stats,
         });
-        resultUser = mergedUser;
+        resultUser = canonicalUser;
       } else {
         resultUser = await prisma.user.update({
           where: { id: currentUser.id },

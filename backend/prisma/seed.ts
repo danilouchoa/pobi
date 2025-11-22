@@ -12,7 +12,12 @@ const email = 'danilo.uchoa@finance.app';
 async function main() {
   if (!ENABLE_DEV_SEED) {
     console.log('⚠️ Seed abortado: defina ENABLE_DEV_SEED=true para executar este seed de desenvolvimento.');
-    return;
+    process.exit(0);
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    console.error('❌ Seed bloqueado em produção.');
+    process.exit(1);
   }
 
   const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, 10);

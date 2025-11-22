@@ -53,12 +53,12 @@ describe('mergeUsersUsingGoogleAsCanonical', () => {
       googleUserId: 'google-user',
     });
 
-    expect(result.moved).toEqual({
-      origins: 2,
-      debtors: 1,
-      expenses: 3,
-      salaryHistory: 1,
-      jobs: 4,
+    expect(result.stats).toEqual({
+      movedOrigins: 2,
+      movedDebtors: 1,
+      movedExpenses: 3,
+      movedSalaryHistory: 1,
+      movedJobs: 4,
     });
     expect(prisma.user.delete).toHaveBeenCalledWith({ where: { id: 'local-user' } });
     expect(prisma.user.update).toHaveBeenCalledWith({

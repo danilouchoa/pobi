@@ -5,7 +5,7 @@
   - `409 DUPLICATE_USER` se e-mail já existir como `LOCAL`;
   - `409 GOOGLE_ACCOUNT_EXISTS` se já houver conta `GOOGLE` para o mesmo e-mail.
 - `/api/auth/login` (POST): login local; falha para contas `GOOGLE` sem `passwordHash`.
-- `/api/auth/google` (POST): login social com ID token validado via `google-auth-library`. Conflito com conta `LOCAL` retorna `409 ACCOUNT_CONFLICT` e exige fluxo de merge.
+- `/api/auth/google` (POST): login social com ID token validado via `google-auth-library`. Se já existir um usuário para o e-mail (LOCAL ou GOOGLE), esse mesmo registro é atualizado com `googleId`+`provider=GOOGLE` e os atributos de perfil.
 - `/api/auth/google/resolve-conflict` (POST): reautentica Google e chama merge automático (Google canônico) para resolver conflito.
 - `/api/auth/link/google` (POST, autenticado): vincula credencial Google à conta logada; se existir outro usuário Google, chama merge canônico.
 - `/api/auth/refresh` (POST): acessa refresh token em cookie httpOnly e retorna novo access token (rota com rotação do refresh).
@@ -30,6 +30,6 @@
 - `AUTH_ACCOUNT_LINK_ENABLED` (default `true`): desabilita endpoints de merge/link retornando `503`.
 
 ## Observações
-- CSRF continua habilitado (header `X-CSRF-Token` + cookie obtido em `/api/csrf-token`).
+- CSRF foi removido nesta branch para alinhar FE/BE; fluxos dependem apenas de Authorization Bearer + cookie httpOnly.
 - `googleLinked` é retornado em todas as respostas de sessão para refletir vínculo (usado na UI).
 - Seed (`prisma/seed.ts`) fica protegido por `ENABLE_DEV_SEED=true` para evitar dependência em testes/CI.

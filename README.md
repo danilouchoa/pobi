@@ -82,6 +82,11 @@ flowchart LR
 4. Healthcheck disponível em `/api/health` garante readiness antes de subir frontend/workers.
 5. Seed Prisma é apenas para DEV: execute `ENABLE_DEV_SEED=true npx prisma db seed` se precisar de usuário local temporário. Testes/CI não dependem desse seed.
 
+### Auth & Sessão
+- Tokens JWT curtos (15m) com payload `{ sub, email, provider, googleLinked, tokenType }` e refresh JWT (7d) em cookie httpOnly (`secure` em produção).
+- Fluxos: `/api/auth/register`, `/api/auth/login`, `/api/auth/google`, `/api/auth/link/google`, `/api/auth/refresh`, `/api/auth/logout`.
+- CSRF não é exigido nesta branch; frontend não chama `/api/csrf-token`.
+
 ## 7. Fluxo de desenvolvimento (branching + commits padronizados)
 - Branch `main` protegida por pipelines verdes (backend/frontend/build-images/qodana/codeql).
 - Crie feature branches a partir de `main` (`feature/`, `fix/`, `refactor/`).
