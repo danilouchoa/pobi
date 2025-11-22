@@ -142,3 +142,8 @@ g
 | | | | | | | |Próximos passos: finalizar delete unitário e ruleset do bulk delete.| | | | |
 | | | |27|[Security/DX] Toggle de Segurança Dev vs Prod|🟡 Em progresso|Introduzir flag SECURITY_MODE para alternar entre modo relaxado (dev) e estrito (prod).|Estrutura conceitual definida; Express 5 exige remoção total de rotas wildcard.| | | | |
 | | | | | | | |Garantir CORS+helmet funcionais em modo relaxado sem quebrar build.| |Necessário aplicar CORS global sem app.options(*).|Implementar SECURITY_MODE="relaxed" (CORS aberto) e "strict" (CORS restrito + rate limiting).| |
+
+## 2025-11-22 - Mongo replica set para Prisma
+- MongoDB agora inicia com `--replSet rs0` e serviço de init idempotente compartilhando o namespace da instância para rodar `rs.initiate`.
+- `DATABASE_URL` aponta para `mongo:27017` com `replicaSet=rs0&retryWrites=true&w=majority`, habilitando transações do Prisma.
+- Seed (`npm run seed`) validado para usuário padrão `danilo.uchoa@finance.app` / `finance123` em ambiente com rede de containers funcional, permitindo login.
