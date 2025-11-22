@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   # ====================================================================
   # BACKEND - API REST
@@ -11,11 +9,13 @@ services:
       - "4000:4000"
     env_file:
       - ./backend/.env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - NODE_ENV=development
       - DATABASE_URL=mongodb://mongo1:27017,mongo2:27017,mongo3:27017/finance_app_db?replicaSet=rs0
       - RABBIT_URL=amqp://rabbitmq:5672
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=redis://host.docker.internal:6379
     networks:
       - finance_net
     healthcheck:
@@ -45,11 +45,13 @@ services:
     command: ["node", "dist/workers/recurringWorker.js"]
     env_file:
       - ./backend/.env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - NODE_ENV=development
       - DATABASE_URL=mongodb://mongo1:27017,mongo2:27017,mongo3:27017/finance_app_db?replicaSet=rs0
       - RABBIT_URL=amqp://rabbitmq:5672
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=redis://host.docker.internal:6379
     networks:
       - finance_net
     healthcheck:
@@ -81,11 +83,13 @@ services:
     command: ["node", "dist/workers/bulkWorker.js"]
     env_file:
       - ./backend/.env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - NODE_ENV=development
       - DATABASE_URL=mongodb://mongo1:27017,mongo2:27017,mongo3:27017/finance_app_db?replicaSet=rs0
       - RABBIT_URL=amqp://rabbitmq:5672
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=redis://host.docker.internal:6379
     networks:
       - finance_net
     healthcheck:
@@ -120,6 +124,8 @@ services:
       - finance_net
     env_file:
       - ./frontend/.env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - VITE_API_URL=http://localhost:4000
     depends_on:
