@@ -1,4 +1,6 @@
 // scripts/debug-login.ts
+// Dev-only helper to validate login credentials directly against the database.
+// Mirrors the backend login normalization and bcrypt check; not part of runtime.
 import dotenv from 'dotenv';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
@@ -12,12 +14,13 @@ async function main() {
   const passwordArg = process.argv[3] ?? 'finance123';
 
   console.log('=== DEBUG LOGIN FINFY ===');
-  console.log('EMAIL       :', emailArg);
+  console.log('EMAIL_RAW   :', emailArg);
   console.log('PASSWORD    :', passwordArg);
   console.log('DATABASE_URL:', process.env.DATABASE_URL);
 
-  // Mesma normalização do loginSchema (toLowerCase)
-  const email = emailArg.toLowerCase();
+  // Mesma normalização do loginSchema (trim + toLowerCase)
+  const email = emailArg.trim().toLowerCase();
+  console.log('EMAIL_NORM  :', email);
 
   const user = await prisma.user.findUnique({ where: { email } });
 

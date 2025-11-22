@@ -162,10 +162,20 @@ export function AuthProvider({ children }) {
       // refreshToken vem como cookie httpOnly (não acessível aqui)
       setToken(data.accessToken);
       setUser(data.user);
-      
+
       return data;
     } catch (error) {
-      const message = error.response?.data?.message ?? "Credenciais inválidas.";
+      const status = error?.response?.status;
+      let message = "Erro inesperado ao efetuar login. Tente novamente.";
+
+      if (!error?.response) {
+        message = "Falha de conexão com o servidor. Verifique se o backend está em execução.";
+      } else if (status === 401) {
+        message = "Credenciais inválidas.";
+      } else if (error.response?.data?.message) {
+        message = error.response.data.message;
+      }
+
       setAuthError(message);
       throw error;
     } finally {
