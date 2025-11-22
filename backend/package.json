@@ -14,8 +14,7 @@
     "billing:migrate-enum": "tsx scripts/migrate-billing-enum.ts",
     "test:billing": "tsx src/lib/billing.test.ts",
     "health:db": "tsx scripts/check-db.ts",
-    "seed:dev": "ts-node prisma/seed.ts",
-    "seed": "node --loader ts-node/esm prisma/seed.ts",
+    "seed": "tsx prisma/seed.ts",
     "lint": "eslint . --ext .ts",
     "clean": "rimraf dist",
     "coverage": "vitest run --coverage"
