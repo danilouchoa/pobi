@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   # ====================================================================
   # BACKEND - API REST
@@ -10,42 +12,24 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      - NODE_ENV=production
-      - DATABASE_URL=mongodb://mongo:27017/finance_app_db
+      - NODE_ENV=development
+      - DATABASE_URL=mongodb://mongo1:27017,mongo2:27017,mongo3:27017/finance_app_db?replicaSet=rs0
       - RABBIT_URL=amqp://rabbitmq:5672
       - REDIS_URL=redis://redis:6379
     networks:
       - finance_net
-    # HEALTHCHECK para Docker Compose
-    # Verifica se o container está saudável antes de marcar como "ready"
-    # Docker usa isso para:
-    # 1. Saber quando o container está realmente pronto (não apenas "running")
-    # 2. Detectar se o processo travou (mesmo que container esteja UP)
-    # 3. Orquestrar depends_on com condition: service_healthy
-      # Comando executado dentro do container
-      # curl -f: Fail silently (retorna exit code 22 se HTTP >= 400)
-      # http://localhost:4000/api/health: Nosso endpoint customizado
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:4000/api/status || wget -qO- http://localhost:4000/api/status"]
-      
-      # Intervalo entre health checks (quanto tempo esperar entre verificações)
-      # 30s: Não precisa verificar constantemente, economiza CPU
       interval: 30s
-      
-      # Timeout para cada verificação (quanto tempo esperar por resposta)
-      # 10s: Tempo suficiente para endpoint responder mesmo sob carga
       timeout: 10s
-      
-      # Quantas falhas consecutivas antes de marcar como "unhealthy"
-      # 3: Tolera falhas temporárias (ex: spike de CPU)
       retries: 3
-      
-      # Período de grace antes de começar a verificar
-      # 15s: Tempo para aplicação inicializar (carregar módulos, conectar DB)
       start_period: 15s
-    # Só inicia após dependências estarem saudáveis
     depends_on:
-      mongo:
+      mongo1:
+        condition: service_healthy
+      mongo2:
+        condition: service_healthy
+      mongo3:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -62,25 +46,25 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      - DATABASE_URL=mongodb://mongo:27017/finance_app_db
+      - NODE_ENV=development
+      - DATABASE_URL=mongodb://mongo1:27017,mongo2:27017,mongo3:27017/finance_app_db?replicaSet=rs0
       - RABBIT_URL=amqp://rabbitmq:5672
       - REDIS_URL=redis://redis:6379
     networks:
       - finance_net
-    # Worker não tem endpoint HTTP, então verificamos se processo está vivo
-    # Usando kill -0 que apenas verifica se PID 1 existe (não mata o processo)
     healthcheck:
-      # kill -0 <PID>: Verifica se processo existe sem matar
-      # PID 1: Primeiro processo do container (nosso worker)
-      # Exit code 0: Processo existe e está rodando
       test: ["CMD", "sh", "-c", "kill -0 1"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
-    # Só inicia se backend estiver HEALTHY (não apenas running)
-    # Garante que worker não tenta processar jobs enquanto API está iniciando
     depends_on:
+      mongo1:
+        condition: service_healthy
+      mongo2:
+        condition: service_healthy
+      mongo3:
+        condition: service_healthy
       backend:
         condition: service_healthy
       rabbitmq:
@@ -98,7 +82,8 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      - DATABASE_URL=mongodb://mongo:27017/finance_app_db
+      - NODE_ENV=development
+      - DATABASE_URL=mongodb://mongo1:27017,mongo2:27017,mongo3:27017/finance_app_db?replicaSet=rs0
       - RABBIT_URL=amqp://rabbitmq:5672
       - REDIS_URL=redis://redis:6379
     networks:
@@ -110,6 +95,12 @@ services:
       retries: 3
       start_period: 10s
     depends_on:
+      mongo1:
+        condition: service_healthy
+      mongo2:
+        condition: service_healthy
+      mongo3:
+        condition: service_healthy
       backend:
         condition: service_healthy
       rabbitmq:
@@ -131,33 +122,122 @@ services:
       - ./frontend/.env
     environment:
       - VITE_API_URL=http://localhost:4000
-    # Frontend só inicia quando backend estiver SAUDÁVEL
-    # Evita tela em branco ou erros de "Cannot connect to API"
     depends_on:
       backend:
         condition: service_healthy
 
   # ====================================================================
-  # MONGODB - Banco de dados
+  # MONGODB - Replica Set (3 nós)
   # ====================================================================
-  mongo:
+  mongo1:
     image: mongo:7
-    container_name: finance_mongo
+    container_name: finance_mongo1
     restart: unless-stopped
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
     ports:
       - "27017:27017"
     volumes:
-      - mongo_data:/data/db
+      - mongo1_data:/data/db
     networks:
       - finance_net
-    # MongoDB tem healthcheck nativo via mongosh
-    # Verifica se o daemon está aceitando conexões
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD-SHELL", "pgrep mongod >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  mongo2:
+    image: mongo:7
+    container_name: finance_mongo2
+    restart: unless-stopped
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    volumes:
+      - mongo2_data:/data/db
+    networks:
+      - finance_net
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep mongod >/dev/null 2>&1"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
+
+  mongo3:
+    image: mongo:7
+    container_name: finance_mongo3
+    restart: unless-stopped
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    volumes:
+      - mongo3_data:/data/db
+    networks:
+      - finance_net
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep mongod >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  mongo-init-replica:
+    image: mongo:7
+    restart: "no"
+    depends_on:
+      mongo1:
+        condition: service_started
+      mongo2:
+        condition: service_started
+      mongo3:
+        condition: service_started
+    networks:
+      - finance_net
+    entrypoint:
+      - bash
+      - -c
+      - |
+        set -e
+
+        echo "[mongo-init] Waiting 15s for MongoDB nodes to start..."
+        sleep 15
+
+        echo "[mongo-init] Ensuring replica set rs0 is initiated..."
+        mongosh --host mongo1:27017 --quiet <<'EOF'
+          try {
+            const status = rs.status();
+            if (status.ok === 1) {
+              print("Replica set already initialized (state: " + status.myState + ").");
+              quit(0);
+            }
+          } catch (e) {
+            if (e.codeName === "NotYetInitialized") {
+              rs.initiate({
+                _id: "rs0",
+                members: [
+                  { _id: 0, host: "mongo1:27017" },
+                  { _id: 1, host: "mongo2:27017" },
+                  { _id: 2, host: "mongo3:27017" }
+                ]
+              });
+              print("Replica set initiation command issued.");
+              quit(0);
+            }
+            printjson(e);
+            quit(1);
+          }
+        EOF
+
+        echo "[mongo-init] Waiting for PRIMARY state (max ~60s)..."
+        for i in {1..30}; do
+          if mongosh --host mongo1:27017 --quiet --eval "const s = rs.status(); if (s.ok === 1 && s.myState === 1) { quit(0); } quit(1);" >/dev/null 2>&1; then
+            echo "[mongo-init] PRIMARY READY."
+            exit 0
+          fi
+          echo "[mongo-init] Replica set not PRIMARY yet. Retry $i/30 in 2s..."
+          sleep 2
+        done
+
+        echo "[mongo-init] Timed out waiting for PRIMARY state."
+        exit 1
 
   # ====================================================================
   # RABBITMQ - Message Broker
@@ -172,11 +252,11 @@ services:
     networks:
       - finance_net
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
-      interval: 30s
-      timeout: 10s
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 10s
+      timeout: 5s
       retries: 5
-      start_period: 20s
+      start_period: 15s
 
   # ====================================================================
   # REDIS - Cache
@@ -200,9 +280,10 @@ services:
       start_period: 10s
 
 volumes:
-  mongo_data:
+  mongo1_data:
+  mongo2_data:
+  mongo3_data:
   redis_data:
-
 
 networks:
   finance_net:

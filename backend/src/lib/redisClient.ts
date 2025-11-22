@@ -15,10 +15,24 @@ class NodeRedisAdapter implements RedisLike {
   private ready: Promise<void>;
 
   constructor(private client: NodeRedisClient) {
-    this.ready = client.connect().then(() => undefined);
+    this.ready = client.connect().then(() => {
+      const url = client.options?.url ?? 'redis://localhost:6379';
+      console.log(`[REDIS] Connected to ${url}`);
+    }).catch((error: Error) => {
+      console.error('[REDIS] Failed to connect on first attempt:', error.message);
+      throw error;
+    });
 
     client.on("error", (error: Error) => {
       console.error("[REDIS] Connection error:", error);
+    });
+
+    client.on("reconnecting", () => {
+      console.warn("[REDIS] Reconnecting...");
+    });
+
+    client.on("end", () => {
+      console.warn("[REDIS] Connection closed");
     });
   }
 
@@ -106,6 +120,7 @@ function buildUpstashRedis(): RedisLike {
   return new UpstashRedisAdapter(client);
 }
 
-const useLocalRedis = process.env.REDIS_URL || process.env.REDIS_HOST;
+const nodeEnv = process.env.NODE_ENV ?? "development";
+const useLocalRedis = Boolean(process.env.REDIS_URL || process.env.REDIS_HOST || nodeEnv !== "production");
 
 export const redis: RedisLike = useLocalRedis ? buildNodeRedis() : buildUpstashRedis();

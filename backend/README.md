@@ -62,7 +62,7 @@ Responsabilidade por camada: `route` valida entrada e chama `service`; `service`
 
 ## 5. Ambiente e Configuração
 - Use o `.env.example` como referência e **nunca** versione `.env` reais.
-- Variáveis essenciais: `DATABASE_URL` (MongoDB), `REDIS_URL`, `RABBITMQ_URL`, `JWT_SECRET`, `REFRESH_TOKEN_SECRET`, `ALLOWED_ORIGINS`, `COOKIE_DOMAIN`, `COOKIE_SECURE`, `COOKIE_SAMESITE`. A validação Zod bloqueia o boot se algo obrigatório faltar.
+- Variáveis essenciais: `DATABASE_URL` (MongoDB com `replicaSet=rs0`), `REDIS_URL` (ou `UPSTASH_REDIS_*` em produção), `RABBIT_URL`, `JWT_SECRET`, `REFRESH_TOKEN_SECRET`, `ALLOWED_ORIGINS`, `COOKIE_DOMAIN`, `COOKIE_SECURE`, `COOKIE_SAMESITE`. A validação Zod bloqueia o boot se algo obrigatório faltar.
 - Execução via Docker Compose: o backend espera MongoDB, Redis e RabbitMQ saudáveis (ver `docker-compose.yaml` na raiz). Healthchecks dos serviços são requeridos antes do start.
 - Para detalhes gerais de infraestrutura e orquestração, consulte o README raiz (`../README.md`).
 
