@@ -11,6 +11,7 @@ services:
       - ./backend/.env
     environment:
       - NODE_ENV=production
+      - DATABASE_URL=mongodb://mongo:27017/finance_app_db
       - RABBIT_URL=amqp://rabbitmq:5672
       - REDIS_URL=redis://redis:6379
     networks:
@@ -42,11 +43,14 @@ services:
       # Período de grace antes de começar a verificar
       # 15s: Tempo para aplicação inicializar (carregar módulos, conectar DB)
       start_period: 15s
-    # Só inicia após MongoDB estar UP (mas não espera estar healthy)
+    # Só inicia após dependências estarem saudáveis
     depends_on:
-      - mongo
-      - rabbitmq
-      - redis
+      mongo:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   # ====================================================================
   # WORKER - Processamento de jobs recorrentes
@@ -58,6 +62,7 @@ services:
     env_file:
       - ./backend/.env
     environment:
+      - DATABASE_URL=mongodb://mongo:27017/finance_app_db
       - RABBIT_URL=amqp://rabbitmq:5672
       - REDIS_URL=redis://redis:6379
     networks:
@@ -93,6 +98,7 @@ services:
     env_file:
       - ./backend/.env
     environment:
+      - DATABASE_URL=mongodb://mongo:27017/finance_app_db
       - RABBIT_URL=amqp://rabbitmq:5672
       - REDIS_URL=redis://redis:6379
     networks:
@@ -178,6 +184,7 @@ services:
   redis:
     image: redis:7
     container_name: finance_redis
+    command: ["redis-server", "--protected-mode", "no", "--bind", "0.0.0.0"]
     restart: unless-stopped
     ports:
       - "6379:6379"

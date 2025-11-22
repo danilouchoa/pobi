@@ -1,21 +1,23 @@
 import { Redis } from "@upstash/redis";
-import { createClient, RedisClientType } from "redis";
+import { createClient } from "redis";
+
+type NodeRedisClient = ReturnType<typeof createClient>;
+type RedisDelArgs = Parameters<NodeRedisClient["del"]>;
 
 type RedisLike = {
   get<T = unknown>(key: string): Promise<T | null>;
   setex(key: string, ttlSeconds: number, value: string): Promise<"OK" | null>;
   del(...keys: string[]): Promise<number>;
   ping(): Promise<string>;
-  scanIterator(options?: { match?: string; count?: number }): AsyncIterableIterator<string>;
 };
 
 class NodeRedisAdapter implements RedisLike {
   private ready: Promise<void>;
 
-  constructor(private client: RedisClientType) {
-    this.ready = client.connect();
+  constructor(private client: NodeRedisClient) {
+    this.ready = client.connect().then(() => undefined);
 
-    client.on("error", (error) => {
+    client.on("error", (error: Error) => {
       console.error("[REDIS] Connection error:", error);
     });
   }
@@ -31,21 +33,17 @@ class NodeRedisAdapter implements RedisLike {
 
   async setex(key: string, ttlSeconds: number, value: string) {
     await this.ensureConnection();
-    return this.client.setEx(key, ttlSeconds, value);
+    return this.client.setEx(key, ttlSeconds, value) as Promise<"OK" | null>;
   }
 
   async del(...keys: string[]) {
     await this.ensureConnection();
-    return this.client.del(...keys);
+    return this.client.del(...(keys as RedisDelArgs));
   }
 
   async ping() {
     await this.ensureConnection();
     return this.client.ping();
-  }
-
-  scanIterator(options?: { match?: string; count?: number }) {
-    return this.client.scanIterator(options);
   }
 }
 
@@ -57,7 +55,7 @@ class UpstashRedisAdapter implements RedisLike {
   }
 
   setex(key: string, ttlSeconds: number, value: string) {
-    return this.client.setex(key, ttlSeconds, value);
+    return this.client.setex(key, ttlSeconds, value) as Promise<"OK" | null>;
   }
 
   del(...keys: string[]) {
@@ -67,18 +65,26 @@ class UpstashRedisAdapter implements RedisLike {
   ping() {
     return this.client.ping();
   }
-
-  scanIterator(options?: { match?: string; count?: number }) {
-    return this.client.scanIterator(options);
-  }
 }
 
 function buildNodeRedis(): RedisLike {
   const host = process.env.REDIS_HOST ?? "redis";
   const port = process.env.REDIS_PORT ?? "6379";
   const url = process.env.REDIS_URL ?? `redis://${host}:${port}`;
+  const connectTimeout = Number(process.env.REDIS_CONNECT_TIMEOUT_MS ?? "15000");
 
-  const client = createClient({ url });
+  const client = createClient({
+    url,
+    socket: {
+      connectTimeout,
+      reconnectStrategy(retries: number) {
+        const delay = Math.min(500 * 2 ** retries, 10_000);
+        console.warn(`[REDIS] Reconnecting (attempt ${retries + 1}) in ${delay}ms`);
+        return delay;
+      },
+    },
+  });
+
   return new NodeRedisAdapter(client);
 }
 
