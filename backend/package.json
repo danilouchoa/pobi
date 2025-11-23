@@ -61,7 +61,7 @@
     "@vitest/coverage-v8": "^4.0.8",
     "eslint": "^8.57.0",
     "nodemon": "^3.1.2",
-    "prisma": "^6.19.0",
+    "prisma": "^7.0.0",
     "supertest": "^7.1.4",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
