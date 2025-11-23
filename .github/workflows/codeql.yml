@@ -1,0 +1,112 @@
+# CodeQL Security Analysis for POBI Project
+# Scans TypeScript/JavaScript code in backend (Node.js/Express) and frontend (React/Vite)
+# Runs on: pushes to main, pull requests, and weekly schedule
+#
+# Project Context:
+# - Backend: TypeScript, Express, Prisma, RabbitMQ, Redis
+# - Frontend: React, TypeScript, Vite, Material-UI
+# - Security focus: SQL injection, XSS, auth vulnerabilities, secrets detection
+#
+name: "CodeQL Security Analysis"
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - '.github/workflows/codeql.yml'
+  pull_request:
+    branches: [ "main" ]
+    types: [ opened, synchronize, reopened, ready_for_review ]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - '.github/workflows/codeql.yml'
+  schedule:
+    # Run weekly scan on Sundays at 9:33 PM UTC (6:33 PM BRT)
+    - cron: '33 21 * * 0'
+
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze ${{ matrix.project }} (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    permissions:
+      # Required for all workflows
+      security-events: write
+      # Required to fetch internal or private CodeQL packs
+      packages: read
+      # Only required for workflows in private repositories
+      actions: read
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        # Backend analysis (TypeScript/Node.js)
+        - language: javascript-typescript
+          build-mode: none
+          project: backend
+          path: backend
+          queries: security-extended,security-and-quality
+        # Frontend analysis (React/TypeScript)
+        - language: javascript-typescript
+          build-mode: none
+          project: frontend
+          path: frontend
+          queries: security-extended,security-and-quality
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: ${{ matrix.path }}/package-lock.json
+
+    - name: Ensure npm cache dir
+      run: mkdir -p ~/.npm
+
+    - name: Install dependencies for ${{ matrix.project }}
+      working-directory: ${{ matrix.path }}
+      run: |
+        npm ci --ignore-scripts
+      continue-on-error: true
+
+    # Initializes the CodeQL tools for scanning
+    - name: Initialize CodeQL for ${{ matrix.project }}
+      uses: github/codeql-action/init@v4
+      with:
+        languages: ${{ matrix.language }}
+        build-mode: ${{ matrix.build-mode }}
+        # Enhanced security queries for production applications
+        queries: ${{ matrix.queries }}
+        # Scan only the specific project directory
+        config: |
+          paths:
+            - ${{ matrix.path }}/src
+          paths-ignore:
+            - ${{ matrix.path }}/__tests__
+            - ${{ matrix.path }}/coverage
+            - ${{ matrix.path }}/dist
+            - ${{ matrix.path }}/node_modules
+            - ${{ matrix.path }}/stories
+            - ${{ matrix.path }}/.storybook
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v4
+      with:
+        category: "/language:${{matrix.language}}/project:${{matrix.project}}"
+        # Upload SARIF results even if there are errors
+        upload: true
+        # Output path for debugging
+        output: codeql-results

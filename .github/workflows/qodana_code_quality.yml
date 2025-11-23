@@ -1,0 +1,34 @@
+name: Qodana
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [ main ]
+    types: [ opened, synchronize, reopened, ready_for_review ]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - '.github/workflows/qodana_code_quality.yml'
+
+concurrency:
+  group: qodana-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qodana:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      checks: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      - name: 'Qodana Scan'
+        uses: JetBrains/qodana-action@v2025.2
+        with:
+          pr-mode: false
+        env:
+          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN_739358186 }}
+          QODANA_ENDPOINT: 'https://qodana.cloud'

@@ -1,0 +1,5 @@
+global:
+  istioNamespace: istio-system
+ingressgateway:
+  service:
+    type: LoadBalancer
