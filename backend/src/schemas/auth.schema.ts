@@ -42,6 +42,7 @@ import { z } from 'zod';
  */
 const emailSchema = z.string()
   .email('E-mail inválido')
+  .trim()
   .toLowerCase() // Normaliza para lowercase
   .max(254, 'E-mail muito longo'); // RFC 5321
 
@@ -52,7 +53,8 @@ const emailSchema = z.string()
  */
 const passwordSchema = z.string()
   .min(8, 'Senha deve ter no mínimo 8 caracteres')
-  .max(128, 'Senha muito longa (máximo 128 caracteres)'); // Prevenir DoS
+  .max(128, 'Senha muito longa (máximo 128 caracteres)') // Prevenir DoS
+  .regex(/^(?=.*[A-Za-z])(?=.*\d).{8,}$/, 'A senha deve conter pelo menos uma letra e um dígito');
 
 /**
  * Validador de nome
@@ -97,9 +99,21 @@ export const googleLoginSchema = z.object({
   credential: z.string().min(1, 'Credential é obrigatória'),
 }).strict();
 
+export const googleResolveConflictSchema = z.object({
+  credential: z.string().min(1, 'Credential é obrigatória'),
+  strategy: z.literal('merge_using_google_as_canonical'),
+}).strict();
+
+export const linkGoogleSchema = z.object({
+  credential: z.string().min(1, 'Credential é obrigatória'),
+}).strict();
+
 // ============================================================================
 // Tipos TypeScript Inferidos
 // ============================================================================
 
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
+export type GoogleLoginInput = z.infer<typeof googleLoginSchema>;
+export type GoogleResolveConflictInput = z.infer<typeof googleResolveConflictSchema>;
+export type LinkGoogleInput = z.infer<typeof linkGoogleSchema>;

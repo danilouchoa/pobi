@@ -142,3 +142,14 @@ g
 | | | | | | | |Próximos passos: finalizar delete unitário e ruleset do bulk delete.| | | | |
 | | | |27|[Security/DX] Toggle de Segurança Dev vs Prod|🟡 Em progresso|Introduzir flag SECURITY_MODE para alternar entre modo relaxado (dev) e estrito (prod).|Estrutura conceitual definida; Express 5 exige remoção total de rotas wildcard.| | | | |
 | | | | | | | |Garantir CORS+helmet funcionais em modo relaxado sem quebrar build.| |Necessário aplicar CORS global sem app.options(*).|Implementar SECURITY_MODE="relaxed" (CORS aberto) e "strict" (CORS restrito + rate limiting).| |
+
+## 2025-11-22 - Mongo replica set para Prisma
+- MongoDB agora inicia como replica set rs0 (3 nós host: 27017/27018/27019) com serviço de init idempotente compartilhando o namespace da instância para rodar `rs.initiate`.
+- `DATABASE_URL` aponta para `localhost:27017,localhost:27018,localhost:27019` com `replicaSet=rs0&retryWrites=true&w=majority`, habilitando transações do Prisma.
+- Seed (`npm run seed`) validado para usuário padrão `danilo.uchoa@finance.app` / `finance123` em ambiente com rede de containers funcional, permitindo login.
+
+## 2025-11-23 - Login estateless via frontend
+- Corrigida configuração local do frontend: `VITE_API_URL` agora aponta para `http://localhost:4000` (antes estava `http://localhost:3000` e causava requisições para porta morta com status 0 no navegador).
+- Login validado end-to-end no fluxo React → API usando usuário seed `danilo.uchoa@finance.app / finance123`.
+- Tratamento de erro do login diferencia falha de conexão (backend fora do ar/CORS) de credenciais inválidas.
+- Script `backend/scripts/debug-login.ts` documentado como utilitário de desenvolvimento para validar credenciais direto no banco usando mesma normalização/bcrypt do backend.

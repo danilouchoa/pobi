@@ -2,7 +2,6 @@ import express, { type RequestHandler } from 'express';
 import cors from 'cors';
 import helmet, { type HelmetOptions } from 'helmet';
 import cookieParser from 'cookie-parser';
-import csurf from 'csurf';
 import { PrismaClient } from '@prisma/client';
 import authRoutes from './routes/auth';
 import { authenticate } from './middlewares/auth';
@@ -57,16 +56,6 @@ const corsMiddleware = cors({
   },
 });
 
-const csrfProtection = csurf({
-  cookie: {
-    httpOnly: true,
-    sameSite: 'strict',
-    secure: config.nodeEnv === 'production',
-    path: '/',
-    ...(config.cookieDomain ? { domain: config.cookieDomain } : {}),
-  },
-});
-
 // Middlewares
 // Helmet removido para rodar localmente sem headers extras
 
@@ -93,12 +82,6 @@ app.use(cookieParser());
 app.use(requestLogger);
 app.use(express.json()); // Habilita o parsing de JSON
 app.use(invalidJsonHandler);
-
-app.use(csrfProtection);
-app.get('/api/csrf-token', (req, res) => {
-  const csrfToken = req.csrfToken();
-  res.json({ csrfToken });
-});
 
 // apiLimiter removido para rodar localmente
 

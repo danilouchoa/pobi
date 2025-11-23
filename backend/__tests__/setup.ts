@@ -12,6 +12,8 @@ process.env.FRONTEND_ORIGIN = 'http://localhost:5173';
 process.env.COOKIE_DOMAIN = 'localhost';
 process.env.GOOGLE_CLIENT_ID = 'test-google-client-id';
 process.env.GOOGLE_CLIENT_SECRET = 'test-google-client-secret';
+process.env.AUTH_GOOGLE_ENABLED = 'true';
+process.env.AUTH_ACCOUNT_LINK_ENABLED = 'true';
 
 // Mock do Prisma Client como classe
 const mockPrismaInstance = {
@@ -27,9 +29,9 @@ const mockPrismaInstance = {
     findFirst: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
     delete: vi.fn(),
     count: vi.fn(),
-    updateMany: vi.fn(),
     deleteMany: vi.fn(),
   },
   origin: {
@@ -37,6 +39,7 @@ const mockPrismaInstance = {
     findFirst: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
     delete: vi.fn(),
   },
   debtor: {
@@ -44,6 +47,7 @@ const mockPrismaInstance = {
     findFirst: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
     delete: vi.fn(),
   },
   salaryHistory: {
@@ -51,6 +55,7 @@ const mockPrismaInstance = {
     findFirst: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
     delete: vi.fn(),
   },
   job: {
@@ -58,11 +63,19 @@ const mockPrismaInstance = {
     findFirst: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
     delete: vi.fn(),
   },
   $disconnect: vi.fn(),
   $connect: vi.fn(),
 };
+
+mockPrismaInstance.$transaction = vi.fn(async (callback: any) => {
+  if (typeof callback === 'function') {
+    return callback(mockPrismaInstance);
+  }
+  return callback;
+});
 
 vi.mock('@prisma/client', () => ({
   PrismaClient: class {

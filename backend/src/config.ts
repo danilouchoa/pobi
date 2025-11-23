@@ -65,6 +65,12 @@ const envSchema = z.object({
   VALIDATION_ENABLED: z.enum(['true', 'false']).optional()
     .transform(val => val !== 'false') // true por default
     .default('true' as any),
+  AUTH_GOOGLE_ENABLED: z.enum(['true', 'false']).optional()
+    .transform(val => val !== 'false')
+    .default('true' as any),
+  AUTH_ACCOUNT_LINK_ENABLED: z.enum(['true', 'false']).optional()
+    .transform(val => val !== 'false')
+    .default('true' as any),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
@@ -107,6 +113,8 @@ export const config = {
   cookieDomain: parsedEnv.data.COOKIE_DOMAIN,
   googleClientId: parsedEnv.data.GOOGLE_CLIENT_ID,
   googleClientSecret: parsedEnv.data.GOOGLE_CLIENT_SECRET,
+  authGoogleEnabled: parsedEnv.data.AUTH_GOOGLE_ENABLED,
+  authAccountLinkEnabled: parsedEnv.data.AUTH_ACCOUNT_LINK_ENABLED,
 };
 
 export const isCorsAllowed = (origin?: string): boolean => {

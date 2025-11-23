@@ -130,6 +130,9 @@ function App() {
               <Typography variant="subtitle2" noWrap maxWidth={180}>
                 {user?.name ?? user?.email}
               </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Conta vinculada ao Google: {user?.googleLinked ? "Sim" : "Não"}
+              </Typography>
             </Box>
             <Button variant="outlined" color="primary" onClick={logout}>
               Sair

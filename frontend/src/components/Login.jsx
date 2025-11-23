@@ -10,6 +10,10 @@ import {
   Alert,
   IconButton,
   CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import { GoogleLogin } from "@react-oauth/google";
@@ -18,16 +22,21 @@ import { useAuth } from "../context/useAuth";
 import { useToast } from "../hooks/useToast";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
 
 export default function Login() {
-  const { login, loginWithGoogle, authError, loading } = useAuth();
+  const { login, register, loginWithGoogle, resolveGoogleConflict, authError, loading } = useAuth();
   const toast = useToast();
   const [form, setForm] = useState({
-    email: "danilo.uchoa@finance.app",
-    password: "finance123",
+    email: "",
+    password: "",
+    name: "",
+    passwordConfirm: "",
   });
   const [feedback, setFeedback] = useState(null);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [mode, setMode] = useState("login");
+  const [googleConflict, setGoogleConflict] = useState(null);
 
   const showFeedback = useCallback((severity, message, options = {}) => {
     const {
@@ -77,28 +86,58 @@ export default function Login() {
 
     const emailValue = form.email.trim();
     const passwordValue = form.password;
-
-    if (!emailValue || !passwordValue.trim()) {
-      showFeedback("error", "Informe e-mail e senha para continuar.");
-      return;
-    }
+    const nameValue = form.name?.trim?.() ?? "";
 
     if (!EMAIL_REGEX.test(emailValue)) {
       showFeedback("error", "Digite um e-mail válido.");
       return;
     }
 
-    if (emailValue !== form.email) {
-      setForm((prev) => ({ ...prev, email: emailValue }));
+    if (mode === "login") {
+      if (!passwordValue.trim()) {
+        showFeedback("error", "Informe e-mail e senha para continuar.");
+        return;
+      }
+
+      if (emailValue !== form.email) {
+        setForm((prev) => ({ ...prev, email: emailValue }));
+      }
+
+      try {
+        await login({ email: emailValue, password: passwordValue });
+        toast.success({ message: "Login realizado! Bem-vindo de volta." });
+        showFeedback("success", "Login realizado! Redirecionando...");
+      } catch (error) {
+        if (!error.response?.data?.message) {
+          showFeedback("error", "Não foi possível fazer login.");
+        }
+      }
+      return;
+    }
+
+    // Registro local
+    if (!nameValue) {
+      showFeedback("error", "Informe seu nome para continuar.");
+      return;
+    }
+
+    if (!PASSWORD_REGEX.test(passwordValue)) {
+      showFeedback("error", "Senha deve ter 8+ caracteres com letras e números.");
+      return;
+    }
+
+    if (!form.passwordConfirm || form.passwordConfirm !== passwordValue) {
+      showFeedback("error", "A confirmação de senha não confere.");
+      return;
     }
 
     try {
-      await login({ email: emailValue, password: passwordValue });
-      toast.success({ message: "Login realizado! Bem-vindo de volta." });
-      showFeedback("success", "Login realizado! Redirecionando...");
+      await register({ name: nameValue, email: emailValue, password: passwordValue });
+      toast.success({ message: "Cadastro realizado! Bem-vindo." });
+      showFeedback("success", "Cadastro concluído! Redirecionando...");
     } catch (error) {
       if (!error.response?.data?.message) {
-        showFeedback("error", "Não foi possível fazer login.");
+        showFeedback("error", "Não foi possível concluir seu cadastro.");
       }
     }
   };
@@ -119,8 +158,31 @@ export default function Login() {
       toast.success({ message: "Login com Google concluído." });
       showFeedback("success", "Login com Google concluído! Redirecionando...");
     } catch (error) {
-      if (!error.response?.data?.message) {
+      if (error.response?.status === 409 && error.response?.data?.error === "ACCOUNT_CONFLICT") {
+        setGoogleConflict({
+          credential,
+          email: error.response?.data?.data?.email,
+        });
+        showFeedback("info", "Encontramos uma conta local com este e-mail. Deseja unificar com Google?");
+      } else if (!error.response?.data?.message) {
         showFeedback("error", "Não foi possível autenticar com Google.");
+      }
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  const handleResolveConflict = async () => {
+    if (!googleConflict?.credential) return;
+    setGoogleLoading(true);
+    try {
+      await resolveGoogleConflict({ credential: googleConflict.credential });
+      toast.success({ message: "Contas unificadas com sucesso." });
+      showFeedback("success", "Contas unificadas! Redirecionando...");
+      setGoogleConflict(null);
+    } catch (error) {
+      if (!error.response?.data?.message) {
+        showFeedback("error", "Não foi possível unificar as contas.");
       }
     } finally {
       setGoogleLoading(false);
@@ -134,6 +196,11 @@ export default function Login() {
 
   const handleChange = (field) => (event) => {
     setForm((prev) => ({ ...prev, [field]: event.target.value }));
+    setFeedback(null);
+  };
+
+  const switchMode = (nextMode) => {
+    setMode(nextMode);
     setFeedback(null);
   };
 
@@ -151,9 +218,25 @@ export default function Login() {
           <Typography variant="h5" fontWeight={700} align="center" gutterBottom>
             Finance App
           </Typography>
-          <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 3 }}>
-            Acesse sua conta para continuar
+          <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 2 }}>
+            {mode === "login" ? "Acesse sua conta para continuar" : "Crie sua conta para começar"}
           </Typography>
+          <Stack direction="row" spacing={1} justifyContent="center" sx={{ mb: 1 }}>
+            <Button
+              variant={mode === "login" ? "contained" : "outlined"}
+              size="small"
+              onClick={() => switchMode("login")}
+            >
+              Entrar
+            </Button>
+            <Button
+              variant={mode === "register" ? "contained" : "outlined"}
+              size="small"
+              onClick={() => switchMode("register")}
+            >
+              Criar conta
+            </Button>
+          </Stack>
           <Stack component="form" spacing={2} onSubmit={handleSubmit}>
             <AnimatePresence>
               {feedback && (
@@ -185,6 +268,15 @@ export default function Login() {
                 </motion.div>
               )}
             </AnimatePresence>
+            {mode === "register" && (
+              <TextField
+                label="Nome"
+                fullWidth
+                value={form.name}
+                onChange={handleChange("name")}
+                required
+              />
+            )}
             <TextField
               label="E-mail"
               type="email"
@@ -201,6 +293,21 @@ export default function Login() {
               onChange={handleChange("password")}
               required
             />
+            {mode === "register" && (
+              <>
+                <TextField
+                  label="Confirmar senha"
+                  type="password"
+                  fullWidth
+                  value={form.passwordConfirm}
+                  onChange={handleChange("passwordConfirm")}
+                  required
+                />
+                <Typography variant="caption" color="text.secondary">
+                  Senha com 8+ caracteres, incluindo letras e números.
+                </Typography>
+              </>
+            )}
             <Button
               type="submit"
               variant="contained"
@@ -212,8 +319,11 @@ export default function Login() {
                 ) : null
               }
             >
-              {loading ? "Autenticando..." : "Entrar"}
+              {loading ? (mode === "login" ? "Autenticando..." : "Criando conta...") : mode === "login" ? "Entrar" : "Criar conta"}
             </Button>
+            <Typography variant="body2" color="text.secondary" align="center">
+              ou continue com
+            </Typography>
             <Box sx={{ position: "relative" }}>
               <GoogleLogin
                 onSuccess={handleGoogleSuccess}
@@ -239,6 +349,29 @@ export default function Login() {
           </Stack>
         </Paper>
       </Container>
+
+      <Dialog open={Boolean(googleConflict)} onClose={() => setGoogleConflict(null)}>
+        <DialogTitle>Unificar contas com Google</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ mb: 1.5 }}>
+            Encontramos uma conta local para {googleConflict?.email ?? "este e-mail"}. Deseja unificar usando
+            o Google como login principal?
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setGoogleConflict(null)} disabled={googleLoading}>
+            Cancelar
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleResolveConflict}
+            disabled={googleLoading}
+            startIcon={googleLoading ? <CircularProgress size={16} /> : null}
+          >
+            Unificar
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
