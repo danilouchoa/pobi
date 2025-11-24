@@ -24,6 +24,10 @@ const mockPrismaInstance = {
     update: vi.fn(),
     delete: vi.fn(),
   },
+  userConsent: {
+    create: vi.fn(),
+    findMany: vi.fn(),
+  },
   expense: {
     findMany: vi.fn(),
     findFirst: vi.fn(),

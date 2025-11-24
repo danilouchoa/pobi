@@ -176,3 +176,8 @@ g
 
 ## UX-04B - Axios 401 Interceptor Refinement
 - Refined Axios 401 handling — login 401 (INVALID_CREDENTIALS) no longer triggers SESSION_EXPIRED; only 401 from protected endpoints with a token in memory trigger the session-expired flow.
+
+## 2025-11-27 - UX-05 – Cadastro mínimo e consentimento base
+- Implementado fluxo de cadastro com campos mínimos (e-mail, senha e nome opcional) usando o AuthShell e componentes do design system.
+- Checkbox obrigatório de Termos/Privacidade com versão registrada e consentimento `BASIC_TERMS_AND_PRIVACY` persistido no backend junto ao IP quando disponível.
+- Nenhum dado financeiro solicitado no cadastro; erros de sign-up não reutilizam o alerta de “Sessão expirada”.

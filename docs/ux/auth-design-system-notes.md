@@ -15,3 +15,8 @@
 - Credenciais inválidas exibem mensagem inline nos campos (mesma cópia para e-mail e senha), enquanto `SESSION_EXPIRED` gera `Alert` global com “Sessão expirada. Faça login novamente.”; demais erros (rede/servidor/desconhecido) continuam como alertas globais.
 - O botão de enviar respeita `isLoading`/`disabled` para evitar duplo clique, mantendo foco em alertas ou campos após erros para acessibilidade.
 - 401 de `/api/auth/login` com `INVALID_CREDENTIALS` não dispara o fluxo de sessão expirada; apenas 401 de endpoints protegidos com token presente acionam refresh/expiração e o alerta global “Sessão expirada. Faça login novamente.”.
+
+## UX-05 — Cadastro mínimo com consentimento
+- Cadastro coleta apenas e-mail e senha (nome opcional) e exige aceite explícito de Termos de Uso e Política de Privacidade com versão identificável.
+- O aceite é persistido como `UserConsent` com propósito `BASIC_TERMS_AND_PRIVACY`, versão informada e IP quando disponível; nenhum dado financeiro é solicitado no cadastro.
+- Erros de sign-up seguem o padrão de mensagens claras (ex.: e-mail em uso, validação ou rede) sem reutilizar o alerta de sessão expirada reservado a fluxos autenticados.

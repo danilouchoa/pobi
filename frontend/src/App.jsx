@@ -16,6 +16,7 @@ import {
   Skeleton,
   Divider,
 } from "@mui/material";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useFinanceApp } from "./hooks/useFinanceApp";
 import Dashboard from "./pages/Dashboard";
 import Lancamentos from "./pages/Lancamentos";
@@ -23,6 +24,7 @@ import Salario from "./components/Salario";
 import Cadastros from "./components/Cadastros";
 import Exportacao from "./components/Exportacao";
 import Login from "./components/Login";
+import Signup from "./components/Signup";
 import { useAuth } from "./context/useAuth";
 
 const TABS = [
@@ -42,9 +44,9 @@ const getInitials = (value = "") => {
     .join("");
 };
 
-function App() {
+function AuthenticatedApp() {
   const [tab, setTab] = useState("dashboard");
-  const { isAuthenticated, user, logout } = useAuth();
+  const { user, logout } = useAuth();
   const {
     state,
     month,
@@ -87,10 +89,6 @@ function App() {
     },
     [tab, debouncedRefresh]
   );
-
-  if (!isAuthenticated) {
-    return <Login />;
-  }
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: "background.default" }}>
@@ -264,6 +262,31 @@ function App() {
       </Container>
     </Box>
   );
+}
+
+function AuthRoutes() {
+  return (
+    <Routes>
+      <Route path="/auth/login" element={<Login />} />
+      <Route path="/auth/signup" element={<Signup />} />
+      <Route path="*" element={<Navigate to="/auth/login" replace />} />
+    </Routes>
+  );
+}
+
+function App() {
+  const { isAuthenticated } = useAuth();
+  const location = useLocation();
+
+  if (!isAuthenticated) {
+    return <AuthRoutes />;
+  }
+
+  if (location.pathname.startsWith("/auth/")) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <AuthenticatedApp />;
 }
 
 function GridSkeleton() {

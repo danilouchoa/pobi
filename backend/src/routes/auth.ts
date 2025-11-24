@@ -53,7 +53,7 @@ const getJwtSecret = (): string => config.jwtSecret;
  * @param user - Objeto user do Prisma
  * @returns User sem passwordHash e outros campos internos
  */
-type PrismaUser = Pick<User, 'id' | 'email' | 'name' | 'avatar' | 'provider' | 'googleId' | 'passwordHash'>;
+type PrismaUser = Pick<User, 'id' | 'email' | 'name' | 'avatar' | 'provider' | 'googleId' | 'passwordHash' | 'createdAt'>;
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
@@ -86,6 +86,20 @@ const buildBaseClaims = (user: PrismaUser) => ({
   provider: user.provider ?? Provider.LOCAL,
   googleLinked: Boolean(user.googleId),
 });
+
+const BASIC_TERMS_PURPOSE = 'BASIC_TERMS_AND_PRIVACY';
+
+const resolveClientIp = (req: Request) => {
+  const forwardedFor = req.headers['x-forwarded-for'];
+  if (Array.isArray(forwardedFor)) {
+    return forwardedFor[0];
+  }
+  if (typeof forwardedFor === 'string') {
+    const [first] = forwardedFor.split(',');
+    if (first) return first.trim();
+  }
+  return req.ip || req.connection.remoteAddress || undefined;
+};
 
 const generateAccessToken = (user: PrismaUser): string => {
   return jwt.sign({ ...buildBaseClaims(user), tokenType: 'access' }, getJwtSecret(), { expiresIn: ACCESS_TOKEN_EXPIRES_IN });
@@ -173,8 +187,9 @@ export default function authRoutes(prisma: PrismaClient) {
    */
   router.post('/register', validate({ body: registerSchema }), async (req: Request, res: Response) => {
     try {
-      const { email, password, name } = req.body;
+      const { email, password, name, termsVersion } = req.body;
       const normalizedEmail = normalizeEmail(email);
+      const clientIp = resolveClientIp(req);
 
       const existingUser = await prisma.user.findUnique({ where: { email: normalizedEmail } });
 
@@ -200,6 +215,15 @@ export default function authRoutes(prisma: PrismaClient) {
           name,
           provider: Provider.LOCAL,
           googleId: null,
+        },
+      });
+
+      await prisma.userConsent.create({
+        data: {
+          userId: user.id,
+          purpose: BASIC_TERMS_PURPOSE,
+          version: termsVersion,
+          ip: clientIp,
         },
       });
 
@@ -474,6 +498,18 @@ export default function authRoutes(prisma: PrismaClient) {
             where: { id: byEmail.id },
             data: updateData,
           });
+
+          if (!user) {
+            user = {
+              ...byEmail,
+              ...updateData,
+              createdAt: byEmail.createdAt ?? new Date(),
+              passwordHash: byEmail.passwordHash ?? null,
+              googleId: updateData.googleId ?? byEmail.googleId ?? null,
+              avatar: updateData.avatar ?? byEmail.avatar ?? null,
+              provider: updateData.provider ?? Provider.GOOGLE,
+            } as PrismaUser;
+          }
         }
       }
 
@@ -487,6 +523,23 @@ export default function authRoutes(prisma: PrismaClient) {
             avatar: profile.avatar,
           },
         });
+
+        if (!user) {
+          user = {
+            id: profile.googleId,
+            email: normalizedEmail,
+            name: profile.name,
+            googleId: profile.googleId,
+            provider: Provider.GOOGLE,
+            avatar: profile.avatar ?? null,
+            passwordHash: null,
+            createdAt: new Date(),
+          } as PrismaUser;
+        }
+      }
+
+      if (!user) {
+        throw new Error('Falha ao criar ou atualizar usuário Google');
       }
 
       publishRecurringJob(user.id).catch((error) => {

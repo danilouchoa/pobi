@@ -47,6 +47,8 @@ const attachChannelHandlers = (
 
 async function connectWithRetry(context: string): Promise<RabbitConnection> {
   let attempt = 0;
+  // Retry loop is intentional to maintain connectivity with backoff
+  // eslint-disable-next-line no-constant-condition
   while (true) {
     try {
       const connection = await connect(RABBIT_URL, { timeout: 5000 });

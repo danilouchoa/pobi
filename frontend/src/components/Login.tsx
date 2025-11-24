@@ -10,6 +10,7 @@ import {
 } from "react";
 import { GoogleLogin, type CredentialResponse } from "@react-oauth/google";
 import { AnimatePresence, motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
 import { LOGIN_ERROR_MESSAGES, isGlobalLoginError } from "../context/loginError";
 import { useToast } from "../hooks/useToast";
@@ -43,6 +44,7 @@ const MotionDiv = motion.div;
 
 export default function Login() {
   const { login, register, loginWithGoogle, resolveGoogleConflict, authError, loading, loginError, clearLoginError } = useAuth();
+  const navigate = useNavigate();
   const toast = useToast();
   const [form, setForm] = useState({ email: "", password: "", name: "", passwordConfirm: "" });
   const [feedback, setFeedback] = useState<Feedback | null>(null);
@@ -292,8 +294,8 @@ export default function Login() {
           <Button
             type="button"
             label="Criar conta"
-            variant={mode === "register" ? "secondary" : "ghost"}
-            onClick={() => switchMode("register")}
+            variant="secondary"
+            onClick={() => navigate("/auth/signup")}
             fullWidth
           />
         </div>

@@ -193,12 +193,12 @@ export function AuthProvider({ children }) {
   /**
    * Cadastro com email/senha
    */
-  const registerLocal = useCallback(async ({ name, email, password }) => {
+  const registerLocal = useCallback(async ({ name, email, password, acceptedTerms, termsVersion }) => {
     setLoading(true);
     setAuthError(null);
     clearLoginError();
     try {
-      const { data } = await api.post("/api/auth/register", { name, email, password });
+      const { data } = await api.post("/api/auth/register", { name, email, password, acceptedTerms, termsVersion });
 
       try {
         await queryClient.clear();

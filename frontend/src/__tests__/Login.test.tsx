@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React, { useState } from "react";
 import { vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 import Login from "../components/Login";
 import { AuthContext } from "../context/AuthProvider";
 import { initialLoginErrorState, LOGIN_ERROR_MESSAGES, type LoginErrorState } from "../context/loginError";
@@ -68,7 +69,11 @@ function renderWithAuth(overrides: AuthOverrides = {}): RenderResult {
   };
 
   return {
-    ...render(<Wrapper />),
+    ...render(
+      <MemoryRouter initialEntries={["/auth/login"]}>
+        <Wrapper />
+      </MemoryRouter>
+    ),
     setLoginError: (state: LoginErrorState) => setLoginErrorState(state),
     setLoading: (value: boolean) => setLoadingState(value),
     loginSpy,

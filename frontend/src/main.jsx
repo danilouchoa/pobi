@@ -5,6 +5,7 @@ import { ThemeProvider, CssBaseline } from "@mui/material";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
+import { BrowserRouter } from "react-router-dom";
 import "./index.css";
 import App from "./App.jsx";
 import { AuthProvider } from "./context/AuthProvider.jsx";
@@ -74,9 +75,11 @@ createRoot(document.getElementById("root")).render(
             <CssBaseline />
             {hasGoogleClientId ? (
               <GoogleOAuthProvider clientId={googleClientId}>
-                <AuthProvider>
-                  <App />
-                </AuthProvider>
+                <BrowserRouter>
+                  <AuthProvider>
+                    <App />
+                  </AuthProvider>
+                </BrowserRouter>
               </GoogleOAuthProvider>
             ) : (
               missingGoogleClientIdNotice

@@ -8,6 +8,9 @@ export const prisma = {
     update: vi.fn(),
     delete: vi.fn(),
   },
+  userConsent: {
+    create: vi.fn(),
+  },
   expense: {
     findMany: vi.fn(),
     create: vi.fn(),

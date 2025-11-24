@@ -39,15 +39,28 @@ model User {
   provider      Provider        @default(LOCAL)
   avatar        String?
   createdAt     DateTime        @default(now())
-  
+
   // Relações (O usuário é "dono" de tudo)
   origins       Origin[]
   debtors       Debtor[]
   expenses      Expense[]
   salaryHistory SalaryHistory[]
   jobs          Job[]
-  
+  consents      UserConsent[]
+
   @@index([provider])
+}
+
+model UserConsent {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purpose   String
+  version   String
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, purpose])
 }
 
 // v5.2 state.origins

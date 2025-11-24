@@ -1,0 +1,2 @@
+export const TERMS_VERSION = "2025-11-26";
+export const TERMS_PURPOSE = "BASIC_TERMS_AND_PRIVACY";

@@ -15,6 +15,7 @@ type CreateUserOptions = {
 };
 
 let users: any[] = [];
+let consents: any[] = [];
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 
@@ -38,11 +39,16 @@ const ensureUserMocks = () => {
   prisma.user.update = prisma.user.update ?? vi.fn();
   prisma.user.delete = prisma.user.delete ?? vi.fn();
 
+  prisma.userConsent = prisma.userConsent ?? { create: vi.fn(), findMany: vi.fn() };
+
   prisma.user.findUnique.mockReset?.();
   prisma.user.findFirst.mockReset?.();
   prisma.user.create.mockReset?.();
   prisma.user.update.mockReset?.();
   prisma.user.delete.mockReset?.();
+
+  prisma.userConsent.create.mockReset?.();
+  prisma.userConsent.findMany?.mockReset?.();
 
   prisma.user.findUnique.mockImplementation(async ({ where }: any = {}) => {
     return clone(users.find((user) => matchesWhere(user, where)) ?? null);
@@ -57,6 +63,16 @@ const ensureUserMocks = () => {
     const user = { id: nextId, ...data };
     users.push(user);
     return clone(user);
+  });
+
+  prisma.userConsent.findMany?.mockImplementation(async ({ where }: any = {}) => {
+    return clone(consents.filter((consent) => matchesWhere(consent, where)));
+  });
+
+  prisma.userConsent.create.mockImplementation(async ({ data }: any = {}) => {
+    const consent = { id: `consent-${consents.length + 1}`, ...data };
+    consents.push(consent);
+    return clone(consent);
   });
 
   prisma.user.update.mockImplementation(async ({ where, data }: any = {}) => {
@@ -80,6 +96,7 @@ const ensureUserMocks = () => {
 
 export const resetUserFactory = () => {
   users = [];
+  consents = [];
   ensureUserMocks();
 };
 
@@ -122,5 +139,6 @@ export const createGoogleUser = async (overrides: CreateUserOptions = {}) => {
 };
 
 export const getUsers = () => clone(users);
+export const getConsents = () => clone(consents);
 
 export { prisma as userFactoryPrisma };
