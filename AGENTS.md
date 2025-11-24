@@ -163,3 +163,8 @@ g
 - Novo componente `AuthShell` (`frontend/src/components/auth/AuthShell.tsx`) criado usando apenas os primitives do Design System para servir como contêiner de todas as telas de autenticação.
 - Tela de login integrada ao `AuthShell` mantendo o comportamento existente (login, cadastro, Google e diálogo de conflito) com layout mobile-first e copy inspirada no visual “Ethereum/SaaS”.
 - Storybook atualizado com `AuthShell.stories.tsx` e testes adicionados (`src/components/auth/__tests__/AuthShell.test.tsx`, `src/__tests__/Login.test.tsx`) para cobrir o shell e a integração do login.
+
+## 2025-11-25 - UX-04 – Refino do fluxo de Login
+- Modelo de erros de login padronizado (`LOGIN_ERROR_MESSAGES`/`loginError`) separando claramente credenciais inválidas, falhas de rede e erros de servidor, alinhado aos códigos do backend.
+- UI do login refinada no `AuthShell`: alertas globais para rede/servidor, erros inline nos campos para credenciais inválidas, carregamento/disparo único do botão e foco pós-erro para acessibilidade.
+- Testes ampliados (`frontend/src/__tests__/Login.test.tsx`) cobrindo sucesso, credenciais inválidas, rede/500 e estado de loading; Storybook ilustra estados de erro. Comandos executados no frontend: `npm run lint`, `npm run coverage`, `npm run build`, `npm run build-storybook`.

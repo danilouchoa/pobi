@@ -1,5 +1,5 @@
 import { useId, useState } from "react";
-import type { InputHTMLAttributes } from "react";
+import type { InputHTMLAttributes, Ref } from "react";
 import { tokens } from "./tokens";
 
 export type TextFieldProps = {
@@ -8,6 +8,7 @@ export type TextFieldProps = {
   error?: string;
   fullWidth?: boolean;
   onToggleVisibilityLabel?: string;
+  inputRef?: Ref<HTMLInputElement>;
 } & Omit<InputHTMLAttributes<HTMLInputElement>, "size">;
 
 const cssVar = (name: string, fallback: string) => `var(${name}, ${fallback})`;
@@ -22,6 +23,7 @@ export function TextField({
   disabled,
   fullWidth,
   onToggleVisibilityLabel = "Mostrar senha",
+  inputRef,
   ...inputProps
 }: TextFieldProps) {
   const autoId = useId();
@@ -63,6 +65,7 @@ export function TextField({
         <input
           id={inputId}
           {...inputProps}
+          ref={inputRef}
           type={controlType}
           required={required}
           disabled={disabled}

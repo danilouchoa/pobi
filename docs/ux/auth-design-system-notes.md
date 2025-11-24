@@ -9,3 +9,8 @@
 - O layout de autenticação foi consolidado no componente `AuthShell` (`frontend/src/components/auth/AuthShell.tsx`), que aplica o fundo vivo/gradient usando apenas os tokens do design system.
 - Telas de login/registro devem ser renderizadas como `children` dentro do `AuthShell`, reutilizando apenas os primitives (`Card`, `Button`, `TextField`, `FormField`, `Alert`, `ThemeProvider/tokens`).
 - Storybook contém a prévia em `frontend/src/stories/ui/AuthShell.stories.tsx` para validar responsividade e copy principal.
+
+## UX-04 — Padrões de erro e carregamento no Login
+- Erros de login foram padronizados em códigos (`INVALID_CREDENTIALS`, `NETWORK`, `SERVER`, `UNKNOWN`) com mensagens legíveis, consumidas pelo frontend via `loginError`/`LOGIN_ERROR_MESSAGES`.
+- Credenciais inválidas são exibidas inline nos campos (ao menos senha), enquanto falhas de rede ou servidor usam `Alert` global dentro do `AuthShell`.
+- O botão de enviar respeita `isLoading`/`disabled` para evitar duplo clique, mantendo foco em alertas ou campos após erros para acessibilidade.

@@ -11,6 +11,7 @@ import {
 import { GoogleLogin, type CredentialResponse } from "@react-oauth/google";
 import { AnimatePresence, motion } from "framer-motion";
 import { useAuth } from "../context/useAuth";
+import { LOGIN_ERROR_MESSAGES, isGlobalLoginError } from "../context/loginError";
 import { useToast } from "../hooks/useToast";
 import { Alert } from "../ui/Alert";
 import { Button } from "../ui/Button";
@@ -41,18 +42,36 @@ const PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
 const MotionDiv = motion.div;
 
 export default function Login() {
-  const { login, register, loginWithGoogle, resolveGoogleConflict, authError, loading } = useAuth();
+  const { login, register, loginWithGoogle, resolveGoogleConflict, authError, loading, loginError, clearLoginError } = useAuth();
   const toast = useToast();
   const [form, setForm] = useState({ email: "", password: "", name: "", passwordConfirm: "" });
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [mode, setMode] = useState<Mode>("login");
   const [googleConflict, setGoogleConflict] = useState<GoogleConflict | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const emailInputRef = useRef<HTMLInputElement | null>(null);
+  const passwordInputRef = useRef<HTMLInputElement | null>(null);
+  const globalErrorRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     emailInputRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    if (loginError.kind === "INVALID_CREDENTIALS") {
+      setFieldErrors({ password: loginError.message ?? LOGIN_ERROR_MESSAGES.INVALID_CREDENTIALS });
+      passwordInputRef.current?.focus();
+      return;
+    }
+
+    setFieldErrors({});
+
+    if (isGlobalLoginError(loginError.kind)) {
+      globalErrorRef.current?.focus();
+    }
+  }, [loginError]);
 
   const showFeedback = useCallback((severity: Feedback["severity"], message: string, options: Partial<Feedback> = {}) => {
     const { autoClose, dismissible = severity !== "success", source = "local" } = options;
@@ -69,11 +88,12 @@ export default function Login() {
 
   useEffect(() => {
     if (authError) {
+      if (mode === "login" && loginError.kind !== "NONE") return;
       showFeedback("error", authError, { source: "auth" });
     } else {
       setFeedback((prev) => (prev?.source === "auth" ? null : prev));
     }
-  }, [authError, showFeedback]);
+  }, [authError, loginError.kind, mode, showFeedback]);
 
   useEffect(() => {
     if (!feedback?.autoClose) return undefined;
@@ -87,20 +107,25 @@ export default function Login() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (isSubmitting) return;
     setFeedback(null);
+    setFieldErrors({});
+    clearLoginError();
 
     const emailValue = form.email.trim();
     const passwordValue = form.password;
     const nameValue = form.name.trim();
 
     if (!EMAIL_REGEX.test(emailValue)) {
-      showFeedback("error", "Digite um e-mail válido.");
+      setFieldErrors({ email: "Digite um e-mail válido." });
+      emailInputRef.current?.focus();
       return;
     }
 
     if (mode === "login") {
       if (!passwordValue.trim()) {
-        showFeedback("error", "Informe e-mail e senha para continuar.");
+        setFieldErrors({ password: "Informe e-mail e senha para continuar." });
+        passwordInputRef.current?.focus();
         return;
       }
 
@@ -108,15 +133,15 @@ export default function Login() {
         setForm((prev) => ({ ...prev, email: emailValue }));
       }
 
+      setIsSubmitting(true);
       try {
         await login({ email: emailValue, password: passwordValue });
         toast.success({ message: "Login realizado! Bem-vindo de volta." });
         showFeedback("success", "Login realizado! Redirecionando...");
-      } catch (error: unknown) {
-        const typedError = error as { response?: { data?: { message?: string } } };
-        if (!typedError.response?.data?.message) {
-          showFeedback("error", "Não foi possível fazer login.");
-        }
+      } catch {
+        // O mapeamento de erro é tratado pelo AuthProvider/loginError
+      } finally {
+        setIsSubmitting(false);
       }
       return;
     }
@@ -136,6 +161,7 @@ export default function Login() {
       return;
     }
 
+    setIsSubmitting(true);
     try {
       await register({ name: nameValue, email: emailValue, password: passwordValue });
       toast.success({ message: "Cadastro realizado! Bem-vindo." });
@@ -145,6 +171,8 @@ export default function Login() {
       if (!typedError.response?.data?.message) {
         showFeedback("error", "Não foi possível concluir seu cadastro.");
       }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -206,11 +234,15 @@ export default function Login() {
 
   const handleChange = (field: keyof typeof form) => (event: ChangeEvent<HTMLInputElement>) => {
     setForm((prev) => ({ ...prev, [field]: event.target.value }));
+    setFieldErrors((prev) => ({ ...prev, [field]: undefined }));
+    clearLoginError();
     setFeedback(null);
   };
 
   const switchMode = (nextMode: Mode) => {
     setMode(nextMode);
+    setFieldErrors({});
+    clearLoginError();
     setFeedback(null);
   };
 
@@ -230,6 +262,8 @@ export default function Login() {
     font: tokens.typography.body,
     color: tokens.colors.mutedText,
   };
+
+  const submitLoading = loading && isSubmitting;
 
   return (
     <AuthShell title="Controle sua vida financeira de forma simples" subtitle={formSubtitle} variant={mode === "login" ? "login" : "signup"}>
@@ -277,6 +311,17 @@ export default function Login() {
             )}
           </AnimatePresence>
 
+          {mode === "login" && isGlobalLoginError(loginError.kind) && loginError.message && (
+            <div ref={globalErrorRef} tabIndex={-1} style={{ outline: "none" }}>
+              <Alert
+                variant={loginError.kind === "NETWORK" ? "warning" : "error"}
+                title={loginError.kind === "NETWORK" ? "Problema de conexão" : "Erro ao entrar"}
+                message={loginError.message}
+                style={{ borderRadius: tokens.radii.lg }}
+              />
+            </div>
+          )}
+
           {mode === "register" && (
             <TextField
               id="name"
@@ -303,7 +348,8 @@ export default function Login() {
             fullWidth
             autoComplete="email"
             inputMode="email"
-            ref={emailInputRef}
+            error={fieldErrors.email}
+            inputRef={emailInputRef}
           />
 
           <TextField
@@ -319,6 +365,8 @@ export default function Login() {
             helperText={mode === "login" ? "Use sua senha cadastrada." : "Mínimo de 8 caracteres com letras e números."}
             autoComplete={mode === "login" ? "current-password" : "new-password"}
             onToggleVisibilityLabel="Mostrar ou ocultar senha"
+            error={fieldErrors.password}
+            inputRef={passwordInputRef}
           />
 
           {mode === "register" && (
@@ -339,10 +387,11 @@ export default function Login() {
 
           <Button
             type="submit"
-            label={loading ? (mode === "login" ? "Autenticando..." : "Criando conta...") : mode === "login" ? "Entrar" : "Criar conta"}
+            label={submitLoading ? (mode === "login" ? "Autenticando..." : "Criando conta...") : mode === "login" ? "Entrar" : "Criar conta"}
             variant="primary"
             fullWidth
-            isLoading={loading}
+            isLoading={submitLoading}
+            disabled={isSubmitting}
           />
 
           <div style={{ textAlign: "center", color: tokens.colors.mutedText, font: tokens.typography.body }}>

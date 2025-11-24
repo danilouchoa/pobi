@@ -1,6 +1,7 @@
 import { createContext, useEffect, useMemo, useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import api, { registerUnauthorizedHandler, setAuthToken } from "../services/api";
+import { initialLoginErrorState, mapLoginError } from "./loginError";
 
 /**
  * AuthProvider - Milestone #13: httpOnly Cookies Authentication
@@ -36,6 +37,7 @@ export function AuthProvider({ children }) {
   
   const [authError, setAuthError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [loginError, setLoginError] = useState(initialLoginErrorState);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const queryClient = useQueryClient();
 
@@ -44,6 +46,7 @@ export function AuthProvider({ children }) {
       setToken(null);
       setUser(null);
       setAuthError(message);
+      setLoginError(initialLoginErrorState);
       try {
         await queryClient.clear();
       } catch (err) {
@@ -52,6 +55,8 @@ export function AuthProvider({ children }) {
     },
     [queryClient]
   );
+
+  const clearLoginError = useCallback(() => setLoginError(initialLoginErrorState), []);
 
   const fetchCurrentUser = useCallback(async () => {
     try {
@@ -148,6 +153,7 @@ export function AuthProvider({ children }) {
   const login = useCallback(async ({ email, password }) => {
     setLoading(true);
     setAuthError(null);
+    clearLoginError();
     try {
       const { data } = await api.post("/api/auth/login", { email, password });
 
@@ -163,25 +169,17 @@ export function AuthProvider({ children }) {
       setToken(data.accessToken);
       setUser(data.user);
 
+      clearLoginError();
       return data;
     } catch (error) {
-      const status = error?.response?.status;
-      let message = "Erro inesperado ao efetuar login. Tente novamente.";
-
-      if (!error?.response) {
-        message = "Falha de conexão com o servidor. Verifique se o backend está em execução.";
-      } else if (status === 401) {
-        message = "Credenciais inválidas.";
-      } else if (error.response?.data?.message) {
-        message = error.response.data.message;
-      }
-
-      setAuthError(message);
+      const mappedError = mapLoginError(error);
+      setLoginError(mappedError);
+      setAuthError(mappedError.message);
       throw error;
     } finally {
       setLoading(false);
     }
-  }, [queryClient]);
+  }, [queryClient, clearLoginError]);
 
   /**
    * Cadastro com email/senha
@@ -189,6 +187,7 @@ export function AuthProvider({ children }) {
   const registerLocal = useCallback(async ({ name, email, password }) => {
     setLoading(true);
     setAuthError(null);
+    clearLoginError();
     try {
       const { data } = await api.post("/api/auth/register", { name, email, password });
 
@@ -208,7 +207,7 @@ export function AuthProvider({ children }) {
     } finally {
       setLoading(false);
     }
-  }, [queryClient]);
+  }, [queryClient, clearLoginError]);
 
   /**
    * Login via Google credential (ID token)
@@ -217,6 +216,7 @@ export function AuthProvider({ children }) {
   const loginWithGoogle = useCallback(async ({ credential }) => {
     setLoading(true);
     setAuthError(null);
+    clearLoginError();
     try {
       const { data } = await api.post('/api/auth/google', { credential });
 
@@ -236,7 +236,7 @@ export function AuthProvider({ children }) {
     } finally {
       setLoading(false);
     }
-  }, [queryClient]);
+  }, [queryClient, clearLoginError]);
 
   /**
    * Resolve conflito de conta LOCAL x GOOGLE com Google como canônico
@@ -244,6 +244,7 @@ export function AuthProvider({ children }) {
   const resolveGoogleConflict = useCallback(async ({ credential }) => {
     setLoading(true);
     setAuthError(null);
+    clearLoginError();
     try {
       const { data } = await api.post('/api/auth/google/resolve-conflict', {
         credential,
@@ -266,7 +267,7 @@ export function AuthProvider({ children }) {
     } finally {
       setLoading(false);
     }
-  }, [queryClient]);
+  }, [queryClient, clearLoginError]);
 
   /**
    * Vincula uma conta Google a um usuário autenticado
@@ -274,6 +275,7 @@ export function AuthProvider({ children }) {
   const linkGoogleAccount = useCallback(async ({ credential }) => {
     setLoading(true);
     setAuthError(null);
+    clearLoginError();
     try {
       const { data } = await api.post('/api/auth/link/google', { credential });
 
@@ -293,7 +295,7 @@ export function AuthProvider({ children }) {
     } finally {
       setLoading(false);
     }
-  }, [queryClient]);
+  }, [queryClient, clearLoginError]);
 
   /**
    * Logout seguro
@@ -323,11 +325,13 @@ export function AuthProvider({ children }) {
       linkGoogleAccount,
       logout,
       authError,
+      loginError,
+      clearLoginError,
       loading,
       isAuthenticated: Boolean(token),
       refreshAccessToken,
     }),
-    [token, user, authError, loading, refreshAccessToken, login, registerLocal, loginWithGoogle, resolveGoogleConflict, linkGoogleAccount, logout]
+    [token, user, authError, loginError, loading, refreshAccessToken, login, registerLocal, loginWithGoogle, resolveGoogleConflict, linkGoogleAccount, logout, clearLoginError]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
