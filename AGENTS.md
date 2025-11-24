@@ -173,3 +173,6 @@ g
 - `loginError.ts` agora diferencia explicitamente `SESSION_EXPIRED` de `INVALID_CREDENTIALS`, ajustando o mapeamento de códigos do backend e mantendo mensagens alinhadas ao UX-04.
 - `AuthProvider` e `Login.tsx` refinados para exibir erro global apenas para sessão expirada/rede/servidor, mantendo credenciais inválidas como erro inline nos campos (cópia “E-mail ou senha incorretos.”).
 - Testes de login atualizados/em novos cenários (`frontend/src/__tests__/Login.test.tsx`) cobrindo sessão expirada vs credenciais inválidas. Comandos executados no frontend: `npm run lint`, `npm run coverage`, `npm run build`, `npm run build-storybook`.
+
+## UX-04B - Axios 401 Interceptor Refinement
+- Refined Axios 401 handling — login 401 (INVALID_CREDENTIALS) no longer triggers SESSION_EXPIRED; only 401 from protected endpoints with a token in memory trigger the session-expired flow.

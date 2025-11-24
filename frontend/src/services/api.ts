@@ -41,9 +41,26 @@ api.interceptors.request.use(async (config) => {
 api.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
-    if (error.response?.status === 401) {
+    const status = error.response?.status;
+    if (status !== 401) {
+      return Promise.reject(error);
+    }
+
+    const url = error.config?.url ?? "";
+
+    const isAuthEndpoint =
+      url.includes("/api/auth/login") ||
+      url.includes("/api/auth/register") ||
+      url.includes("/api/auth/refresh");
+
+    if (!authToken) {
+      return Promise.reject(error);
+    }
+
+    if (!isAuthEndpoint) {
       unauthorizedHandler?.();
     }
+
     return Promise.reject(error);
   }
 );

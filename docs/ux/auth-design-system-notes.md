@@ -14,3 +14,4 @@
 - Erros de login foram padronizados em códigos (`INVALID_CREDENTIALS`, `SESSION_EXPIRED`, `NETWORK`, `SERVER`, `UNKNOWN`) com mensagens legíveis, consumidas pelo frontend via `loginError`/`LOGIN_ERROR_MESSAGES`.
 - Credenciais inválidas exibem mensagem inline nos campos (mesma cópia para e-mail e senha), enquanto `SESSION_EXPIRED` gera `Alert` global com “Sessão expirada. Faça login novamente.”; demais erros (rede/servidor/desconhecido) continuam como alertas globais.
 - O botão de enviar respeita `isLoading`/`disabled` para evitar duplo clique, mantendo foco em alertas ou campos após erros para acessibilidade.
+- 401 de `/api/auth/login` com `INVALID_CREDENTIALS` não dispara o fluxo de sessão expirada; apenas 401 de endpoints protegidos com token presente acionam refresh/expiração e o alerta global “Sessão expirada. Faça login novamente.”.
