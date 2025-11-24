@@ -112,13 +112,36 @@ describe("Login", () => {
     fireEvent.change(screen.getByLabelText(/^Senha/i), { target: { value: "wrong" } });
     fireEvent.click(screen.getAllByRole("button", { name: /Entrar/i }).pop()!);
 
-    await waitFor(() => {
-      expect(screen.getByText(LOGIN_ERROR_MESSAGES.INVALID_CREDENTIALS)).toBeInTheDocument();
-    });
-
+    const inlineMessages = await screen.findAllByText(LOGIN_ERROR_MESSAGES.INVALID_CREDENTIALS);
+    expect(inlineMessages).toHaveLength(2);
+    expect(screen.getByLabelText(/E-mail/i)).toHaveAttribute("aria-invalid", "true");
     expect(screen.getByLabelText(/^Senha/i)).toHaveAttribute("aria-invalid", "true");
     const alerts = screen.queryAllByRole("alert");
     expect(alerts.some((alert) => alert.textContent?.includes(LOGIN_ERROR_MESSAGES.INVALID_CREDENTIALS))).toBe(false);
+    expect(screen.queryByText(LOGIN_ERROR_MESSAGES.SESSION_EXPIRED)).not.toBeInTheDocument();
+  });
+
+  it("shows global alert for session expiration without inline credential errors", async () => {
+    let setLoginErrorState: (state: LoginErrorState) => void = () => {};
+    const loginSpy = vi.fn(async () => {
+      setLoginErrorState({ kind: "SESSION_EXPIRED", message: LOGIN_ERROR_MESSAGES.SESSION_EXPIRED });
+      throw new Error("SESSION_EXPIRED");
+    });
+
+    const { setLoginError } = renderWithAuth({ login: loginSpy });
+    setLoginErrorState = setLoginError;
+
+    fireEvent.change(screen.getByLabelText(/E-mail/i), { target: { value: "user@finfy.com" } });
+    fireEvent.change(screen.getByLabelText(/^Senha/i), { target: { value: "Password123" } });
+    fireEvent.click(screen.getAllByRole("button", { name: /Entrar/i }).pop()!);
+
+    await waitFor(() => {
+      expect(screen.getByText(LOGIN_ERROR_MESSAGES.SESSION_EXPIRED)).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(screen.getByLabelText(/E-mail/i)).not.toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByLabelText(/^Senha/i)).not.toHaveAttribute("aria-invalid", "true");
   });
 
   it("renders network error as global alert", async () => {

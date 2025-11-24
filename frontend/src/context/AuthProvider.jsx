@@ -1,7 +1,7 @@
 import { createContext, useEffect, useMemo, useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import api, { registerUnauthorizedHandler, setAuthToken } from "../services/api";
-import { initialLoginErrorState, mapLoginError } from "./loginError";
+import { initialLoginErrorState, LOGIN_ERROR_MESSAGES, mapLoginError } from "./loginError";
 
 /**
  * AuthProvider - Milestone #13: httpOnly Cookies Authentication
@@ -42,11 +42,11 @@ export function AuthProvider({ children }) {
   const queryClient = useQueryClient();
 
   const resetSession = useCallback(
-    async (message = null) => {
+    async (message = null, nextLoginError = initialLoginErrorState) => {
       setToken(null);
       setUser(null);
       setAuthError(message);
-      setLoginError(initialLoginErrorState);
+      setLoginError(nextLoginError);
       try {
         await queryClient.clear();
       } catch (err) {
@@ -64,8 +64,11 @@ export function AuthProvider({ children }) {
       setUser(data.user);
       return data.user;
     } catch (error) {
-      const message = error.response?.data?.message ?? "Sessão expirada. Faça login novamente.";
-      await resetSession(message);
+      const message = error.response?.data?.message ?? LOGIN_ERROR_MESSAGES.SESSION_EXPIRED;
+      await resetSession(message, {
+        kind: "SESSION_EXPIRED",
+        message: LOGIN_ERROR_MESSAGES.SESSION_EXPIRED,
+      });
       throw error;
     }
   }, [resetSession]);
@@ -104,7 +107,10 @@ export function AuthProvider({ children }) {
         return data.accessToken;
       } catch (e) {
         console.warn("[Auth] Refresh token expired or invalid, redirecting to login", e);
-        await resetSession("Sessão expirada. Faça login novamente.");
+        await resetSession(LOGIN_ERROR_MESSAGES.SESSION_EXPIRED, {
+          kind: "SESSION_EXPIRED",
+          message: LOGIN_ERROR_MESSAGES.SESSION_EXPIRED,
+        });
         return null;
       } finally {
         setIsRefreshing(false);
@@ -121,7 +127,10 @@ export function AuthProvider({ children }) {
 
         if (!newToken) {
           // Refresh falhou → redirecionar para login
-          await resetSession("Sessão expirada. Faça login novamente.");
+          await resetSession(LOGIN_ERROR_MESSAGES.SESSION_EXPIRED, {
+            kind: "SESSION_EXPIRED",
+            message: LOGIN_ERROR_MESSAGES.SESSION_EXPIRED,
+          });
         }
       });
     }, [refreshAccessToken, resetSession]);

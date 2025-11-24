@@ -61,8 +61,9 @@ export default function Login() {
 
   useEffect(() => {
     if (loginError.kind === "INVALID_CREDENTIALS") {
-      setFieldErrors({ password: loginError.message ?? LOGIN_ERROR_MESSAGES.INVALID_CREDENTIALS });
-      passwordInputRef.current?.focus();
+      const inlineMessage = loginError.message ?? LOGIN_ERROR_MESSAGES.INVALID_CREDENTIALS;
+      setFieldErrors({ email: inlineMessage, password: inlineMessage });
+      emailInputRef.current?.focus();
       return;
     }
 
@@ -265,6 +266,12 @@ export default function Login() {
 
   const submitLoading = loading && isSubmitting;
 
+  const loginErrorAlertTitle = useMemo(() => {
+    if (loginError.kind === "NETWORK") return "Problema de conexão";
+    if (loginError.kind === "SESSION_EXPIRED") return "Erro";
+    return "Erro ao entrar";
+  }, [loginError.kind]);
+
   return (
     <AuthShell title="Controle sua vida financeira de forma simples" subtitle={formSubtitle} variant={mode === "login" ? "login" : "signup"}>
       <div style={{ display: "flex", flexDirection: "column", gap: tokens.spacing.md }}>
@@ -315,7 +322,7 @@ export default function Login() {
             <div ref={globalErrorRef} tabIndex={-1} style={{ outline: "none" }}>
               <Alert
                 variant={loginError.kind === "NETWORK" ? "warning" : "error"}
-                title={loginError.kind === "NETWORK" ? "Problema de conexão" : "Erro ao entrar"}
+                title={loginErrorAlertTitle}
                 message={loginError.message}
                 style={{ borderRadius: tokens.radii.lg }}
               />

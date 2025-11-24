@@ -11,6 +11,6 @@
 - Storybook contém a prévia em `frontend/src/stories/ui/AuthShell.stories.tsx` para validar responsividade e copy principal.
 
 ## UX-04 — Padrões de erro e carregamento no Login
-- Erros de login foram padronizados em códigos (`INVALID_CREDENTIALS`, `NETWORK`, `SERVER`, `UNKNOWN`) com mensagens legíveis, consumidas pelo frontend via `loginError`/`LOGIN_ERROR_MESSAGES`.
-- Credenciais inválidas são exibidas inline nos campos (ao menos senha), enquanto falhas de rede ou servidor usam `Alert` global dentro do `AuthShell`.
+- Erros de login foram padronizados em códigos (`INVALID_CREDENTIALS`, `SESSION_EXPIRED`, `NETWORK`, `SERVER`, `UNKNOWN`) com mensagens legíveis, consumidas pelo frontend via `loginError`/`LOGIN_ERROR_MESSAGES`.
+- Credenciais inválidas exibem mensagem inline nos campos (mesma cópia para e-mail e senha), enquanto `SESSION_EXPIRED` gera `Alert` global com “Sessão expirada. Faça login novamente.”; demais erros (rede/servidor/desconhecido) continuam como alertas globais.
 - O botão de enviar respeita `isLoading`/`disabled` para evitar duplo clique, mantendo foco em alertas ou campos após erros para acessibilidade.
