@@ -5,7 +5,7 @@ import { Button } from "../../ui/Button";
 import { TextField } from "../../ui/TextField";
 import { AuthShell } from "../../components/auth/AuthShell";
 
-function AuthFormPreview() {
+function AuthShellPreview() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -17,16 +17,11 @@ function AuthFormPreview() {
       return;
     }
     setError(null);
-    // Simulação apenas para Storybook
   };
 
   return (
-    <AuthShell
-      title="Entrar no Finfy"
-      subtitle="Sessão segura com cookies httpOnly. Use apenas os campos essenciais."
-      variant="login"
-    >
-      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+    <AuthShell title="Controle sua vida financeira" subtitle="Sessão segura com cookies httpOnly." variant="login">
+      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
         {error && <Alert variant="error" message={error} />}
         <TextField
           label="E-mail"
@@ -36,7 +31,7 @@ function AuthFormPreview() {
           value={email}
           onChange={(event) => setEmail(event.target.value)}
           required
-          helperText="Usaremos o e-mail apenas para autenticação e avisos essenciais."
+          fullWidth
         />
         <TextField
           label="Senha"
@@ -46,19 +41,31 @@ function AuthFormPreview() {
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           required
+          fullWidth
           helperText="Mínimo de 8 caracteres com letras e números."
         />
         <Button label="Entrar" variant="primary" fullWidth type="submit" />
-        <Button label="Criar conta" variant="ghost" fullWidth />
+        <Button label="Criar conta" variant="ghost" fullWidth type="button" />
       </form>
     </AuthShell>
   );
 }
 
-const meta: Meta<typeof AuthFormPreview> = {
-  title: "UI/AuthFormPreview",
-  component: AuthFormPreview,
+const meta: Meta<typeof AuthShellPreview> = {
+  title: "UI/AuthShell",
+  component: AuthShellPreview,
+  parameters: {
+    layout: "fullscreen",
+  },
 };
 
 export default meta;
-export const Preview: StoryObj<typeof AuthFormPreview> = {};
+export const MobileFirst: StoryObj<typeof AuthShellPreview> = {};
+export const DesktopWithHighlights: StoryObj<typeof AuthShellPreview> = {
+  args: {},
+  parameters: {
+    viewport: {
+      defaultViewport: "responsive",
+    },
+  },
+};

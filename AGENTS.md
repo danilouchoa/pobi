@@ -158,3 +158,8 @@ g
 - Tokens de Auth centralizados em `frontend/src/ui/tokens.ts` e aplicados globalmente via `TokenProvider`/variáveis CSS `--finfy-*` para reutilização além do domínio de Auth.
 - Componentes de Auth (`Button`, `TextField`, `FormField`, `Card`, `Alert`) alinhados ao guia `docs/ux/auth-benchmark-and-principles.md`, com foco em labels persistentes, estados de foco acessíveis e mensagens inline de erro/ajuda.
 - Warnings conhecidos: aviso de chunk >500 kB em `npm run build`/`npm run build-storybook` e aviso do builder do Storybook sobre `@mui/icons-material` (pacote presente). Detalhes em `docs/ux/auth-design-system-notes.md`. `npm audit` sem vulnerabilidades altas registradas em `frontend/audit-report.json`.
+
+## 2025-11-24 - UX-03 Auth Shell
+- Novo componente `AuthShell` (`frontend/src/components/auth/AuthShell.tsx`) criado usando apenas os primitives do Design System para servir como contêiner de todas as telas de autenticação.
+- Tela de login integrada ao `AuthShell` mantendo o comportamento existente (login, cadastro, Google e diálogo de conflito) com layout mobile-first e copy inspirada no visual “Ethereum/SaaS”.
+- Storybook atualizado com `AuthShell.stories.tsx` e testes adicionados (`src/components/auth/__tests__/AuthShell.test.tsx`, `src/__tests__/Login.test.tsx`) para cobrir o shell e a integração do login.
