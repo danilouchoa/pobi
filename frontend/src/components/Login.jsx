@@ -23,6 +23,7 @@ import { useToast } from "../hooks/useToast";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
+const MotionDiv = motion.div;
 
 export default function Login() {
   const { login, register, loginWithGoogle, resolveGoogleConflict, authError, loading } = useAuth();
@@ -240,7 +241,7 @@ export default function Login() {
           <Stack component="form" spacing={2} onSubmit={handleSubmit}>
             <AnimatePresence>
               {feedback && (
-                <motion.div
+                <MotionDiv
                   key={feedback.id}
                   initial={{ opacity: 0, y: -8 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -265,7 +266,7 @@ export default function Login() {
                   >
                     {feedback.message}
                   </Alert>
-                </motion.div>
+                </MotionDiv>
               )}
             </AnimatePresence>
             {mode === "register" && (

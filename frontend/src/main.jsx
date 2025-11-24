@@ -10,6 +10,7 @@ import App from "./App.jsx";
 import { AuthProvider } from "./context/AuthProvider.jsx";
 import theme from "./theme";
 import { ToastProvider } from "./ui/feedback";
+import { TokenProvider } from "./ui/ThemeProvider";
 
 /**
  * main.jsx
@@ -68,18 +69,20 @@ createRoot(document.getElementById("root")).render(
     <QueryClientProvider client={queryClient}>
       {/* ToastProvider garante feedback visual consistente em todas as rotas. */}
       <ToastProvider>
-        <ThemeProvider theme={theme}>
-          <CssBaseline />
-          {hasGoogleClientId ? (
-            <GoogleOAuthProvider clientId={googleClientId}>
-              <AuthProvider>
-                <App />
-              </AuthProvider>
-            </GoogleOAuthProvider>
-          ) : (
-            missingGoogleClientIdNotice
-          )}
-        </ThemeProvider>
+        <TokenProvider>
+          <ThemeProvider theme={theme}>
+            <CssBaseline />
+            {hasGoogleClientId ? (
+              <GoogleOAuthProvider clientId={googleClientId}>
+                <AuthProvider>
+                  <App />
+                </AuthProvider>
+              </GoogleOAuthProvider>
+            ) : (
+              missingGoogleClientIdNotice
+            )}
+          </ThemeProvider>
+        </TokenProvider>
       </ToastProvider>
       {isDev ? <ReactQueryDevtools initialIsOpen={false} /> : null}
     </QueryClientProvider>
