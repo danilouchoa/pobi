@@ -2,7 +2,7 @@ import request from 'supertest';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import app from '../src/index';
 import { getCsrfToken } from './utils/csrf';
-import { resetUserFactory, createLocalUser, createGoogleUser, getConsents } from './factories/userFactory';
+import { resetUserFactory, createLocalUser, createGoogleUser, getConsents, getVerificationTokens } from './factories/userFactory';
 
 describe('POST /api/auth/register', () => {
   beforeEach(() => {
@@ -30,6 +30,8 @@ describe('POST /api/auth/register', () => {
       purpose: 'BASIC_TERMS_AND_PRIVACY',
       version: '2025-11-26',
     });
+    expect(getVerificationTokens()).toHaveLength(1);
+    expect(getVerificationTokens()[0]).toMatchObject({ userId: expect.any(String), expiresAt: expect.any(Date) });
   });
 
   it('retorna 409 se já existir usuário LOCAL com o mesmo email', async () => {

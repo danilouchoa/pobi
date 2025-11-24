@@ -39,6 +39,8 @@ model User {
   provider      Provider        @default(LOCAL)
   avatar        String?
   createdAt     DateTime        @default(now())
+  emailVerifiedAt DateTime?
+  emailVerifiedIp String?
 
   // Relações (O usuário é "dono" de tudo)
   origins       Origin[]
@@ -47,6 +49,7 @@ model User {
   salaryHistory SalaryHistory[]
   jobs          Job[]
   consents      UserConsent[]
+  verificationTokens EmailVerificationToken[]
 
   @@index([provider])
 }
@@ -214,4 +217,18 @@ model Job {
   user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([status, createdAt])
+}
+
+model EmailVerificationToken {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId     String   @db.ObjectId
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime @default(now())
+  createdIp  String?
+
+  @@index([userId])
+  @@index([expiresAt])
 }

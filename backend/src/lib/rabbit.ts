@@ -90,13 +90,19 @@ const ensureSharedChannel = async (): Promise<ConfirmChannel> => {
   await channel.bindQueue('dead-letter-queue', 'dlx-exchange', '');
   
   // Filas principais com DLX configurado
-  await channel.assertQueue('recurring-jobs', { 
+  await channel.assertQueue('recurring-jobs', {
     durable: true,
     arguments: {
       'x-dead-letter-exchange': 'dlx-exchange'
     }
   });
-  await channel.assertQueue('bulkUpdateQueue', { 
+  await channel.assertQueue('bulkUpdateQueue', {
+    durable: true,
+    arguments: {
+      'x-dead-letter-exchange': 'dlx-exchange'
+    }
+  });
+  await channel.assertQueue('email-jobs', {
     durable: true,
     arguments: {
       'x-dead-letter-exchange': 'dlx-exchange'
@@ -200,6 +206,10 @@ export async function publishToQueue(
 
 export async function publishRecurringJob(userId?: string) {
   await publishToQueue('recurring-jobs', { type: 'recurring.process', userId, ts: Date.now() });
+}
+
+export async function publishEmailJob(payload: unknown, jobId?: string) {
+  await publishToQueue('email-jobs', payload, jobId);
 }
 
 type BulkUpdateMessage = {

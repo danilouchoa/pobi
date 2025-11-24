@@ -71,6 +71,20 @@ const envSchema = z.object({
   AUTH_ACCOUNT_LINK_ENABLED: z.enum(['true', 'false']).optional()
     .transform(val => val !== 'false')
     .default('true' as any),
+  EMAIL_VERIFICATION_TOKEN_TTL_HOURS: z
+    .string()
+    .optional()
+    .transform((val) => {
+      const parsed = Number(val ?? '24');
+      return Number.isNaN(parsed) ? 24 : parsed;
+    }),
+  EMAIL_VERIFICATION_RESEND_MINUTES: z
+    .string()
+    .optional()
+    .transform((val) => {
+      const parsed = Number(val ?? '10');
+      return Number.isNaN(parsed) ? 10 : parsed;
+    }),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
@@ -115,6 +129,8 @@ export const config = {
   googleClientSecret: parsedEnv.data.GOOGLE_CLIENT_SECRET,
   authGoogleEnabled: parsedEnv.data.AUTH_GOOGLE_ENABLED,
   authAccountLinkEnabled: parsedEnv.data.AUTH_ACCOUNT_LINK_ENABLED,
+  emailVerificationTokenTtlHours: parsedEnv.data.EMAIL_VERIFICATION_TOKEN_TTL_HOURS,
+  emailVerificationResendMinutes: parsedEnv.data.EMAIL_VERIFICATION_RESEND_MINUTES,
 };
 
 export const isCorsAllowed = (origin?: string): boolean => {

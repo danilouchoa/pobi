@@ -78,6 +78,7 @@ describe('POST /api/auth/google', () => {
         avatar: createdUser.avatar,
         provider: 'GOOGLE',
         googleLinked: true,
+        emailVerifiedAt: null,
       },
       accessToken: expect.any(String),
     });
@@ -148,6 +149,7 @@ describe('POST /api/auth/google', () => {
       avatar: updatedUser.avatar,
       provider: 'GOOGLE',
       googleLinked: true,
+      emailVerifiedAt: null,
     });
   });
 

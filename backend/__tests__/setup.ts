@@ -121,6 +121,7 @@ vi.mock('../src/lib/redisClient', () => {
 vi.mock('../src/lib/rabbit', () => ({
   publishToQueue: vi.fn().mockResolvedValue(undefined),
   publishRecurringJob: vi.fn().mockResolvedValue(undefined),
+  publishEmailJob: vi.fn().mockResolvedValue(undefined),
   consumeQueue: vi.fn(),
   createRabbit: vi.fn().mockResolvedValue({
     channel: {
