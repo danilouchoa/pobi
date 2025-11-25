@@ -13,8 +13,8 @@ import { mergeUsersUsingGoogleAsCanonical } from '../services/userMerge';
 import {
   EMAIL_VERIFICATION_QUEUE,
   canIssueNewToken,
-  consumeToken,
   createEmailVerificationToken,
+  EmailVerificationTokenStatus,
   resolveToken,
 } from '../services/emailVerification';
 
@@ -247,7 +247,7 @@ export default function authRoutes(prisma: PrismaClient) {
         },
       });
 
-      const { rawToken, record } = await createEmailVerificationToken({
+      const { rawToken, expiresAt } = await createEmailVerificationToken({
         prisma,
         userId: user.id,
         createdIp: clientIp,
@@ -260,7 +260,7 @@ export default function authRoutes(prisma: PrismaClient) {
         email: user.email,
         userId: user.id,
         verificationUrl,
-        expiresAt: record.expiresAt.toISOString(),
+        expiresAt: expiresAt.toISOString(),
       });
 
       logAuthEvent('auth.register.local', { userId: user.id, email: user.email });
@@ -461,23 +461,23 @@ export default function authRoutes(prisma: PrismaClient) {
   router.post('/verify-email', validate({ body: verifyEmailSchema }), async (req: Request, res: Response) => {
     try {
       const { token } = verifyEmailSchema.parse(req.body);
-      const outcome = await resolveToken(prisma, token);
+      const outcome = await resolveToken(token, { prisma });
 
-      if (outcome.status === 'invalid') {
+      if (outcome.status === EmailVerificationTokenStatus.NotFound) {
         logAuthEvent('auth.verify-email.invalid-token');
         return res.status(400).json({ error: 'INVALID_TOKEN', message: 'Token de verificação inválido.' });
       }
-      if (outcome.status === 'expired') {
-        logAuthEvent('auth.verify-email.expired', { tokenId: outcome.tokenId, userId: outcome.userId });
+      if (outcome.status === EmailVerificationTokenStatus.Expired) {
+        logAuthEvent('auth.verify-email.expired', { tokenId: outcome.token.id, userId: outcome.token.userId });
         return res.status(410).json({ error: 'TOKEN_EXPIRED', message: 'Link de verificação expirou.' });
       }
-      if (outcome.status === 'already-used') {
-        logAuthEvent('auth.verify-email.already-used', { tokenId: outcome.tokenId, userId: outcome.userId });
+      if (outcome.status === EmailVerificationTokenStatus.AlreadyUsed) {
+        logAuthEvent('auth.verify-email.already-used', { tokenId: outcome.token.id, userId: outcome.token.userId });
         return res.status(409).json({ error: 'TOKEN_ALREADY_USED', message: 'Este link já foi utilizado.' });
       }
 
       const clientIp = resolveClientIp(req);
-      const tokenRecord = await prisma.emailVerificationToken.findUnique({ where: { id: outcome.tokenId } });
+      const tokenRecord = await prisma.emailVerificationToken.findUnique({ where: { id: outcome.token.id } });
       if (!tokenRecord) {
         return res.status(400).json({ error: 'INVALID_TOKEN', message: 'Token de verificação inválido.' });
       }
@@ -528,16 +528,12 @@ export default function authRoutes(prisma: PrismaClient) {
         return res.json({ status: 'ALREADY_VERIFIED' });
       }
 
-      const allowed = await canIssueNewToken(prisma, userId);
+      const { allowed } = await canIssueNewToken(userId, { prisma });
       if (!allowed) {
         return res.status(429).json({ error: 'RATE_LIMITED', message: 'Aguarde antes de reenviar o e-mail.' });
       }
 
-      const { rawToken, record } = await createEmailVerificationToken({
-        prisma,
-        userId,
-        createdIp: resolveClientIp(req),
-      });
+      const { rawToken, expiresAt } = await createEmailVerificationToken({ prisma, userId, createdIp: resolveClientIp(req) });
       const verificationUrl = `${config.frontendOrigin.replace(/\/$/, '')}/auth/verify-email?token=${rawToken}`;
       await publishEmailJob({
         type: 'VERIFY_EMAIL',
@@ -545,7 +541,7 @@ export default function authRoutes(prisma: PrismaClient) {
         email: user.email,
         userId: user.id,
         verificationUrl,
-        expiresAt: record.expiresAt.toISOString(),
+        expiresAt: expiresAt.toISOString(),
       });
       logAuthEvent('auth.verify-email.resend-requested', { userId: user.id });
       return res.json({ status: 'RESENT' });

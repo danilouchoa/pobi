@@ -187,3 +187,10 @@ g
 - Modelo de estados de conta (UNVERIFIED/VERIFIED + futuro REVERIFY_REQUIRED), jornada completa (sign-up ➜ check-email ➜ verify ➜ pós-verificação) e regras de light double opt-in documentadas.
 - Contratos de backend (modelos, endpoints verify/resend, códigos de erro dedicados e eventos), contratos de frontend (rotas/screen AuthShell, integração com AuthProvider), regras de acesso para não verificados e visão de microservices/BFF registradas.
 - Backlog derivado para UX-06B…UX-06F descrito; card apenas de documentação, sem alterações em código front/back.
+
+## UX-06B – Backend: email verification data model & token service
+- Extendido o modelo `User` com campos `emailVerifiedAt` e `emailVerifiedIp`.
+- Introduzido o modelo `EmailVerificationToken` (Mongo compatível com `@id`/`_id`, hash do token, TTL e metadados de criação/consumo).
+- Implementado serviço `emailVerification` (`createEmailVerificationToken`, `resolveToken`, `consumeToken`, `canIssueNewToken`) com hashing `sha256` e status tipados.
+- Configurações de TTL/janela de reenvio expostas via helper de config (sem acessar `process.env` diretamente).
+- Testes unitários adicionados cobrindo ciclo de vida do token e rate limiting.
