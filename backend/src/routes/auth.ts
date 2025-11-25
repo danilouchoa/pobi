@@ -15,7 +15,6 @@ import {
   canIssueNewToken,
   createEmailVerificationToken,
   EmailVerificationTokenStatus,
-  resolveToken,
 } from '../services/emailVerification';
 
 const SALT_ROUNDS = 10;
@@ -461,7 +460,8 @@ export default function authRoutes(prisma: PrismaClient) {
   router.post('/verify-email', validate({ body: verifyEmailSchema }), async (req: Request, res: Response) => {
     try {
       const { token } = verifyEmailSchema.parse(req.body);
-      const outcome = await resolveToken(token, { prisma });
+      const clientIp = resolveClientIp(req);
+      const outcome = await consumeToken(token, clientIp ?? null, { prisma });
 
       if (outcome.status === EmailVerificationTokenStatus.NotFound) {
         logAuthEvent('auth.verify-email.invalid-token');
@@ -476,33 +476,14 @@ export default function authRoutes(prisma: PrismaClient) {
         return res.status(409).json({ error: 'TOKEN_ALREADY_USED', message: 'Este link já foi utilizado.' });
       }
 
-      const clientIp = resolveClientIp(req);
-      const tokenRecord = await prisma.emailVerificationToken.findUnique({ where: { id: outcome.token.id } });
-      if (!tokenRecord) {
-        return res.status(400).json({ error: 'INVALID_TOKEN', message: 'Token de verificação inválido.' });
-      }
+      logAuthEvent('auth.verify-email.success', { userId: outcome.user.id, tokenId: outcome.token.id });
 
-      const user = await prisma.user.findUnique({ where: { id: tokenRecord.userId } });
+      const user = await prisma.user.findUnique({ where: { id: outcome.user.id } });
       if (!user) {
         return res.status(404).json({ error: 'USER_NOT_FOUND', message: 'Usuário não encontrado.' });
       }
 
-      const now = new Date();
-      const updatedUser = await prisma.$transaction(async (tx) => {
-        await tx.emailVerificationToken.update({
-          where: { id: tokenRecord.id },
-          data: { consumedAt: now },
-        });
-        const result = await tx.user.update({
-          where: { id: user.id },
-          data: { emailVerifiedAt: user.emailVerifiedAt ?? now, emailVerifiedIp: clientIp },
-        });
-        return result;
-      });
-
-      logAuthEvent('auth.verify-email.success', { userId: updatedUser.id, tokenId: tokenRecord.id });
-
-      return res.json({ status: 'VERIFIED', user: sanitizeUser(updatedUser) });
+      return res.json({ status: 'VERIFIED', user: sanitizeUser(user) });
     } catch (error) {
       console.error('[AUTH] Erro ao verificar e-mail:', error);
       return res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Erro interno no servidor.' });

@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { PrismaClient, type EmailVerificationToken, type Prisma } from '@prisma/client';
+import { type PrismaClient, type EmailVerificationToken, type Prisma } from '@prisma/client';
 import { config } from '../config';
 
 export const EMAIL_VERIFICATION_QUEUE = 'email-jobs';
@@ -13,10 +13,6 @@ export enum EmailVerificationTokenStatus {
 
 const HASH_ALGORITHM = 'sha256';
 const TOKEN_BYTE_SIZE = 32;
-
-const prisma = new PrismaClient();
-
-const resolvePrisma = (client?: PrismaClient) => client ?? prisma;
 
 const hashToken = (token: string) => crypto.createHash(HASH_ALGORITHM).update(token, 'utf8').digest('hex');
 
@@ -56,11 +52,12 @@ export type TokenConsumptionResult =
 export const createEmailVerificationToken = async (options: {
   userId: string;
   createdIp?: string | null;
-  prisma?: PrismaClient;
+  prisma: PrismaClient;
+  now?: Date;
 }): Promise<{ rawToken: string; expiresAt: Date; tokenId: string }> => {
-  const client = resolvePrisma(options.prisma);
+  const client = options.prisma;
   const { rawToken, tokenHash } = generateVerificationToken();
-  const expiresAt = buildTokenExpiry();
+  const expiresAt = buildTokenExpiry(options.now);
 
   const record = await client.emailVerificationToken.create({
     data: {
@@ -77,9 +74,9 @@ export const createEmailVerificationToken = async (options: {
 
 export const resolveToken = async (
   rawToken: string,
-  options: { prisma?: PrismaClient; now?: Date } = {},
+  options: { prisma: PrismaClient; now?: Date },
 ): Promise<TokenResolutionResult> => {
-  const client = resolvePrisma(options.prisma);
+  const client = options.prisma;
   const tokenHash = hashToken(rawToken);
   const token = await client.emailVerificationToken.findFirst({ where: { tokenHash } });
   const now = options.now ?? new Date();
@@ -93,9 +90,9 @@ export const resolveToken = async (
 export const consumeToken = async (
   rawToken: string,
   verificationIp: string | null,
-  options: { prisma?: PrismaClient; now?: Date } = {},
+  options: { prisma: PrismaClient; now?: Date },
 ): Promise<TokenConsumptionResult> => {
-  const client = resolvePrisma(options.prisma);
+  const client = options.prisma;
   const now = options.now ?? new Date();
   const resolution = await resolveToken(rawToken, { prisma: client, now });
 
@@ -146,9 +143,9 @@ export type TokenResendCheckReason = 'within_resend_window' | 'no_recent_token' 
 
 export const canIssueNewToken = async (
   userId: string,
-  options: { prisma?: PrismaClient; now?: Date } = {},
+  options: { prisma: PrismaClient; now?: Date },
 ): Promise<{ allowed: boolean; reason: TokenResendCheckReason; lastTokenCreatedAt?: Date }> => {
-  const client = resolvePrisma(options.prisma);
+  const client = options.prisma;
   const windowMinutes = config.emailVerificationResendMinutes ?? 10;
   const now = options.now ?? new Date();
   const windowStart = new Date(now.getTime() - windowMinutes * 60 * 1000);

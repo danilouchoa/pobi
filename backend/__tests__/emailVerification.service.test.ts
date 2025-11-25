@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
-vi.mock('../src/config', () => ({
+vi.mock('../config', () => ({
   config: {
     emailVerificationTokenTtlHours: 24,
     emailVerificationResendMinutes: 15,
