@@ -14,6 +14,7 @@ import {
   EMAIL_VERIFICATION_QUEUE,
   canIssueNewToken,
   createEmailVerificationToken,
+  consumeToken,
   EmailVerificationTokenStatus,
 } from '../services/emailVerification';
 

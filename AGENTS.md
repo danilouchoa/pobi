@@ -195,15 +195,7 @@ g
 - Configurações de TTL/janela de reenvio expostas via helper de config (sem acessar `process.env` diretamente).
 - Testes unitários adicionados cobrindo ciclo de vida do token e rate limiting.
 
-<<<<<<< ours
-## UX-06BHF01 – Backend: email verification fixups
-- Removido o `PrismaClient` interno de `emailVerification.ts`, exigindo injeção explícita de Prisma em todos os métodos.
-- Normalizado o import de `config` entre serviço e testes para permitir mocking consistente.
-- Rota `/api/auth/verify-email` agora delega totalmente a `consumeToken` o consumo do token e a marcação do usuário como verificado, mantendo os mesmos códigos de status e payloads de erro/sucesso.
-
-=======
 ## UX-06B – Backend: email verification fixups
 - Removido o `PrismaClient` interno de `emailVerification.ts`, exigindo injeção explícita de Prisma em todos os métodos.
 - Normalizado o import de `config` entre serviço e testes para permitir mocking consistente.
 - Rota `/api/auth/verify-email` agora delega totalmente a `consumeToken` o consumo do token e a marcação do usuário como verificado, mantendo os mesmos códigos de status e payloads de erro/sucesso.
->>>>>>> theirs
