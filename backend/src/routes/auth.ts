@@ -254,14 +254,20 @@ export default function authRoutes(prisma: PrismaClient) {
       });
 
       const verificationUrl = `${config.frontendOrigin.replace(/\/$/, '')}/auth/verify-email?token=${rawToken}`;
-      await publishEmailJob({
-        type: 'VERIFY_EMAIL',
-        queue: EMAIL_VERIFICATION_QUEUE,
-        email: user.email,
-        userId: user.id,
-        verificationUrl,
-        expiresAt: expiresAt.toISOString(),
-      });
+      logAuthEvent('auth.verify-email.token-created', { userId: user.id });
+
+      try {
+        await publishEmailJob({
+          type: 'VERIFY_EMAIL',
+          queue: EMAIL_VERIFICATION_QUEUE,
+          email: user.email,
+          userId: user.id,
+          verificationUrl,
+          expiresAt: expiresAt.toISOString(),
+        });
+      } catch (publishError) {
+        console.error(`[AUTH] Failed to enqueue verification email for user ${user.id}:`, publishError);
+      }
 
       logAuthEvent('auth.register.local', { userId: user.id, email: user.email });
 
@@ -484,7 +490,14 @@ export default function authRoutes(prisma: PrismaClient) {
         return res.status(404).json({ error: 'USER_NOT_FOUND', message: 'Usuário não encontrado.' });
       }
 
-      return res.json({ status: 'VERIFIED', user: sanitizeUser(user) });
+      const emailVerifiedAt = user.emailVerifiedAt?.toISOString() ?? null;
+
+      return res.json({
+        status: 'VERIFIED',
+        emailVerified: true,
+        emailVerifiedAt,
+        user: sanitizeUser(user),
+      });
     } catch (error) {
       console.error('[AUTH] Erro ao verificar e-mail:', error);
       return res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Erro interno no servidor.' });
@@ -507,26 +520,35 @@ export default function authRoutes(prisma: PrismaClient) {
       }
 
       if (user.emailVerifiedAt) {
+        logAuthEvent('auth.verify-email.resend-already-verified', { userId });
         return res.json({ status: 'ALREADY_VERIFIED' });
       }
 
       const { allowed } = await canIssueNewToken(userId, { prisma });
       if (!allowed) {
+        logAuthEvent('auth.verify-email.resend-rate-limited', { userId });
         return res.status(429).json({ error: 'RATE_LIMITED', message: 'Aguarde antes de reenviar o e-mail.' });
       }
 
-      const { rawToken, expiresAt } = await createEmailVerificationToken({ prisma, userId, createdIp: resolveClientIp(req) });
+      const clientIp = resolveClientIp(req);
+      const { rawToken, expiresAt } = await createEmailVerificationToken({ prisma, userId, createdIp: clientIp });
       const verificationUrl = `${config.frontendOrigin.replace(/\/$/, '')}/auth/verify-email?token=${rawToken}`;
-      await publishEmailJob({
-        type: 'VERIFY_EMAIL',
-        queue: EMAIL_VERIFICATION_QUEUE,
-        email: user.email,
-        userId: user.id,
-        verificationUrl,
-        expiresAt: expiresAt.toISOString(),
-      });
-      logAuthEvent('auth.verify-email.resend-requested', { userId: user.id });
-      return res.json({ status: 'RESENT' });
+      logAuthEvent('auth.verify-email.token-created', { userId: user.id });
+      try {
+        await publishEmailJob({
+          type: 'VERIFY_EMAIL',
+          queue: EMAIL_VERIFICATION_QUEUE,
+          email: user.email,
+          userId: user.id,
+          verificationUrl,
+          expiresAt: expiresAt.toISOString(),
+        });
+        logAuthEvent('auth.verify-email.resend-requested', { userId: user.id });
+        return res.json({ status: 'RESENT' });
+      } catch (publishError) {
+        console.error(`[AUTH] Failed to enqueue verification email for user ${user.id}:`, publishError);
+        return res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Erro interno no servidor.' });
+      }
     } catch (error) {
       console.error('[AUTH] Erro ao reenviar verificação:', error);
       return res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Erro interno no servidor.' });

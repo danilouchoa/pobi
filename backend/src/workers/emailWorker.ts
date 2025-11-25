@@ -1,53 +1,85 @@
-import amqp from 'amqplib';
+import { ConsumeMessage } from 'amqplib';
+import { z } from 'zod';
+import { config } from '../config';
 import { sendEmail } from '../lib/email';
+import { createRabbit } from '../lib/rabbit';
 import { EMAIL_VERIFICATION_QUEUE } from '../services/emailVerification';
 
-const RABBIT_URL = process.env.RABBIT_URL || 'amqp://localhost';
+export const verifyEmailJobSchema = z.object({
+  type: z.literal('VERIFY_EMAIL'),
+  email: z.string().email(),
+  verificationUrl: z.string().url(),
+  userId: z.string(),
+  expiresAt: z.string(),
+});
 
-export type VerifyEmailJob = {
-  type: 'VERIFY_EMAIL';
-  email: string;
-  verificationUrl: string;
-  userId: string;
-  expiresAt: string;
+export type VerifyEmailJob = z.infer<typeof verifyEmailJobSchema>;
+
+const logEmailEvent = (event: string, meta: Record<string, unknown> = {}) => {
+  console.info(`[EmailWorker] ${event}`, meta);
 };
 
-const handleVerifyEmail = async (payload: VerifyEmailJob) => {
-  const text = `Confirme seu acesso ao Finfy: ${payload.verificationUrl}\nEste link expira em ${payload.expiresAt}.`;
-  await sendEmail({
-    to: payload.email,
+export const handleVerifyEmailJob = async (payload: VerifyEmailJob) => {
+  const { email, verificationUrl, expiresAt, userId } = payload;
+  const expiration = new Date(expiresAt);
+  const text = `Confirme seu acesso ao Finfy: ${verificationUrl}\nEste link expira em ${expiration.toISOString()}.`;
+
+  const result = await sendEmail({
+    to: email,
     subject: 'Confirme seu e-mail no Finfy',
     text,
-    html: `<p>Olá!</p><p>Confirme seu acesso clicando no link abaixo:</p><p><a href="${payload.verificationUrl}">Verificar e-mail</a></p><p>O link expira em ${new Date(payload.expiresAt).toLocaleString()}.</p>`
+    html: `<p>Olá!</p><p>Confirme seu acesso clicando no link abaixo:</p><p><a href="${verificationUrl}">Verificar e-mail</a></p><p>O link expira em ${expiration.toLocaleString()}.</p>`,
   });
+
+  logEmailEvent('email.verify-email.sent', { userId, messageId: (result as any).id });
 };
 
-const handleMessage = async (msg: amqp.ConsumeMessage | null, channel: amqp.ConfirmChannel) => {
-  if (!msg) return;
+export const handleEmailJob = async (payload: unknown) => {
+  const parsed = verifyEmailJobSchema.safeParse(payload);
+  if (!parsed.success) {
+    logEmailEvent('email.verify-email.invalid-payload', { reason: parsed.error.flatten().formErrors });
+    return { ack: true as const, handled: false };
+  }
+
   try {
-    const payload = JSON.parse(msg.content.toString()) as VerifyEmailJob;
-    if (payload.type === 'VERIFY_EMAIL') {
-      await handleVerifyEmail(payload);
-    }
-    channel.ack(msg);
+    await handleVerifyEmailJob(parsed.data);
+    return { ack: true as const, handled: true };
   } catch (error) {
-    console.error('[EmailWorker] failed to process message', error);
-    channel.nack(msg, false, false);
+    logEmailEvent('email.verify-email.failed', {
+      userId: parsed.data.userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return { ack: false as const, handled: true };
   }
 };
 
-const bootstrap = async () => {
-  const connection = await amqp.connect(RABBIT_URL);
-  const channel = await connection.createConfirmChannel();
-  await channel.assertQueue(EMAIL_VERIFICATION_QUEUE, { durable: true });
-  await channel.prefetch(5);
-  console.log('[EmailWorker] waiting for email jobs...');
-  await channel.consume(EMAIL_VERIFICATION_QUEUE, (msg) => handleMessage(msg, channel));
+export const startEmailWorker = async () => {
+  const { channel } = await createRabbit({ queue: EMAIL_VERIFICATION_QUEUE, prefetch: 5 });
+  await channel.consume(EMAIL_VERIFICATION_QUEUE, async (msg: ConsumeMessage | null) => {
+    if (!msg) return;
+
+    try {
+      const payload = JSON.parse(msg.content.toString());
+      const result = await handleEmailJob(payload);
+      if (result.ack) {
+        channel.ack(msg);
+      } else {
+        channel.nack(msg, false, false);
+      }
+    } catch (error) {
+      logEmailEvent('email.verify-email.unexpected', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      channel.nack(msg, false, false);
+    }
+  });
+
+  logEmailEvent('email.worker.ready', { queue: EMAIL_VERIFICATION_QUEUE, rabbitUrl: config.rabbitUrl });
 };
 
 if (process.env.NODE_ENV !== 'test') {
-  bootstrap().catch((error) => {
-    console.error('[EmailWorker] fatal error', error);
+  startEmailWorker().catch((error) => {
+    logEmailEvent('email.worker.fatal', { error: error instanceof Error ? error.message : String(error) });
     process.exit(1);
   });
 }

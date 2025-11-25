@@ -199,3 +199,8 @@ g
 - Removido o `PrismaClient` interno de `emailVerification.ts`, exigindo injeção explícita de Prisma em todos os métodos.
 - Normalizado o import de `config` entre serviço e testes para permitir mocking consistente.
 - Rota `/api/auth/verify-email` agora delega totalmente a `consumeToken` o consumo do token e a marcação do usuário como verificado, mantendo os mesmos códigos de status e payloads de erro/sucesso.
+
+## UX-06C – Backend: verificação de e-mail (endpoints, fila e worker)
+- `/api/auth/register` cria token de verificação e enfileira job `VERIFY_EMAIL` na `EMAIL_VERIFICATION_QUEUE` com URL e expiração.
+- `/api/auth/verify-email` e `/api/auth/resend-verification` utilizam o serviço `emailVerification` e respeitam janela de reenvio.
+- Worker dedicado consome a fila de verificação e envia e-mails via provider, rodando como serviço separado em Docker.

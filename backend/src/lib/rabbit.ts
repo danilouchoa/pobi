@@ -1,7 +1,6 @@
 import { connect, type ConfirmChannel } from 'amqplib';
 import crypto from 'crypto';
-
-const RABBIT_URL = process.env.RABBIT_URL || 'amqp://rabbitmq:5672';
+import { config } from '../config';
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 type RabbitConnection = Awaited<ReturnType<typeof connect>>;
@@ -51,7 +50,7 @@ async function connectWithRetry(context: string): Promise<RabbitConnection> {
   // eslint-disable-next-line no-constant-condition
   while (true) {
     try {
-      const connection = await connect(RABBIT_URL, { timeout: 5000 });
+      const connection = await connect(config.rabbitUrl, { timeout: 5000 });
       console.log(`[Rabbit] Connected (${context})`);
       return connection;
     } catch (error) {

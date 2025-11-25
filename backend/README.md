@@ -37,6 +37,7 @@ API financeira em Node.js 20 + Express que controla despesas, agrupamento de par
 | `npm run billing:migrate-enum` | Migrações do enum de `billingRolloverPolicy` (NEXT/PREVIOUS). |
 | `npm run fingerprints:backfill` / `npm run fingerprints:regenerate` | Scripts auxiliares de idempotência para lançamentos recorrentes. |
 | `npm run test:billing` | Teste de unidade focado em lógica de billing. |
+| `npm run worker:email` | Sobe o worker de e-mail (após `npm run build`) para consumir `EMAIL_VERIFICATION_QUEUE`. |
 | `npm run health:db` | Check rápido de conectividade com MongoDB. |
 | `npm run seed` | Semeia dados de desenvolvimento no banco. |
 | `npm run clean` | Remove a pasta `dist/` gerada pelo build. |
@@ -86,6 +87,9 @@ Responsabilidade por camada: `route` valida entrada e chama `service`; `service`
 - **recurringWorker**: cria lançamentos recorrentes e reaplica cálculo de `billingMonth` com idempotência via fingerprints.
 - **bulkWorker**: executa operações em lote (ex.: criação massiva de parcelas) usando ConfirmChannel e `prefetch` configurado.
 - Ambos se reconectam ao RabbitMQ com backoff e respeitam a DLQ. Métricas básicas registram `[CACHE HIT/MISS]` e tentativas de consumo.
+- **emailWorker**: consome a fila `EMAIL_VERIFICATION_QUEUE` (`email-jobs`) processando jobs `VERIFY_EMAIL` com payload `{ email, userId, verificationUrl, expiresAt }`.
+  - Envia o e-mail de verificação usando o provider configurado e registra logs `email.verify-email.sent`/`failed`.
+  - Execução local: `npm run build && npm run worker:email` ou `docker compose up email-worker` (depende de RabbitMQ saudável).
 
 ## 8. Testes
 - Suíte principal com **Vitest** + **Supertest** para rotas e serviços. Rodar localmente: `npm ci && npm run coverage` (ou `npm run coverage -- --watch` para iteração).

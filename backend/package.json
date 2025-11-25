@@ -14,6 +14,7 @@
     "billing:backfill": "tsx scripts/backfill-billing-month.ts",
     "billing:migrate-enum": "tsx scripts/migrate-billing-enum.ts",
     "test:billing": "tsx src/lib/billing.test.ts",
+    "worker:email": "node dist/workers/emailWorker.js",
     "health:db": "tsx scripts/check-db.ts",
     "seed": "tsx prisma/seed.ts",
     "lint": "eslint . --ext .ts",

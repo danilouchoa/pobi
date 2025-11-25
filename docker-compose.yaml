@@ -71,6 +71,35 @@ services:
         condition: service_healthy
 
   # ====================================================================
+  # EMAIL-WORKER - Envio de e-mails transacionais (verificação)
+  # ====================================================================
+  email-worker:
+    build: ./backend
+    container_name: finance_email_worker
+    network_mode: host
+    command: ["node", "dist/workers/emailWorker.js"]
+    env_file:
+      - ./backend/.env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=mongodb://localhost:27017,localhost:27018,localhost:27019/finance_app_db?replicaSet=rs0&retryWrites=true&w=majority
+      - RABBIT_URL=amqp://localhost:5672
+      - REDIS_URL=redis://localhost:6379
+    healthcheck:
+      test: ["CMD", "sh", "-c", "kill -0 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+
+  # ====================================================================
   # BULK-WORKER - Processamento de operações em lote
   # ====================================================================
   bulk-worker:

@@ -1,5 +1,6 @@
 import amqp from 'amqplib';
 import { PrismaClient } from '@prisma/client';
+import { config } from '../config';
 import { processRecurringExpenses } from '../services/recurringService';
 
 // Handler puro para teste unitário
@@ -15,7 +16,6 @@ export async function handleRecurringJob({ msg, channel, prisma }: { msg: any, c
   }
 }
 const prisma = new PrismaClient();
-const RABBIT_URL = process.env.RABBIT_URL || 'amqp://localhost';
 const QUEUE_NAME = 'recurring-jobs';
 const BASE_DELAY_MS = 1000;
 const MAX_DELAY_MS = 30000;
@@ -47,7 +47,7 @@ const cleanupConnection = async () => {
 };
 
 const setupConsumer = async () => {
-  const conn = await amqp.connect(RABBIT_URL);
+  const conn = await amqp.connect(config.rabbitUrl);
   connection = conn;
   conn.on('close', () => {
     if (shuttingDown) return;

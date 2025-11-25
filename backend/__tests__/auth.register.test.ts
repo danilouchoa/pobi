@@ -3,6 +3,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import app from '../src/index';
 import { getCsrfToken } from './utils/csrf';
 import { resetUserFactory, createLocalUser, createGoogleUser, getConsents, getVerificationTokens } from './factories/userFactory';
+import { publishEmailJob } from '../src/lib/rabbit';
+import { EMAIL_VERIFICATION_QUEUE } from '../src/services/emailVerification';
 
 describe('POST /api/auth/register', () => {
   beforeEach(() => {
@@ -32,6 +34,14 @@ describe('POST /api/auth/register', () => {
     });
     expect(getVerificationTokens()).toHaveLength(1);
     expect(getVerificationTokens()[0]).toMatchObject({ userId: expect.any(String), expiresAt: expect.any(Date) });
+
+    const queuedJob = (publishEmailJob as unknown as vi.Mock).mock.calls[0]?.[0];
+    expect(queuedJob).toMatchObject({
+      type: 'VERIFY_EMAIL',
+      queue: EMAIL_VERIFICATION_QUEUE,
+      email: 'new.user@finance.app',
+    });
+    expect(queuedJob.verificationUrl).toContain('/auth/verify-email?token=');
   });
 
   it('retorna 409 se já existir usuário LOCAL com o mesmo email', async () => {
