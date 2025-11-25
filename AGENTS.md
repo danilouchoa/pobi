@@ -181,3 +181,9 @@ g
 - Implementado fluxo de cadastro com campos mínimos (e-mail, senha e nome opcional) usando o AuthShell e componentes do design system.
 - Checkbox obrigatório de Termos/Privacidade com versão registrada e consentimento `BASIC_TERMS_AND_PRIVACY` persistido no backend junto ao IP quando disponível.
 - Nenhum dado financeiro solicitado no cadastro; erros de sign-up não reutilizam o alerta de “Sessão expirada”.
+
+## 2025-11-28 - UX-06A – Blueprint de verificação de e-mail & estados da conta
+- Criado `docs/ux/auth-email-verification-flow.md` com o blueprint UX-06 para verificação de e-mail.
+- Modelo de estados de conta (UNVERIFIED/VERIFIED + futuro REVERIFY_REQUIRED), jornada completa (sign-up ➜ check-email ➜ verify ➜ pós-verificação) e regras de light double opt-in documentadas.
+- Contratos de backend (modelos, endpoints verify/resend, códigos de erro dedicados e eventos), contratos de frontend (rotas/screen AuthShell, integração com AuthProvider), regras de acesso para não verificados e visão de microservices/BFF registradas.
+- Backlog derivado para UX-06B…UX-06F descrito; card apenas de documentação, sem alterações em código front/back.

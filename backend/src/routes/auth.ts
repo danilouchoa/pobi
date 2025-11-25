@@ -71,6 +71,7 @@ type PrismaUser = Pick<
   | 'passwordHash'
   | 'createdAt'
   | 'emailVerifiedAt'
+  | 'emailVerifiedIp'
 >;
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
@@ -643,6 +644,8 @@ export default function authRoutes(prisma: PrismaClient) {
               googleId: updateData.googleId ?? byEmail.googleId ?? null,
               avatar: updateData.avatar ?? byEmail.avatar ?? null,
               provider: updateData.provider ?? Provider.GOOGLE,
+              emailVerifiedAt: byEmail.emailVerifiedAt ?? null,
+              emailVerifiedIp: byEmail.emailVerifiedIp ?? null,
             } as PrismaUser;
           }
         }
@@ -669,6 +672,8 @@ export default function authRoutes(prisma: PrismaClient) {
             avatar: profile.avatar ?? null,
             passwordHash: null,
             createdAt: new Date(),
+            emailVerifiedAt: null,
+            emailVerifiedIp: null,
           } as PrismaUser;
         }
       }
