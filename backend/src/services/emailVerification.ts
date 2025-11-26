@@ -1,8 +1,8 @@
 import crypto from 'crypto';
 import { type PrismaClient, type EmailVerificationToken, type Prisma } from '@prisma/client';
 import { config } from '../config';
-
-export const EMAIL_VERIFICATION_QUEUE = 'email-jobs';
+import { EMAIL_VERIFICATION_QUEUE } from '../lib/queues';
+export { EMAIL_VERIFICATION_QUEUE };
 
 export enum EmailVerificationTokenStatus {
   Valid = 'valid',

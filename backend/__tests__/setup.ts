@@ -7,7 +7,6 @@ process.env.JWT_REFRESH_SECRET = 'test-refresh-secret-key';
 process.env.DATABASE_URL = 'mongodb://localhost:27017/test_db';
 process.env.REDIS_HOST = 'localhost';
 process.env.REDIS_PORT = '6379';
-process.env.RABBITMQ_URL = 'amqp://localhost';
 process.env.RABBIT_URL = 'amqp://localhost';
 process.env.FRONTEND_ORIGIN = 'http://localhost:5173';
 process.env.COOKIE_DOMAIN = 'localhost';

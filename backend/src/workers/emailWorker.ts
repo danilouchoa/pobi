@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { config } from '../config';
 import { sendEmail } from '../lib/email';
 import { createRabbit } from '../lib/rabbit';
-import { EMAIL_VERIFICATION_QUEUE } from '../services/emailVerification';
+import { EMAIL_VERIFICATION_QUEUE } from '../lib/queues';
 
 export const verifyEmailJobSchema = z.object({
   type: z.literal('VERIFY_EMAIL'),

@@ -1,6 +1,7 @@
 import { connect, type ConfirmChannel } from 'amqplib';
 import crypto from 'crypto';
 import { config } from '../config';
+import { EMAIL_VERIFICATION_QUEUE } from './queues';
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 type RabbitConnection = Awaited<ReturnType<typeof connect>>;
@@ -101,7 +102,7 @@ const ensureSharedChannel = async (): Promise<ConfirmChannel> => {
       'x-dead-letter-exchange': 'dlx-exchange'
     }
   });
-  await channel.assertQueue('email-jobs', {
+  await channel.assertQueue(EMAIL_VERIFICATION_QUEUE, {
     durable: true,
     arguments: {
       'x-dead-letter-exchange': 'dlx-exchange'
@@ -208,7 +209,7 @@ export async function publishRecurringJob(userId?: string) {
 }
 
 export async function publishEmailJob(payload: unknown, jobId?: string) {
-  await publishToQueue('email-jobs', payload, jobId);
+  await publishToQueue(EMAIL_VERIFICATION_QUEUE, payload, jobId);
 }
 
 type BulkUpdateMessage = {
