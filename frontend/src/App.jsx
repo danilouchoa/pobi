@@ -25,6 +25,8 @@ import Cadastros from "./components/Cadastros";
 import Exportacao from "./components/Exportacao";
 import Login from "./components/Login";
 import Signup from "./components/Signup";
+import CheckEmail from "./components/auth/CheckEmail";
+import VerifyEmail from "./components/auth/VerifyEmail";
 import { useAuth } from "./context/useAuth";
 
 const TABS = [
@@ -269,6 +271,8 @@ function AuthRoutes() {
     <Routes>
       <Route path="/auth/login" element={<Login />} />
       <Route path="/auth/signup" element={<Signup />} />
+      <Route path="/auth/check-email" element={<CheckEmail />} />
+      <Route path="/auth/verify-email" element={<VerifyEmail />} />
       <Route path="*" element={<Navigate to="/auth/login" replace />} />
     </Routes>
   );
@@ -278,12 +282,21 @@ function App() {
   const { isAuthenticated } = useAuth();
   const location = useLocation();
 
+  const isAuthPath = location.pathname.startsWith("/auth/");
+  const isVerificationFlow =
+    location.pathname.startsWith("/auth/check-email") ||
+    location.pathname.startsWith("/auth/verify-email");
+
   if (!isAuthenticated) {
     return <AuthRoutes />;
   }
 
-  if (location.pathname.startsWith("/auth/")) {
+  if (isAuthPath && !isVerificationFlow) {
     return <Navigate to="/" replace />;
+  }
+
+  if (isAuthPath && isVerificationFlow) {
+    return <AuthRoutes />;
   }
 
   return <AuthenticatedApp />;

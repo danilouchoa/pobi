@@ -23,6 +23,15 @@ import { initialLoginErrorState, LOGIN_ERROR_MESSAGES, mapLoginError } from "./l
 // User data pode ser cacheado para UX, mas não é crítico
 const USER_KEY = "finance_user";
 
+const enhanceUserShape = (userData) => {
+  if (!userData) return userData;
+
+  const emailVerifiedAt = userData.emailVerifiedAt ?? null;
+  const emailVerified = userData.emailVerified ?? Boolean(emailVerifiedAt);
+
+  return { ...userData, emailVerifiedAt, emailVerified };
+};
+
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
@@ -32,7 +41,7 @@ export function AuthProvider({ children }) {
   // User data (pode ser cacheado para evitar re-fetch)
   const [user, setUser] = useState(() => {
     const cached = localStorage.getItem(USER_KEY);
-    return cached ? JSON.parse(cached) : null;
+    return cached ? enhanceUserShape(JSON.parse(cached)) : null;
   });
   
   const [authError, setAuthError] = useState(null);
@@ -58,11 +67,14 @@ export function AuthProvider({ children }) {
 
   const clearLoginError = useCallback(() => setLoginError(initialLoginErrorState), []);
 
+  const enhanceUser = useCallback(enhanceUserShape, []);
+
   const fetchCurrentUser = useCallback(async () => {
     try {
       const { data } = await api.get("/api/auth/me");
-      setUser(data.user);
-      return data.user;
+      const nextUser = enhanceUser(data.user);
+      setUser(nextUser);
+      return nextUser;
     } catch (error) {
       const message = error.response?.data?.message ?? LOGIN_ERROR_MESSAGES.SESSION_EXPIRED;
       await resetSession(message, {
@@ -71,7 +83,7 @@ export function AuthProvider({ children }) {
       });
       throw error;
     }
-  }, [resetSession]);
+  }, [enhanceUser, resetSession]);
 
   // Definir token no axios quando mudar
   useEffect(() => {
@@ -100,7 +112,7 @@ export function AuthProvider({ children }) {
         setAuthToken(data.accessToken);
         setToken(data.accessToken);
         if (data.user) {
-          setUser(data.user);
+          setUser(enhanceUser(data.user));
         } else {
           await fetchCurrentUser();
         }
@@ -116,7 +128,7 @@ export function AuthProvider({ children }) {
         setIsRefreshing(false);
       }
       },
-      [isRefreshing, fetchCurrentUser, resetSession]
+      [enhanceUser, fetchCurrentUser, isRefreshing, resetSession]
     );
 
   // Registrar handler para 401 (access token expirado)
@@ -163,8 +175,8 @@ export function AuthProvider({ children }) {
     setLoading(true);
     setAuthError(null);
     clearLoginError();
-    try {
-      const { data } = await api.post("/api/auth/login", { email, password });
+      try {
+        const { data } = await api.post("/api/auth/login", { email, password });
 
       // Limpar cache do QueryClient antes de configurar nova sessão
       try {
@@ -176,7 +188,7 @@ export function AuthProvider({ children }) {
       // Backend retorna { user, accessToken }
       // refreshToken vem como cookie httpOnly (não acessível aqui)
       setToken(data.accessToken);
-      setUser(data.user);
+      setUser(enhanceUser(data.user));
 
       clearLoginError();
       return data;
@@ -188,7 +200,7 @@ export function AuthProvider({ children }) {
     } finally {
       setLoading(false);
     }
-  }, [queryClient, clearLoginError]);
+  }, [queryClient, clearLoginError, enhanceUser]);
 
   /**
    * Cadastro com email/senha
@@ -207,7 +219,7 @@ export function AuthProvider({ children }) {
       }
 
       setToken(data.accessToken);
-      setUser(data.user);
+      setUser(enhanceUser(data.user));
       return data;
     } catch (error) {
       const message = error.response?.data?.message ?? "Não foi possível criar sua conta.";
@@ -216,7 +228,7 @@ export function AuthProvider({ children }) {
     } finally {
       setLoading(false);
     }
-  }, [queryClient, clearLoginError]);
+  }, [queryClient, clearLoginError, enhanceUser]);
 
   /**
    * Login via Google credential (ID token)
@@ -236,7 +248,7 @@ export function AuthProvider({ children }) {
       }
 
       setToken(data.accessToken);
-      setUser(data.user);
+      setUser(enhanceUser(data.user));
       return data;
     } catch (error) {
       const message = error.response?.data?.message ?? 'Não foi possível autenticar com Google.';
@@ -245,7 +257,7 @@ export function AuthProvider({ children }) {
     } finally {
       setLoading(false);
     }
-  }, [queryClient, clearLoginError]);
+  }, [queryClient, clearLoginError, enhanceUser]);
 
   /**
    * Resolve conflito de conta LOCAL x GOOGLE com Google como canônico
@@ -267,7 +279,7 @@ export function AuthProvider({ children }) {
       }
 
       setToken(data.accessToken);
-      setUser(data.user);
+      setUser(enhanceUser(data.user));
       return data;
     } catch (error) {
       const message = error.response?.data?.message ?? 'Não foi possível unificar as contas.';
@@ -276,7 +288,7 @@ export function AuthProvider({ children }) {
     } finally {
       setLoading(false);
     }
-  }, [queryClient, clearLoginError]);
+  }, [queryClient, clearLoginError, enhanceUser]);
 
   /**
    * Vincula uma conta Google a um usuário autenticado
@@ -295,7 +307,7 @@ export function AuthProvider({ children }) {
       }
 
       setToken(data.accessToken);
-      setUser(data.user);
+      setUser(enhanceUser(data.user));
       return data;
     } catch (error) {
       const message = error.response?.data?.message ?? 'Não foi possível vincular sua conta Google.';
@@ -304,7 +316,7 @@ export function AuthProvider({ children }) {
     } finally {
       setLoading(false);
     }
-  }, [queryClient, clearLoginError]);
+  }, [queryClient, clearLoginError, enhanceUser]);
 
   /**
    * Logout seguro
@@ -323,6 +335,26 @@ export function AuthProvider({ children }) {
     }
   }, [resetSession]);
 
+  const updateUser = useCallback(
+    (partialUser) => {
+      setUser((prev) => {
+        if (!prev) return prev;
+        return enhanceUser({ ...prev, ...partialUser });
+      });
+    },
+    [enhanceUser]
+  );
+
+  const markEmailVerified = useCallback(
+    (emailVerifiedAt = new Date().toISOString()) => {
+      setUser((prev) => {
+        if (!prev) return prev;
+        return enhanceUser({ ...prev, emailVerified: true, emailVerifiedAt });
+      });
+    },
+    [enhanceUser]
+  );
+
   const value = useMemo(
     () => ({
       token,
@@ -333,6 +365,8 @@ export function AuthProvider({ children }) {
       resolveGoogleConflict,
       linkGoogleAccount,
       logout,
+      updateUser,
+      markEmailVerified,
       authError,
       loginError,
       clearLoginError,
@@ -340,7 +374,23 @@ export function AuthProvider({ children }) {
       isAuthenticated: Boolean(token),
       refreshAccessToken,
     }),
-    [token, user, authError, loginError, loading, refreshAccessToken, login, registerLocal, loginWithGoogle, resolveGoogleConflict, linkGoogleAccount, logout, clearLoginError]
+    [
+      token,
+      user,
+      authError,
+      loginError,
+      loading,
+      refreshAccessToken,
+      login,
+      registerLocal,
+      loginWithGoogle,
+      resolveGoogleConflict,
+      linkGoogleAccount,
+      logout,
+      updateUser,
+      markEmailVerified,
+      clearLoginError,
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

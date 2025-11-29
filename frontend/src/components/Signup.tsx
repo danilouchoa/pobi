@@ -97,7 +97,7 @@ export default function Signup() {
         termsVersion: TERMS_VERSION,
       });
       toast.success({ message: "Conta criada com sucesso." });
-      navigate("/", { replace: true });
+      navigate("/auth/check-email", { replace: true });
     } catch (error: unknown) {
       const typedError = error as ApiError;
       const status = typedError.response?.status;
