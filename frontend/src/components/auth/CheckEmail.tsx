@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../context/useAuth";
+import type { VerifyEmailErrorCode } from "../../services/authApi";
 import { resendVerification } from "../../services/authApi";
 import { Alert } from "../../ui/Alert";
 import { Button } from "../../ui/Button";
@@ -54,7 +55,7 @@ export default function CheckEmail() {
         });
       }
     } catch (error: unknown) {
-      const typedError = error as { response?: { status?: number; data?: { error?: string } } };
+      const typedError = error as { response?: { status?: number; data?: { error?: VerifyEmailErrorCode } } };
       const errorCode = typedError.response?.data?.error;
       const status = typedError.response?.status;
 

@@ -205,3 +205,6 @@ g
 - `/api/auth/verify-email` e `/api/auth/resend-verification` utilizam o serviço `emailVerification` e respeitam janela de reenvio.
 - Worker dedicado consome a fila de verificação e envia e-mails via provider, rodando como serviço separado em Docker.
 - UX-06C micro: centralizado `EMAIL_VERIFICATION_QUEUE` em `lib/queues`, `publishEmailJob` usa a constante compartilhada e os testes de RabbitMQ usam `config.rabbitUrl` (`RABBIT_URL`).
+
+## UX-06D – Frontend: verificação de e-mail (estabilidade)
+- Tipagem do `verifyEmail/resendVerification` alinhada aos códigos de erro do backend (`INVALID_TOKEN`, `TOKEN_EXPIRED`, `TOKEN_ALREADY_USED`, `RATE_LIMITED`) e ao payload de `emailVerified/emailVerifiedAt`, com `AuthProvider` sempre normalizando o usuário persistido.

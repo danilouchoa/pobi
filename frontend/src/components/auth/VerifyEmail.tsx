@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../context/useAuth";
+import type { VerifyEmailErrorCode } from "../../services/authApi";
 import { verifyEmail } from "../../services/authApi";
 import { Alert } from "../../ui/Alert";
 import { Button } from "../../ui/Button";
@@ -60,40 +61,53 @@ export default function VerifyEmail() {
   );
 
   const resolveTokenError = useCallback(
-    (code: string) => {
+    (code: VerifyEmailErrorCode | "MISSING_TOKEN" | "GENERIC_ERROR") => {
       switch (code) {
         case "INVALID_TOKEN":
+        case "MISSING_TOKEN":
           setFeedback({
-          variant: "error",
-          title: "Link inválido",
-          message: "O link de verificação é inválido ou foi alterado.",
-          code,
-        });
-        setPrimaryAction("Voltar para login", goToLogin);
-        break;
-      case "TOKEN_EXPIRED":
-        setFeedback({
-          variant: "error",
-          title: "Link expirado",
-          message: "O link de verificação expirou. Solicite um novo para continuar.",
-          code,
-        });
-        setPrimaryAction(
-          isAuthenticated ? "Reenviar e-mail" : "Voltar para login",
-          isAuthenticated ? goToCheckEmail : goToLogin
-        );
-        break;
-      case "TOKEN_ALREADY_USED":
-        setFeedback({
-          variant: isAuthenticated ? "info" : "warning",
-          title: "Link já utilizado",
-          message: isAuthenticated
-            ? "Seu e-mail já foi confirmado. Você pode seguir para o dashboard."
-            : "Este link já foi utilizado. Acesse sua conta para continuar.",
-          code,
-        });
-        setPrimaryAction(isAuthenticated ? "Ir para o dashboard" : "Ir para login", isAuthenticated ? goToDashboard : goToLogin);
-        break;
+            variant: "error",
+            title: "Link inválido",
+            message: "O link de verificação é inválido ou foi alterado.",
+            code,
+          });
+          setPrimaryAction("Voltar para login", goToLogin);
+          break;
+        case "TOKEN_EXPIRED":
+          setFeedback({
+            variant: "error",
+            title: "Link expirado",
+            message: "O link de verificação expirou. Solicite um novo para continuar.",
+            code,
+          });
+          setPrimaryAction(
+            isAuthenticated ? "Reenviar e-mail" : "Voltar para login",
+            isAuthenticated ? goToCheckEmail : goToLogin
+          );
+          break;
+        case "TOKEN_ALREADY_USED":
+          setFeedback({
+            variant: isAuthenticated ? "info" : "warning",
+            title: "Link já utilizado",
+            message: isAuthenticated
+              ? "Seu e-mail já foi confirmado. Você pode seguir para o dashboard."
+              : "Este link já foi utilizado. Acesse sua conta para continuar.",
+            code,
+          });
+          setPrimaryAction(
+            isAuthenticated ? "Ir para o dashboard" : "Ir para login",
+            isAuthenticated ? goToDashboard : goToLogin
+          );
+          break;
+        case "RATE_LIMITED":
+          setFeedback({
+            variant: "error",
+            title: "Muitas tentativas",
+            message: "Aguarde alguns minutos antes de tentar novamente.",
+            code,
+          });
+          setPrimaryAction(isAuthenticated ? "Ir para o dashboard" : "Ir para login", isAuthenticated ? goToDashboard : goToLogin);
+          break;
         default:
           setFeedback({
             variant: "error",
@@ -112,35 +126,35 @@ export default function VerifyEmail() {
       if (hasRequestedRef.current === verificationToken) return;
       hasRequestedRef.current = verificationToken;
 
-    setViewState("loading");
-    setFeedback(null);
+      setViewState("loading");
+      setFeedback(null);
 
-    try {
-      const result = await verifyEmail(verificationToken);
+      try {
+        const result = await verifyEmail(verificationToken);
 
-      if (isAuthenticated) {
-        if (result.user) {
-          updateUser?.(result.user);
-        } else if (result.emailVerifiedAt) {
-          markEmailVerified?.(result.emailVerifiedAt);
+        if (isAuthenticated) {
+          if (result.user) {
+            updateUser?.(result.user);
+          } else if (result.emailVerifiedAt) {
+            markEmailVerified?.(result.emailVerifiedAt);
+          }
         }
-      }
 
-      resolveSuccess("Seu e-mail foi confirmado com sucesso.");
-    } catch (error: unknown) {
-      const typedError = error as { response?: { data?: { error?: string }; status?: number } };
-      const code = typedError.response?.data?.error;
+        resolveSuccess("Seu e-mail foi confirmado com sucesso.");
+      } catch (error: unknown) {
+        const typedError = error as { response?: { data?: { error?: VerifyEmailErrorCode }; status?: number } };
+        const code = typedError.response?.data?.error;
 
-      if (!verificationToken) {
-        resolveTokenError("INVALID_TOKEN");
+        if (!verificationToken) {
+          resolveTokenError("INVALID_TOKEN");
+          setViewState("resolved");
+          return;
+        }
+
+        resolveTokenError(code ?? "GENERIC_ERROR");
+      } finally {
         setViewState("resolved");
-        return;
       }
-
-      resolveTokenError(code ?? "GENERIC_ERROR");
-    } finally {
-      setViewState("resolved");
-    }
     },
     [isAuthenticated, markEmailVerified, resolveTokenError, resolveSuccess, updateUser]
   );

@@ -24,7 +24,7 @@ import { initialLoginErrorState, LOGIN_ERROR_MESSAGES, mapLoginError } from "./l
 const USER_KEY = "finance_user";
 
 const enhanceUserShape = (userData) => {
-  if (!userData) return userData;
+  if (!userData) return null;
 
   const emailVerifiedAt = userData.emailVerifiedAt ?? null;
   const emailVerified = userData.emailVerified ?? Boolean(emailVerifiedAt);
