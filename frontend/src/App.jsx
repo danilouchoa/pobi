@@ -16,7 +16,8 @@ import {
   Skeleton,
   Divider,
 } from "@mui/material";
-import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { useSnackbar } from "notistack";
 import { useFinanceApp } from "./hooks/useFinanceApp";
 import Dashboard from "./pages/Dashboard";
 import Lancamentos from "./pages/Lancamentos";
@@ -28,6 +29,8 @@ import Signup from "./components/Signup";
 import CheckEmail from "./components/auth/CheckEmail";
 import VerifyEmail from "./components/auth/VerifyEmail";
 import { useAuth } from "./context/useAuth";
+import { UnverifiedEmailBanner } from "./components/auth/UnverifiedEmailBanner";
+import { registerEmailNotVerifiedHandler } from "./services/api";
 
 const TABS = [
   { id: "dashboard", label: "Resumo Mensal" },
@@ -49,6 +52,8 @@ const getInitials = (value = "") => {
 function AuthenticatedApp() {
   const [tab, setTab] = useState("dashboard");
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const { enqueueSnackbar, closeSnackbar } = useSnackbar();
   const {
     state,
     month,
@@ -82,6 +87,33 @@ function AuthenticatedApp() {
   useEffect(() => {
     return () => debouncedRefresh.cancel();
   }, [debouncedRefresh]);
+
+  useEffect(() => {
+    const handler = ({ message, redirectPath }) => {
+      const snackbarKey = enqueueSnackbar(message, {
+        variant: "warning",
+        action: (key) => (
+          <Button
+            color="inherit"
+            size="small"
+            onClick={() => {
+              closeSnackbar(key);
+              navigate(redirectPath);
+            }}
+          >
+            Ver opções de verificação
+          </Button>
+        ),
+      });
+
+      if (!snackbarKey) {
+        navigate(redirectPath);
+      }
+    };
+
+    registerEmailNotVerifiedHandler(handler);
+    return () => registerEmailNotVerifiedHandler(null);
+  }, [closeSnackbar, enqueueSnackbar, navigate]);
 
   const handleTabChange = useCallback(
     (_, value) => {
@@ -142,6 +174,7 @@ function AuthenticatedApp() {
       </AppBar>
 
       <Container maxWidth="lg" sx={{ py: 5 }}>
+        <UnverifiedEmailBanner />
         <Paper sx={{ p: { xs: 3, md: 4 }, mb: 4 }}>
           <Stack spacing={2} divider={<Divider flexItem />}>
             <Box>

@@ -80,6 +80,11 @@ Responsabilidade por camada: `route` valida entrada e chama `service`; `service`
 - **Unitária**: `DELETE /expenses/:id` remove apenas a parcela alvo e invalida o cache do `billingMonth` afetado.
 - **Em lote**: `DELETE /expenses/group/:installment_group_id` remove todas as parcelas do grupo quando a intenção é eliminar o lançamento completo.
 
+### Acesso a recursos sensíveis (UX-06E)
+- Rotas que conversam com integrações externas ou que expõem dados sensíveis (ex.: `/api/jobs/*` e `/api/dlq/*`) agora utilizam o middleware `requireEmailVerified`.
+- Usuários com e-mail não verificado recebem `403` com payload `{ error: "EMAIL_NOT_VERIFIED", message: "Seu e-mail ainda não foi confirmado..." }`.
+- Usuários verificados mantêm o comportamento atual, sem regressão de permissões.
+
 ### Dead Letter Queue e reprocessamento
 - Mensagens com falha após tentativas de retry são encaminhadas à DLQ. O fluxo padrão é: fila principal → retries com backoff → DLQ → reprocessamento manual via `/admin/dlq` ou purge.
 

@@ -27,7 +27,7 @@ const enhanceUserShape = (userData) => {
   if (!userData) return null;
 
   const emailVerifiedAt = userData.emailVerifiedAt ?? null;
-  const emailVerified = userData.emailVerified ?? Boolean(emailVerifiedAt);
+  const emailVerified = Boolean(emailVerifiedAt ?? userData.emailVerified);
 
   return { ...userData, emailVerifiedAt, emailVerified };
 };

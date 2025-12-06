@@ -208,3 +208,8 @@ g
 
 ## UX-06D – Frontend: verificação de e-mail (estabilidade)
 - Tipagem do `verifyEmail/resendVerification` alinhada aos códigos de erro do backend (`INVALID_TOKEN`, `TOKEN_EXPIRED`, `TOKEN_ALREADY_USED`, `RATE_LIMITED`) e ao payload de `emailVerified/emailVerifiedAt`, com `AuthProvider` sempre normalizando o usuário persistido.
+
+## UX-06E – Regras de acesso para usuários não verificados
+- Middleware `requireEmailVerified` protege rotas sensíveis no backend (aplicado em `/api/jobs/*` e `/api/dlq/*`), retornando `403` com `{ error: "EMAIL_NOT_VERIFIED", message: "Seu e-mail ainda não foi confirmado..." }` para contas sem verificação.
+- No dashboard autenticado, usuários não verificados veem um banner persistente com CTA de reenvio de verificação e mensagens de sucesso/throttling alinhadas ao tom das telas de Auth.
+- Erros `EMAIL_NOT_VERIFIED` vindos da API são tratados centralmente no frontend, exibindo aviso amigável e atalho para `/auth/check-email` sem quebrar a sessão.
