@@ -43,4 +43,16 @@ describe('emailWorker', () => {
 
     expect(result).toEqual({ ack: false, handled: true });
   });
+
+  it('registra evento quando provider é noop', async () => {
+    (sendEmail as unknown as vi.Mock).mockResolvedValueOnce({ id: 'noop-123', provider: 'noop' });
+    const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+
+    const result = await handleEmailJob(baseJob);
+
+    expect(result).toEqual({ ack: true, handled: true });
+    const logged = consoleSpy.mock.calls.some((call) => String(call[0]).includes('email.verify-email.sent'));
+    expect(logged).toBe(true);
+    consoleSpy.mockRestore();
+  });
 });

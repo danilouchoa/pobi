@@ -1,5 +1,7 @@
 import { type NextFunction, type RequestHandler, type Response } from 'express';
 import type { PrismaClient } from '@prisma/client';
+import { config } from '../config';
+import { logEvent } from '../lib/logger';
 import type { AuthenticatedRequest } from './auth';
 
 type VerificationLikeUser = {
@@ -25,6 +27,17 @@ const buildForbiddenResponse = (res: Response, emailVerifiedAt: Date | string | 
 
 export const requireEmailVerified = (prisma: Pick<PrismaClient, 'user'>): RequestHandler =>
   async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    if (!config.emailVerificationRequired) {
+      logEvent({
+        event: 'auth.verify-email.gate.skipped',
+        requestId: req.headers['x-request-id'] as string | undefined,
+        userId: req.auth?.userId || req.userId,
+        ip: req.ip,
+        meta: { reason: 'verification_disabled' },
+      });
+      return next();
+    }
+
     const userId = req.auth?.userId || req.userId;
 
     if (!userId) {
@@ -47,6 +60,13 @@ export const requireEmailVerified = (prisma: Pick<PrismaClient, 'user'>): Reques
       }
 
       if (!isEmailVerified(user)) {
+        logEvent({
+          event: 'auth.verify-email.blocked',
+          requestId: req.headers['x-request-id'] as string | undefined,
+          userId,
+          ip: req.ip,
+          meta: { emailVerifiedAt: user.emailVerifiedAt ?? null },
+        });
         return buildForbiddenResponse(res, user.emailVerifiedAt ?? null);
       }
 

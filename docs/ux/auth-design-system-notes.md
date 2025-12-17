@@ -20,3 +20,9 @@
 - Cadastro coleta apenas e-mail e senha (nome opcional) e exige aceite explícito de Termos de Uso e Política de Privacidade com versão identificável.
 - O aceite é persistido como `UserConsent` com propósito `BASIC_TERMS_AND_PRIVACY`, versão informada e IP quando disponível; nenhum dado financeiro é solicitado no cadastro.
 - Erros de sign-up seguem o padrão de mensagens claras (ex.: e-mail em uso, validação ou rede) sem reutilizar o alerta de sessão expirada reservado a fluxos autenticados.
+
+## UX-06 — Verificação de e-mail (CheckEmail / VerifyEmail)
+- Telas `/auth/check-email` e `/auth/verify-email` usam apenas o AuthShell + primitives, mantendo copy direta e curta. Mensagens principais: convite para confirmar e CTA para reenviar quando permitido.
+- Resend segue janela configurável; ao receber `RATE_LIMITED`, exibir orientação “Aguarde alguns minutos antes de solicitar um novo e-mail.” sem travar a navegação. Estado `ALREADY_VERIFIED` deve atualizar o usuário e remover banners/avisos.
+- Erros mapeados: `INVALID_TOKEN`, `TOKEN_EXPIRED`, `TOKEN_ALREADY_USED`, `RATE_LIMITED`, `EMAIL_NOT_VERIFIED` (403) → sempre mensagens amigáveis, sem termos técnicos. Token nunca aparece em tela ou logs (usar apenas dica de 4 últimos caracteres se necessário para suporte).
+- Acessibilidade: alerts com `role="status"` ou semântica equivalente; não roubar foco automaticamente; CTA claramente identificável para reenviar/ver opções de verificação; textos em PT-BR consistentes com o benchmark.

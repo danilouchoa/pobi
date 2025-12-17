@@ -71,6 +71,13 @@ const envSchema = z.object({
   AUTH_ACCOUNT_LINK_ENABLED: z.enum(['true', 'false']).optional()
     .transform(val => val !== 'false')
     .default('true' as any),
+  AUTH_EMAIL_VERIFICATION_REQUIRED: z.enum(['true', 'false']).optional()
+    .transform(val => val !== 'false')
+    .default('true' as any),
+  AUTH_EMAIL_VERIFICATION_TOKEN_TTL_MINUTES: z.string().optional(),
+  AUTH_EMAIL_VERIFICATION_RESEND_WINDOW_SECONDS: z.string().optional(),
+  AUTH_EMAIL_VERIFICATION_ENQUEUE_ENABLED: z.enum(['true', 'false']).optional(),
+  AUTH_EMAIL_PROVIDER: z.string().optional(),
   EMAIL_VERIFICATION_TOKEN_TTL_HOURS: z
     .string()
     .optional()
@@ -114,6 +121,41 @@ const derivedCorsOrigins = Array.from(
   ].filter(Boolean)),
 );
 
+const tokenTtlMinutes = (() => {
+  if (parsedEnv.data.AUTH_EMAIL_VERIFICATION_TOKEN_TTL_MINUTES) {
+    const parsed = Number(parsedEnv.data.AUTH_EMAIL_VERIFICATION_TOKEN_TTL_MINUTES);
+    return Number.isNaN(parsed) ? 24 * 60 : parsed;
+  }
+  const hours = parsedEnv.data.EMAIL_VERIFICATION_TOKEN_TTL_HOURS ?? 24;
+  return hours * 60;
+})();
+
+const resendWindowSeconds = (() => {
+  if (parsedEnv.data.AUTH_EMAIL_VERIFICATION_RESEND_WINDOW_SECONDS) {
+    const parsed = Number(parsedEnv.data.AUTH_EMAIL_VERIFICATION_RESEND_WINDOW_SECONDS);
+    return Number.isNaN(parsed) ? 10 * 60 : parsed;
+  }
+  const minutes = parsedEnv.data.EMAIL_VERIFICATION_RESEND_MINUTES ?? 10;
+  return minutes * 60;
+})();
+
+const emailVerificationRequired = (() => {
+  if (parsedEnv.data.AUTH_EMAIL_VERIFICATION_REQUIRED !== undefined) {
+    return parsedEnv.data.AUTH_EMAIL_VERIFICATION_REQUIRED !== 'false';
+  }
+  return true;
+})();
+
+const emailVerificationEnqueueEnabled = (() => {
+  if (parsedEnv.data.AUTH_EMAIL_VERIFICATION_ENQUEUE_ENABLED !== undefined) {
+    return parsedEnv.data.AUTH_EMAIL_VERIFICATION_ENQUEUE_ENABLED !== 'false';
+  }
+  return parsedEnv.data.NODE_ENV !== 'test';
+})();
+
+const emailProvider = parsedEnv.data.AUTH_EMAIL_PROVIDER
+  ?? (parsedEnv.data.NODE_ENV === 'production' ? 'resend' : 'noop');
+
 export const config = {
   nodeEnv: parsedEnv.data.NODE_ENV,
   port: parsedEnv.data.PORT,
@@ -129,8 +171,11 @@ export const config = {
   googleClientSecret: parsedEnv.data.GOOGLE_CLIENT_SECRET,
   authGoogleEnabled: parsedEnv.data.AUTH_GOOGLE_ENABLED,
   authAccountLinkEnabled: parsedEnv.data.AUTH_ACCOUNT_LINK_ENABLED,
-  emailVerificationTokenTtlHours: parsedEnv.data.EMAIL_VERIFICATION_TOKEN_TTL_HOURS,
-  emailVerificationResendMinutes: parsedEnv.data.EMAIL_VERIFICATION_RESEND_MINUTES,
+  emailVerificationTokenTtlMinutes: tokenTtlMinutes,
+  emailVerificationResendWindowSeconds: resendWindowSeconds,
+  emailVerificationRequired,
+  emailVerificationEnqueueEnabled,
+  emailProvider,
 };
 
 export const isCorsAllowed = (origin?: string): boolean => {

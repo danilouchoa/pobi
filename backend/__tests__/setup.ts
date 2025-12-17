@@ -14,6 +14,11 @@ process.env.GOOGLE_CLIENT_ID = 'test-google-client-id';
 process.env.GOOGLE_CLIENT_SECRET = 'test-google-client-secret';
 process.env.AUTH_GOOGLE_ENABLED = 'true';
 process.env.AUTH_ACCOUNT_LINK_ENABLED = 'true';
+process.env.AUTH_EMAIL_VERIFICATION_REQUIRED = 'true';
+process.env.AUTH_EMAIL_VERIFICATION_ENQUEUE_ENABLED = 'false';
+process.env.AUTH_EMAIL_PROVIDER = 'noop';
+process.env.AUTH_EMAIL_VERIFICATION_TOKEN_TTL_MINUTES = `${24 * 60}`;
+process.env.AUTH_EMAIL_VERIFICATION_RESEND_WINDOW_SECONDS = `${10 * 60}`;
 
 // Mock do Prisma Client como classe
 const mockPrismaInstance = {

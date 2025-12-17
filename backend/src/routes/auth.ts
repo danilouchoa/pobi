@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
 import { config } from '../config';
 import { publishEmailJob, publishRecurringJob } from '../lib/rabbit';
+import { logEvent, type LogLevel, maskEmail } from '../lib/logger';
 import { validate } from '../middlewares/validation';
 import { registerSchema, loginSchema, googleLoginSchema, googleResolveConflictSchema, linkGoogleSchema, verifyEmailSchema } from '../schemas/auth.schema';
 import rateLimit from 'express-rate-limit';
@@ -140,8 +141,26 @@ const issueSession = (res: Response, user: PrismaUser, status = 200) => {
   });
 };
 
-const logAuthEvent = (event: string, meta: Record<string, unknown> = {}) => {
-  console.info(`[AUTH] ${event}`, meta);
+const resolveRequestId = (req?: Request) => {
+  const header = req?.headers['x-request-id'];
+  if (Array.isArray(header)) return header[0];
+  if (typeof header === 'string') return header;
+  return undefined;
+};
+
+const logAuthEvent = (
+  event: string,
+  meta: Record<string, unknown> = {},
+  options?: { level?: LogLevel; req?: Request; userId?: string; ip?: string | null },
+) => {
+  logEvent({
+    event,
+    level: options?.level ?? 'info',
+    requestId: resolveRequestId(options?.req),
+    userId: options?.userId,
+    ip: options?.ip ?? options?.req?.ip,
+    meta,
+  });
 };
 
 export default function authRoutes(prisma: PrismaClient) {
@@ -254,22 +273,43 @@ export default function authRoutes(prisma: PrismaClient) {
       });
 
       const verificationUrl = `${config.frontendOrigin.replace(/\/$/, '')}/auth/verify-email?token=${rawToken}`;
-      logAuthEvent('auth.verify-email.token-created', { userId: user.id });
+      logAuthEvent(
+        'auth.verify-email.token-created',
+        { userId: user.id, email: maskEmail(user.email), expiresAt: expiresAt.toISOString(), queue: EMAIL_VERIFICATION_QUEUE },
+        { req, userId: user.id, ip: clientIp },
+      );
 
-      try {
-        await publishEmailJob({
-          type: 'VERIFY_EMAIL',
-          queue: EMAIL_VERIFICATION_QUEUE,
-          email: user.email,
-          userId: user.id,
-          verificationUrl,
-          expiresAt: expiresAt.toISOString(),
-        });
-      } catch (publishError) {
-        console.error(`[AUTH] Failed to enqueue verification email for user ${user.id}:`, publishError);
+      if (!config.emailVerificationEnqueueEnabled) {
+        logAuthEvent(
+          'auth.verify-email.enqueue.skipped',
+          { userId: user.id, queue: EMAIL_VERIFICATION_QUEUE, reason: 'enqueue_disabled' },
+          { req, userId: user.id, ip: clientIp },
+        );
+      } else {
+        try {
+          await publishEmailJob({
+            type: 'VERIFY_EMAIL',
+            queue: EMAIL_VERIFICATION_QUEUE,
+            email: user.email,
+            userId: user.id,
+            verificationUrl,
+            expiresAt: expiresAt.toISOString(),
+          });
+          logAuthEvent(
+            'auth.verify-email.token-enqueued',
+            { userId: user.id, queue: EMAIL_VERIFICATION_QUEUE },
+            { req, userId: user.id, ip: clientIp },
+          );
+        } catch (publishError) {
+          logAuthEvent(
+            'auth.verify-email.enqueue.failed',
+            { userId: user.id, queue: EMAIL_VERIFICATION_QUEUE, error: publishError instanceof Error ? publishError.message : String(publishError) },
+            { req, userId: user.id, ip: clientIp, level: 'error' },
+          );
+        }
       }
 
-      logAuthEvent('auth.register.local', { userId: user.id, email: user.email });
+      logAuthEvent('auth.register.local', { userId: user.id, email: maskEmail(user.email) }, { req, userId: user.id, ip: clientIp });
 
       return issueSession(res, user, 201);
     } catch (error) {
@@ -471,19 +511,39 @@ export default function authRoutes(prisma: PrismaClient) {
       const outcome = await consumeToken(token, clientIp ?? null, { prisma });
 
       if (outcome.status === EmailVerificationTokenStatus.NotFound) {
-        logAuthEvent('auth.verify-email.invalid-token');
+        logAuthEvent(
+          'auth.verify-email.invalid-token',
+          { tokenHint: token.slice(-4) || 'none' },
+          { req, ip: clientIp },
+        );
         return res.status(400).json({ error: 'INVALID_TOKEN', message: 'Token de verificação inválido.' });
       }
       if (outcome.status === EmailVerificationTokenStatus.Expired) {
-        logAuthEvent('auth.verify-email.expired', { tokenId: outcome.token.id, userId: outcome.token.userId });
+        logAuthEvent(
+          'auth.verify-email.expired',
+          { tokenId: outcome.token.id, userId: outcome.token.userId },
+          { req, userId: outcome.token.userId, ip: clientIp },
+        );
         return res.status(410).json({ error: 'TOKEN_EXPIRED', message: 'Link de verificação expirou.' });
       }
       if (outcome.status === EmailVerificationTokenStatus.AlreadyUsed) {
-        logAuthEvent('auth.verify-email.already-used', { tokenId: outcome.token.id, userId: outcome.token.userId });
+        logAuthEvent(
+          'auth.verify-email.already-used',
+          { tokenId: outcome.token.id, userId: outcome.token.userId, consumedAt: outcome.token.consumedAt },
+          { req, userId: outcome.token.userId, ip: clientIp },
+        );
         return res.status(409).json({ error: 'TOKEN_ALREADY_USED', message: 'Este link já foi utilizado.' });
       }
 
-      logAuthEvent('auth.verify-email.success', { userId: outcome.user.id, tokenId: outcome.token.id });
+      logAuthEvent(
+        'auth.verify-email.success',
+        {
+          userId: outcome.user.id,
+          tokenId: outcome.token.id,
+          emailVerifiedAt: outcome.user.emailVerifiedAt?.toISOString?.() ?? outcome.user.emailVerifiedAt,
+        },
+        { req, userId: outcome.user.id, ip: clientIp },
+      );
 
       const user = await prisma.user.findUnique({ where: { id: outcome.user.id } });
       if (!user) {
@@ -520,20 +580,42 @@ export default function authRoutes(prisma: PrismaClient) {
       }
 
       if (user.emailVerifiedAt) {
-        logAuthEvent('auth.verify-email.resend-already-verified', { userId });
+        logAuthEvent(
+          'auth.verify-email.resend-already-verified',
+          { userId, email: maskEmail(user.email) },
+          { req, userId, ip: req.ip },
+        );
         return res.json({ status: 'ALREADY_VERIFIED' });
       }
 
-      const { allowed } = await canIssueNewToken(userId, { prisma });
+      const { allowed, reason, lastTokenCreatedAt } = await canIssueNewToken(userId, { prisma });
       if (!allowed) {
-        logAuthEvent('auth.verify-email.resend-rate-limited', { userId });
+        logAuthEvent(
+          'auth.verify-email.resend-rate-limited',
+          { userId, reason, lastTokenCreatedAt },
+          { req, userId, ip: req.ip, level: 'warn' },
+        );
         return res.status(429).json({ error: 'RATE_LIMITED', message: 'Aguarde antes de reenviar o e-mail.' });
       }
 
       const clientIp = resolveClientIp(req);
       const { rawToken, expiresAt } = await createEmailVerificationToken({ prisma, userId, createdIp: clientIp });
       const verificationUrl = `${config.frontendOrigin.replace(/\/$/, '')}/auth/verify-email?token=${rawToken}`;
-      logAuthEvent('auth.verify-email.token-created', { userId: user.id });
+      logAuthEvent(
+        'auth.verify-email.token-created',
+        { userId: user.id, email: maskEmail(user.email), expiresAt: expiresAt.toISOString(), queue: EMAIL_VERIFICATION_QUEUE },
+        { req, userId: user.id, ip: clientIp },
+      );
+
+      if (!config.emailVerificationEnqueueEnabled) {
+        logAuthEvent(
+          'auth.verify-email.enqueue.skipped',
+          { userId: user.id, queue: EMAIL_VERIFICATION_QUEUE, reason: 'enqueue_disabled' },
+          { req, userId: user.id, ip: clientIp },
+        );
+        return res.json({ status: 'RESENT' });
+      }
+
       try {
         await publishEmailJob({
           type: 'VERIFY_EMAIL',
@@ -543,10 +625,18 @@ export default function authRoutes(prisma: PrismaClient) {
           verificationUrl,
           expiresAt: expiresAt.toISOString(),
         });
-        logAuthEvent('auth.verify-email.resend-requested', { userId: user.id });
+        logAuthEvent(
+          'auth.verify-email.resend-requested',
+          { userId: user.id, queue: EMAIL_VERIFICATION_QUEUE },
+          { req, userId: user.id, ip: clientIp },
+        );
         return res.json({ status: 'RESENT' });
       } catch (publishError) {
-        console.error(`[AUTH] Failed to enqueue verification email for user ${user.id}:`, publishError);
+        logAuthEvent(
+          'auth.verify-email.enqueue.failed',
+          { userId: user.id, queue: EMAIL_VERIFICATION_QUEUE, error: publishError instanceof Error ? publishError.message : String(publishError) },
+          { req, userId: user.id, ip: clientIp, level: 'error' },
+        );
         return res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Erro interno no servidor.' });
       }
     } catch (error) {

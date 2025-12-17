@@ -85,6 +85,11 @@ Responsabilidade por camada: `route` valida entrada e chama `service`; `service`
 - Usuários com e-mail não verificado recebem `403` com payload `{ error: "EMAIL_NOT_VERIFIED", message: "Seu e-mail ainda não foi confirmado..." }`.
 - Usuários verificados mantêm o comportamento atual, sem regressão de permissões.
 
+### Configuração de verificação de e-mail (UX-06F)
+- Toggles via env: `AUTH_EMAIL_VERIFICATION_REQUIRED`, `AUTH_EMAIL_VERIFICATION_ENQUEUE_ENABLED`, `AUTH_EMAIL_VERIFICATION_TOKEN_TTL_MINUTES`, `AUTH_EMAIL_VERIFICATION_RESEND_WINDOW_SECONDS`, `AUTH_EMAIL_PROVIDER` (`noop` para dev/test, `resend` para prod).
+- Logs estruturados para todo o ciclo (`auth.verify-email.*`, `email.verify-email.*`, `email.worker.*`) incluem `event`, `ts`, `requestId` e metadados como `userId` e `tokenHint` (últimos 4 caracteres).
+- Se o enqueue estiver desabilitado, a API ainda cria o token e registra `auth.verify-email.enqueue.skipped`; o worker pode ser desligado sem quebrar o fluxo de registro/login.
+
 ### Dead Letter Queue e reprocessamento
 - Mensagens com falha após tentativas de retry são encaminhadas à DLQ. O fluxo padrão é: fila principal → retries com backoff → DLQ → reprocessamento manual via `/admin/dlq` ou purge.
 

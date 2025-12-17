@@ -22,9 +22,9 @@ export const generateVerificationToken = () => {
 };
 
 export const buildTokenExpiry = (now = new Date()) => {
-  const hours = config.emailVerificationTokenTtlHours ?? 24;
+  const minutes = config.emailVerificationTokenTtlMinutes ?? 24 * 60;
   const expires = new Date(now);
-  expires.setHours(expires.getHours() + hours);
+  expires.setMinutes(expires.getMinutes() + minutes);
   return expires;
 };
 
@@ -146,9 +146,9 @@ export const canIssueNewToken = async (
   options: { prisma: PrismaClient; now?: Date },
 ): Promise<{ allowed: boolean; reason: TokenResendCheckReason; lastTokenCreatedAt?: Date }> => {
   const client = options.prisma;
-  const windowMinutes = config.emailVerificationResendMinutes ?? 10;
+  const windowSeconds = config.emailVerificationResendWindowSeconds ?? 10 * 60;
   const now = options.now ?? new Date();
-  const windowStart = new Date(now.getTime() - windowMinutes * 60 * 1000);
+  const windowStart = new Date(now.getTime() - windowSeconds * 1000);
 
   const recentToken = await client.emailVerificationToken.findFirst({
     where: { userId },

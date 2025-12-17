@@ -213,3 +213,8 @@ g
 - Middleware `requireEmailVerified` protege rotas sensíveis no backend (aplicado em `/api/jobs/*` e `/api/dlq/*`), retornando `403` com `{ error: "EMAIL_NOT_VERIFIED", message: "Seu e-mail ainda não foi confirmado..." }` para contas sem verificação.
 - No dashboard autenticado, usuários não verificados veem um banner persistente com CTA de reenvio de verificação e mensagens de sucesso/throttling alinhadas ao tom das telas de Auth.
 - Erros `EMAIL_NOT_VERIFIED` vindos da API são tratados centralmente no frontend, exibindo aviso amigável e atalho para `/auth/check-email` sem quebrar a sessão.
+
+## UX-06F – Observabilidade e toggles da verificação de e-mail
+- Structured logs padronizados para o ciclo de verificação: `auth.verify-email.token-created`, `*.resend-requested`, `*.resend-rate-limited`, `*.invalid-token`, `*.expired`, `*.already-used`, `*.success`, `*.enqueue.skipped/failed`, além dos eventos do worker (`email.verify-email.received/sent/failed/invalid-payload`, `email.worker.ready/fatal`).
+- Feature flags configuráveis via env: `AUTH_EMAIL_VERIFICATION_REQUIRED`, `AUTH_EMAIL_VERIFICATION_ENQUEUE_ENABLED`, `AUTH_EMAIL_VERIFICATION_TOKEN_TTL_MINUTES`, `AUTH_EMAIL_VERIFICATION_RESEND_WINDOW_SECONDS`, `AUTH_EMAIL_PROVIDER` (noop/resend). TTL e janela de resend agora usam minutos/segundos configuráveis.
+- Gating respeita o toggle `AUTH_EMAIL_VERIFICATION_REQUIRED`; quando desligado, o middleware apenas loga e libera. Enfileiramento pode ser desativado para dev/test (`enqueue.skipped`). Worker e rotas compartilham os mesmos logs e não vazam tokens (tokenHint com últimos 4 caracteres).

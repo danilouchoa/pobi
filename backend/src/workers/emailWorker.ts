@@ -4,6 +4,7 @@ import { config } from '../config';
 import { sendEmail } from '../lib/email';
 import { createRabbit } from '../lib/rabbit';
 import { EMAIL_VERIFICATION_QUEUE } from '../lib/queues';
+import { logEvent } from '../lib/logger';
 
 export const verifyEmailJobSchema = z.object({
   type: z.literal('VERIFY_EMAIL'),
@@ -15,8 +16,8 @@ export const verifyEmailJobSchema = z.object({
 
 export type VerifyEmailJob = z.infer<typeof verifyEmailJobSchema>;
 
-const logEmailEvent = (event: string, meta: Record<string, unknown> = {}) => {
-  console.info(`[EmailWorker] ${event}`, meta);
+const logEmailEvent = (event: string, meta: Record<string, unknown> = {}, level: 'info' | 'warn' | 'error' = 'info') => {
+  logEvent({ event, level, meta });
 };
 
 export const handleVerifyEmailJob = async (payload: VerifyEmailJob) => {
@@ -31,24 +32,39 @@ export const handleVerifyEmailJob = async (payload: VerifyEmailJob) => {
     html: `<p>Olá!</p><p>Confirme seu acesso clicando no link abaixo:</p><p><a href="${verificationUrl}">Verificar e-mail</a></p><p>O link expira em ${expiration.toLocaleString()}.</p>`,
   });
 
-  logEmailEvent('email.verify-email.sent', { userId, messageId: (result as any).id });
+  logEmailEvent('email.verify-email.sent', {
+    userId,
+    messageId: (result as any).id,
+    provider: (result as any).provider ?? config.emailProvider,
+  });
 };
 
 export const handleEmailJob = async (payload: unknown) => {
   const parsed = verifyEmailJobSchema.safeParse(payload);
   if (!parsed.success) {
-    logEmailEvent('email.verify-email.invalid-payload', { reason: parsed.error.flatten().formErrors });
+    logEmailEvent('email.verify-email.invalid-payload', { reason: parsed.error.flatten().formErrors }, 'warn');
     return { ack: true as const, handled: false };
   }
+
+  logEmailEvent('email.verify-email.received', {
+    userId: parsed.data.userId,
+    email: parsed.data.email,
+    expiresAt: parsed.data.expiresAt,
+  });
 
   try {
     await handleVerifyEmailJob(parsed.data);
     return { ack: true as const, handled: true };
   } catch (error) {
-    logEmailEvent('email.verify-email.failed', {
-      userId: parsed.data.userId,
-      error: error instanceof Error ? error.message : String(error),
-    });
+    logEmailEvent(
+      'email.verify-email.failed',
+      {
+        userId: parsed.data.userId,
+        error: error instanceof Error ? error.message : String(error),
+        retryable: true,
+      },
+      'error',
+    );
     return { ack: false as const, handled: true };
   }
 };
@@ -69,7 +85,7 @@ export const startEmailWorker = async () => {
     } catch (error) {
       logEmailEvent('email.verify-email.unexpected', {
         error: error instanceof Error ? error.message : String(error),
-      });
+      }, 'error');
       channel.nack(msg, false, false);
     }
   });
@@ -79,7 +95,7 @@ export const startEmailWorker = async () => {
 
 if (process.env.NODE_ENV !== 'test') {
   startEmailWorker().catch((error) => {
-    logEmailEvent('email.worker.fatal', { error: error instanceof Error ? error.message : String(error) });
+    logEmailEvent('email.worker.fatal', { error: error instanceof Error ? error.message : String(error) }, 'error');
     process.exit(1);
   });
 }

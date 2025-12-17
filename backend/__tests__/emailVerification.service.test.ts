@@ -3,8 +3,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 vi.mock('../src/config', () => ({
   config: {
-    emailVerificationTokenTtlHours: 24,
-    emailVerificationResendMinutes: 15,
+    emailVerificationTokenTtlMinutes: 24 * 60,
+    emailVerificationResendWindowSeconds: 15 * 60,
   },
 }));
 
