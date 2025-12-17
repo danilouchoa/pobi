@@ -50,4 +50,39 @@ describe('Middleware: requireEmailVerified', () => {
     expect(res.body.error).toBe('EMAIL_NOT_VERIFIED');
     expect(prisma.user.findUnique).toHaveBeenCalled();
   });
+
+  it('permite criar histórico salarial quando o usuário está verificado', async () => {
+    prisma.user.findUnique.mockResolvedValue({ id: 'user-123', emailVerifiedAt: new Date() });
+    prisma.salaryHistory.create.mockResolvedValue({
+      id: 'salary-1',
+      month: '2024-12',
+      hours: 160,
+      hourRate: 100,
+      taxRate: 0.15,
+      cnae: '6202-2/00',
+      userId: 'user-123',
+    });
+
+    const res = await request(app)
+      .post('/api/salaryHistory')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ month: '2024-12', hours: 160, hourRate: 100, taxRate: 0.15, cnae: '6202-2/00' });
+
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ id: 'salary-1', month: '2024-12', userId: 'user-123' });
+    expect(prisma.salaryHistory.create).toHaveBeenCalled();
+  });
+
+  it('bloqueia criação de histórico salarial para usuário não verificado', async () => {
+    prisma.user.findUnique.mockResolvedValue({ id: 'user-123', emailVerifiedAt: null });
+
+    const res = await request(app)
+      .post('/api/salaryHistory')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ month: '2024-12', hours: 160, hourRate: 100, taxRate: 0.15, cnae: '6202-2/00' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe('EMAIL_NOT_VERIFIED');
+    expect(prisma.salaryHistory.create).not.toHaveBeenCalled();
+  });
 });

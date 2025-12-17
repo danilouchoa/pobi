@@ -81,9 +81,9 @@ Responsabilidade por camada: `route` valida entrada e chama `service`; `service`
 - **Em lote**: `DELETE /expenses/group/:installment_group_id` remove todas as parcelas do grupo quando a intenção é eliminar o lançamento completo.
 
 ### Acesso a recursos sensíveis (UX-06E)
-- Rotas que conversam com integrações externas ou que expõem dados sensíveis (ex.: `/api/jobs/*` e `/api/dlq/*`) agora utilizam o middleware `requireEmailVerified`.
+- Rotas que conversam com integrações externas ou que expõem dados sensíveis (ex.: `/api/jobs/*`, `/api/dlq/*` e `/api/salaryHistory/*`) agora utilizam o middleware `requireEmailVerified`.
 - Usuários com e-mail não verificado recebem `403` com payload `{ error: "EMAIL_NOT_VERIFIED", message: "Seu e-mail ainda não foi confirmado..." }`.
-- Usuários verificados mantêm o comportamento atual, sem regressão de permissões.
+- Usuários verificados mantêm o comportamento atual, sem regressão de permissões. Exports no frontend também exibem alerta e redirecionam para `/auth/check-email` quando o e-mail não está confirmado.
 
 ### Configuração de verificação de e-mail (UX-06F)
 - Toggles via env: `AUTH_EMAIL_VERIFICATION_REQUIRED`, `AUTH_EMAIL_VERIFICATION_ENQUEUE_ENABLED`, `AUTH_EMAIL_VERIFICATION_TOKEN_TTL_MINUTES`, `AUTH_EMAIL_VERIFICATION_RESEND_WINDOW_SECONDS`, `AUTH_EMAIL_PROVIDER` (`noop` para dev/test, `resend` para prod).

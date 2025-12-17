@@ -339,6 +339,7 @@ export const loginTestUser = async () => {
     id: 'user-123',
     email: testUser.email,
     name: 'Danilo Uchoa',
+    emailVerifiedAt: new Date(),
     passwordHash,
     createdAt: new Date(),
     updatedAt: new Date(),
