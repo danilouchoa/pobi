@@ -223,3 +223,9 @@ g
 ## 2025-12-17 - UX-06F-HF01 (build unblock)
 - Corrigido parsing booleano de `AUTH_EMAIL_VERIFICATION_REQUIRED` em config para eliminar TS2367 no email-worker.
 - Removida importação duplicada de `config` em `backend/src/lib/email.ts` que causava TS2300 durante o build.
+
+## 2025-12-17 - Cloud-first Docker Compose
+- docker-compose agora sobe apenas backend (porta 4000) + frontend (porta 5173); workers (`worker`, `email-worker`, `bulk-worker`) ficam em `--profile workers`.
+- Sem `network_mode: host` nem overrides de localhost; usa somente `env_file` (backend/.env, frontend/.env) com credenciais de cloud (Atlas, CloudAMQP, Upstash, Resend, Google OAuth). Nunca commitar segredos — use apenas `.env.example`.
+- Healthcheck do backend usa `/api/status`; frontend depende do backend saudável.
+- Troubleshooting rápido: (1) CORS/OAuth: alinhar `FRONTEND_ORIGIN`/`VITE_API_URL`; (2) Redis: em produção é obrigatório `REDIS_URL` ou `UPSTASH_REDIS_REST_*`; (3) workers não processam fila: subir com `docker compose --profile workers up -d` e garantir `RABBIT_URL` correto.

@@ -21,6 +21,11 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(1, 'JWT_SECRET is required'),
   // Sanitizado: nunca incluir credenciais reais em default
   RABBIT_URL: z.string().min(1).default('amqp://localhost'),
+  REDIS_URL: z.string().optional(),
+  REDIS_HOST: z.string().optional(),
+  REDIS_PORT: z.string().optional(),
+  UPSTASH_REDIS_REST_URL: z.string().optional(),
+  UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
   CORS_ORIGINS: z.string().optional(),
   FRONTEND_ORIGIN: z
     .string({
@@ -101,6 +106,21 @@ if (!parsedEnv.success) {
   throw new Error('Invalid environment configuration.');
 }
 
+const hasRedisServer = Boolean(
+  parsedEnv.data.REDIS_URL
+  || parsedEnv.data.REDIS_HOST
+  || parsedEnv.data.REDIS_PORT,
+);
+
+const hasUpstashRedis = Boolean(
+  parsedEnv.data.UPSTASH_REDIS_REST_URL
+  && parsedEnv.data.UPSTASH_REDIS_REST_TOKEN,
+);
+
+if (parsedEnv.data.NODE_ENV === 'production' && !hasRedisServer && !hasUpstashRedis) {
+  throw new Error('Redis configuration is missing: set REDIS_URL (or REDIS_HOST/REDIS_PORT) or UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN');
+}
+
 const resolvedSecurityMode =
   parsedEnv.data.SECURITY_MODE ?? (parsedEnv.data.NODE_ENV === 'production' ? 'strict' : 'relaxed');
 
@@ -162,6 +182,11 @@ export const config = {
   databaseUrl: parsedEnv.data.DATABASE_URL,
   jwtSecret: parsedEnv.data.JWT_SECRET,
   rabbitUrl: parsedEnv.data.RABBIT_URL,
+  redisUrl: parsedEnv.data.REDIS_URL,
+  redisHost: parsedEnv.data.REDIS_HOST,
+  redisPort: parsedEnv.data.REDIS_PORT,
+  upstashRedisRestUrl: parsedEnv.data.UPSTASH_REDIS_REST_URL,
+  upstashRedisRestToken: parsedEnv.data.UPSTASH_REDIS_REST_TOKEN,
   corsOrigins: derivedCorsOrigins,
   securityMode: resolvedSecurityMode,
   validationEnabled: parsedEnv.data.VALIDATION_ENABLED,
