@@ -1,57 +1,57 @@
-name: CD ArgoCD Sync
+# name: CD ArgoCD Sync
 
-on:
-  workflow_run:
-    workflows: ["CI Build Images"]
-    types: [ completed ]
+# on:
+#   workflow_run:
+#     workflows: ["CI Build Images"]
+#     types: [ completed ]
 
-jobs:
-  sync:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
-    runs-on: ubuntu-latest
-    env:
-      ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
-      ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+# jobs:
+#   sync:
+#     if: ${{ github.event.workflow_run.conclusion == 'success' }}
+#     runs-on: ubuntu-latest
+#     env:
+#       ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+#       ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+#     steps:
+#       - name: Checkout
+#         uses: actions/checkout@v4
 
-      - name: Download image tag artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: image-tags
-          path: ./artifacts
+#       - name: Download image tag artifact
+#         uses: actions/download-artifact@v4
+#         with:
+#           name: image-tags
+#           path: ./artifacts
 
-      - name: Load image tags
-        id: tags
-        run: |
-          source ./artifacts/image-tags.env
-          echo "backend_image=$BACKEND_IMAGE" >> $GITHUB_OUTPUT
-          echo "frontend_image=$FRONTEND_IMAGE" >> $GITHUB_OUTPUT
-          echo "Using backend: $BACKEND_IMAGE"; echo "Using frontend: $FRONTEND_IMAGE"
+#       - name: Load image tags
+#         id: tags
+#         run: |
+#           source ./artifacts/image-tags.env
+#           echo "backend_image=$BACKEND_IMAGE" >> $GITHUB_OUTPUT
+#           echo "frontend_image=$FRONTEND_IMAGE" >> $GITHUB_OUTPUT
+#           echo "Using backend: $BACKEND_IMAGE"; echo "Using frontend: $FRONTEND_IMAGE"
 
-      - name: Install ArgoCD CLI
-        run: |
-          curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
-          chmod +x /usr/local/bin/argocd
+#       - name: Install ArgoCD CLI
+#         run: |
+#           curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+#           chmod +x /usr/local/bin/argocd
 
-      - name: Configure ArgoCD context (token)
-        run: |
-          argocd login "$ARGOCD_SERVER" --sso --grpc-web --auth-token "$ARGOCD_AUTH_TOKEN" --insecure
-        env:
-          ARGOCD_SERVER: ${{ env.ARGOCD_SERVER }}
-          ARGOCD_AUTH_TOKEN: ${{ env.ARGOCD_AUTH_TOKEN }}
+#       - name: Configure ArgoCD context (token)
+#         run: |
+#           argocd login "$ARGOCD_SERVER" --sso --grpc-web --auth-token "$ARGOCD_AUTH_TOKEN" --insecure
+#         env:
+#           ARGOCD_SERVER: ${{ env.ARGOCD_SERVER }}
+#           ARGOCD_AUTH_TOKEN: ${{ env.ARGOCD_AUTH_TOKEN }}
 
-      - name: Update backend image tag via helm set and sync
-        run: |
-          TAG=$(echo "${{ steps.tags.outputs.backend_image }}" | awk -F: '{print $2}')
-          argocd app set finfy-backend --helm-set image.tag=$TAG
-          argocd app sync finfy-backend --timeout 300
-          argocd app wait finfy-backend --timeout 300 --health --sync
+#       - name: Update backend image tag via helm set and sync
+#         run: |
+#           TAG=$(echo "${{ steps.tags.outputs.backend_image }}" | awk -F: '{print $2}')
+#           argocd app set finfy-backend --helm-set image.tag=$TAG
+#           argocd app sync finfy-backend --timeout 300
+#           argocd app wait finfy-backend --timeout 300 --health --sync
 
-      - name: Update frontend image tag via helm set and sync
-        run: |
-          TAG=$(echo "${{ steps.tags.outputs.frontend_image }}" | awk -F: '{print $2}')
-          argocd app set finfy-frontend --helm-set image.tag=$TAG
-          argocd app sync finfy-frontend --timeout 300
-          argocd app wait finfy-frontend --timeout 300 --health --sync
+#       - name: Update frontend image tag via helm set and sync
+#         run: |
+#           TAG=$(echo "${{ steps.tags.outputs.frontend_image }}" | awk -F: '{print $2}')
+#           argocd app set finfy-frontend --helm-set image.tag=$TAG
+#           argocd app sync finfy-frontend --timeout 300
+#           argocd app wait finfy-frontend --timeout 300 --health --sync

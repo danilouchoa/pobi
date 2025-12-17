@@ -153,3 +153,79 @@ g
 - Login validado end-to-end no fluxo React → API usando usuário seed `danilo.uchoa@finance.app / finance123`.
 - Tratamento de erro do login diferencia falha de conexão (backend fora do ar/CORS) de credenciais inválidas.
 - Script `backend/scripts/debug-login.ts` documentado como utilitário de desenvolvimento para validar credenciais direto no banco usando mesma normalização/bcrypt do backend.
+
+## 2025-11-23 - UX-02A Auth Design System Hardening
+- Tokens de Auth centralizados em `frontend/src/ui/tokens.ts` e aplicados globalmente via `TokenProvider`/variáveis CSS `--finfy-*` para reutilização além do domínio de Auth.
+- Componentes de Auth (`Button`, `TextField`, `FormField`, `Card`, `Alert`) alinhados ao guia `docs/ux/auth-benchmark-and-principles.md`, com foco em labels persistentes, estados de foco acessíveis e mensagens inline de erro/ajuda.
+- Warnings conhecidos: aviso de chunk >500 kB em `npm run build`/`npm run build-storybook` e aviso do builder do Storybook sobre `@mui/icons-material` (pacote presente). Detalhes em `docs/ux/auth-design-system-notes.md`. `npm audit` sem vulnerabilidades altas registradas em `frontend/audit-report.json`.
+
+## 2025-11-24 - UX-03 Auth Shell
+- Novo componente `AuthShell` (`frontend/src/components/auth/AuthShell.tsx`) criado usando apenas os primitives do Design System para servir como contêiner de todas as telas de autenticação.
+- Tela de login integrada ao `AuthShell` mantendo o comportamento existente (login, cadastro, Google e diálogo de conflito) com layout mobile-first e copy inspirada no visual “Ethereum/SaaS”.
+- Storybook atualizado com `AuthShell.stories.tsx` e testes adicionados (`src/components/auth/__tests__/AuthShell.test.tsx`, `src/__tests__/Login.test.tsx`) para cobrir o shell e a integração do login.
+
+## 2025-11-25 - UX-04 – Refino do fluxo de Login
+- Modelo de erros de login padronizado (`LOGIN_ERROR_MESSAGES`/`loginError`) separando claramente credenciais inválidas, falhas de rede e erros de servidor, alinhado aos códigos do backend.
+- UI do login refinada no `AuthShell`: alertas globais para rede/servidor, erros inline nos campos para credenciais inválidas, carregamento/disparo único do botão e foco pós-erro para acessibilidade.
+- Testes ampliados (`frontend/src/__tests__/Login.test.tsx`) cobrindo sucesso, credenciais inválidas, rede/500 e estado de loading; Storybook ilustra estados de erro. Comandos executados no frontend: `npm run lint`, `npm run coverage`, `npm run build`, `npm run build-storybook`.
+
+## 2025-11-26 - UX-04A – Correção de mensagens de erro (sessão expirada x credenciais inválidas)
+- `loginError.ts` agora diferencia explicitamente `SESSION_EXPIRED` de `INVALID_CREDENTIALS`, ajustando o mapeamento de códigos do backend e mantendo mensagens alinhadas ao UX-04.
+- `AuthProvider` e `Login.tsx` refinados para exibir erro global apenas para sessão expirada/rede/servidor, mantendo credenciais inválidas como erro inline nos campos (cópia “E-mail ou senha incorretos.”).
+- Testes de login atualizados/em novos cenários (`frontend/src/__tests__/Login.test.tsx`) cobrindo sessão expirada vs credenciais inválidas. Comandos executados no frontend: `npm run lint`, `npm run coverage`, `npm run build`, `npm run build-storybook`.
+
+## UX-04B - Axios 401 Interceptor Refinement
+- Refined Axios 401 handling — login 401 (INVALID_CREDENTIALS) no longer triggers SESSION_EXPIRED; only 401 from protected endpoints with a token in memory trigger the session-expired flow.
+
+## 2025-11-27 - UX-05 – Cadastro mínimo e consentimento base
+- Implementado fluxo de cadastro com campos mínimos (e-mail, senha e nome opcional) usando o AuthShell e componentes do design system.
+- Checkbox obrigatório de Termos/Privacidade com versão registrada e consentimento `BASIC_TERMS_AND_PRIVACY` persistido no backend junto ao IP quando disponível.
+- Nenhum dado financeiro solicitado no cadastro; erros de sign-up não reutilizam o alerta de “Sessão expirada”.
+
+## 2025-11-28 - UX-06A – Blueprint de verificação de e-mail & estados da conta
+- Criado `docs/ux/auth-email-verification-flow.md` com o blueprint UX-06 para verificação de e-mail.
+- Modelo de estados de conta (UNVERIFIED/VERIFIED + futuro REVERIFY_REQUIRED), jornada completa (sign-up ➜ check-email ➜ verify ➜ pós-verificação) e regras de light double opt-in documentadas.
+- Contratos de backend (modelos, endpoints verify/resend, códigos de erro dedicados e eventos), contratos de frontend (rotas/screen AuthShell, integração com AuthProvider), regras de acesso para não verificados e visão de microservices/BFF registradas.
+- Backlog derivado para UX-06B…UX-06F descrito; card apenas de documentação, sem alterações em código front/back.
+
+## UX-06B – Backend: email verification data model & token service
+- Extendido o modelo `User` com campos `emailVerifiedAt` e `emailVerifiedIp`.
+- Introduzido o modelo `EmailVerificationToken` (Mongo compatível com `@id`/`_id`, hash do token, TTL e metadados de criação/consumo).
+- Implementado serviço `emailVerification` (`createEmailVerificationToken`, `resolveToken`, `consumeToken`, `canIssueNewToken`) com hashing `sha256` e status tipados.
+- Configurações de TTL/janela de reenvio expostas via helper de config (sem acessar `process.env` diretamente).
+- Testes unitários adicionados cobrindo ciclo de vida do token e rate limiting.
+
+## UX-06B – Backend: email verification fixups
+- Removido o `PrismaClient` interno de `emailVerification.ts`, exigindo injeção explícita de Prisma em todos os métodos.
+- Normalizado o import de `config` entre serviço e testes para permitir mocking consistente.
+- Rota `/api/auth/verify-email` agora delega totalmente a `consumeToken` o consumo do token e a marcação do usuário como verificado, mantendo os mesmos códigos de status e payloads de erro/sucesso.
+
+## UX-06C – Backend: verificação de e-mail (endpoints, fila e worker)
+- `/api/auth/register` cria token de verificação e enfileira job `VERIFY_EMAIL` na `EMAIL_VERIFICATION_QUEUE` com URL e expiração.
+- `/api/auth/verify-email` e `/api/auth/resend-verification` utilizam o serviço `emailVerification` e respeitam janela de reenvio.
+- Worker dedicado consome a fila de verificação e envia e-mails via provider, rodando como serviço separado em Docker.
+- UX-06C micro: centralizado `EMAIL_VERIFICATION_QUEUE` em `lib/queues`, `publishEmailJob` usa a constante compartilhada e os testes de RabbitMQ usam `config.rabbitUrl` (`RABBIT_URL`).
+
+## UX-06D – Frontend: verificação de e-mail (estabilidade)
+- Tipagem do `verifyEmail/resendVerification` alinhada aos códigos de erro do backend (`INVALID_TOKEN`, `TOKEN_EXPIRED`, `TOKEN_ALREADY_USED`, `RATE_LIMITED`) e ao payload de `emailVerified/emailVerifiedAt`, com `AuthProvider` sempre normalizando o usuário persistido.
+
+## UX-06E – Regras de acesso para usuários não verificados
+- Middleware `requireEmailVerified` protege rotas sensíveis no backend (aplicado em `/api/jobs/*`, `/api/dlq/*` e `/api/salaryHistory/*`), retornando `403` com `{ error: "EMAIL_NOT_VERIFIED", message: "Seu e-mail ainda não foi confirmado..." }` para contas sem verificação.
+- No dashboard autenticado, usuários não verificados veem um banner persistente com CTA de reenvio de verificação e mensagens de sucesso/throttling alinhadas ao tom das telas de Auth.
+- Tela de exportação no frontend bloqueia ações quando o e-mail não está verificado, mostrando alerta + CTA para `/auth/check-email` e reaproveitando toasts amigáveis.
+- Erros `EMAIL_NOT_VERIFIED` vindos da API são tratados centralmente no frontend, exibindo aviso amigável e atalho para `/auth/check-email` sem quebrar a sessão.
+
+## UX-06F – Observabilidade e toggles da verificação de e-mail
+- Structured logs padronizados para o ciclo de verificação: `auth.verify-email.token-created`, `*.resend-requested`, `*.resend-rate-limited`, `*.invalid-token`, `*.expired`, `*.already-used`, `*.success`, `*.enqueue.skipped/failed`, além dos eventos do worker (`email.verify-email.received/sent/failed/invalid-payload`, `email.worker.ready/fatal`).
+- Feature flags configuráveis via env: `AUTH_EMAIL_VERIFICATION_REQUIRED`, `AUTH_EMAIL_VERIFICATION_ENQUEUE_ENABLED`, `AUTH_EMAIL_VERIFICATION_TOKEN_TTL_MINUTES`, `AUTH_EMAIL_VERIFICATION_RESEND_WINDOW_SECONDS`, `AUTH_EMAIL_PROVIDER` (noop/resend). TTL e janela de resend agora usam minutos/segundos configuráveis.
+- Gating respeita o toggle `AUTH_EMAIL_VERIFICATION_REQUIRED`; quando desligado, o middleware apenas loga e libera. Enfileiramento pode ser desativado para dev/test (`enqueue.skipped`). Worker e rotas compartilham os mesmos logs e não vazam tokens (tokenHint com últimos 4 caracteres).
+
+## 2025-12-17 - UX-06F-HF01 (build unblock)
+- Corrigido parsing booleano de `AUTH_EMAIL_VERIFICATION_REQUIRED` em config para eliminar TS2367 no email-worker.
+- Removida importação duplicada de `config` em `backend/src/lib/email.ts` que causava TS2300 durante o build.
+
+## 2025-12-17 - Cloud-first Docker Compose
+- docker-compose agora sobe apenas backend (porta 4000) + frontend (porta 5173); workers (`worker`, `email-worker`, `bulk-worker`) ficam em `--profile workers`.
+- Sem `network_mode: host` nem overrides de localhost; usa somente `env_file` (backend/.env, frontend/.env) com credenciais de cloud (Atlas, CloudAMQP, Upstash, Resend, Google OAuth). Nunca commitar segredos — use apenas `.env.example`.
+- Healthcheck do backend usa `/api/status`; frontend depende do backend saudável.
+- Troubleshooting rápido: (1) CORS/OAuth: alinhar `FRONTEND_ORIGIN`/`VITE_API_URL`; (2) Redis: em produção é obrigatório `REDIS_URL` ou `UPSTASH_REDIS_REST_*`; (3) workers não processam fila: subir com `docker compose --profile workers up -d` e garantir `RABBIT_URL` correto.

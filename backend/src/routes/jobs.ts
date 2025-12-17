@@ -1,5 +1,6 @@
 import { Router, Request } from 'express';
 import { PrismaClient } from '@prisma/client';
+import { requireEmailVerified } from '../middlewares/emailVerified';
 
 interface AuthenticatedRequest extends Request {
   userId?: string;
@@ -7,6 +8,8 @@ interface AuthenticatedRequest extends Request {
 
 export default function jobsRoutes(prisma: PrismaClient) {
   const router = Router();
+
+  router.use(requireEmailVerified(prisma));
 
   router.get('/:id/status', async (req: AuthenticatedRequest, res) => {
     const userId = req.userId;

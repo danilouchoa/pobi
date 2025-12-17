@@ -23,6 +23,7 @@ beforeAll(async () => {
     id: 'user-123',
     email: 'danilo.uchoa@finance.app',
     name: 'Danilo Uchoa',
+    emailVerifiedAt: new Date(),
     passwordHash: await bcrypt.hash('finance123', 10),
     createdAt: new Date(),
     updatedAt: new Date(),

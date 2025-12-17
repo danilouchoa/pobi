@@ -4,12 +4,20 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
 import { config } from '../config';
-import { publishRecurringJob } from '../lib/rabbit';
+import { publishEmailJob, publishRecurringJob } from '../lib/rabbit';
+import { logEvent, type LogLevel, maskEmail } from '../lib/logger';
 import { validate } from '../middlewares/validation';
-import { registerSchema, loginSchema, googleLoginSchema, googleResolveConflictSchema, linkGoogleSchema } from '../schemas/auth.schema';
+import { registerSchema, loginSchema, googleLoginSchema, googleResolveConflictSchema, linkGoogleSchema, verifyEmailSchema } from '../schemas/auth.schema';
 import rateLimit from 'express-rate-limit';
 import { authenticate, type AuthenticatedRequest } from '../middlewares/auth';
 import { mergeUsersUsingGoogleAsCanonical } from '../services/userMerge';
+import {
+  EMAIL_VERIFICATION_QUEUE,
+  canIssueNewToken,
+  createEmailVerificationToken,
+  consumeToken,
+  EmailVerificationTokenStatus,
+} from '../services/emailVerification';
 
 const SALT_ROUNDS = 10;
 const ACCESS_TOKEN_EXPIRES_IN = '15m';
@@ -53,7 +61,19 @@ const getJwtSecret = (): string => config.jwtSecret;
  * @param user - Objeto user do Prisma
  * @returns User sem passwordHash e outros campos internos
  */
-type PrismaUser = Pick<User, 'id' | 'email' | 'name' | 'avatar' | 'provider' | 'googleId' | 'passwordHash'>;
+type PrismaUser = Pick<
+  User,
+  | 'id'
+  | 'email'
+  | 'name'
+  | 'avatar'
+  | 'provider'
+  | 'googleId'
+  | 'passwordHash'
+  | 'createdAt'
+  | 'emailVerifiedAt'
+  | 'emailVerifiedIp'
+>;
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
@@ -64,6 +84,7 @@ const sanitizeUser = (user: PrismaUser) => ({
   avatar: user.avatar ?? null,
   provider: user.provider ?? Provider.LOCAL,
   googleLinked: Boolean(user.googleId),
+  emailVerifiedAt: user.emailVerifiedAt ?? null,
 });
 
 const buildRefreshTokenCookieOptions = (): CookieOptions => ({
@@ -87,6 +108,20 @@ const buildBaseClaims = (user: PrismaUser) => ({
   googleLinked: Boolean(user.googleId),
 });
 
+const BASIC_TERMS_PURPOSE = 'BASIC_TERMS_AND_PRIVACY';
+
+const resolveClientIp = (req: Request) => {
+  const forwardedFor = req.headers['x-forwarded-for'];
+  if (Array.isArray(forwardedFor)) {
+    return forwardedFor[0];
+  }
+  if (typeof forwardedFor === 'string') {
+    const [first] = forwardedFor.split(',');
+    if (first) return first.trim();
+  }
+  return req.ip || req.connection.remoteAddress || undefined;
+};
+
 const generateAccessToken = (user: PrismaUser): string => {
   return jwt.sign({ ...buildBaseClaims(user), tokenType: 'access' }, getJwtSecret(), { expiresIn: ACCESS_TOKEN_EXPIRES_IN });
 };
@@ -106,8 +141,26 @@ const issueSession = (res: Response, user: PrismaUser, status = 200) => {
   });
 };
 
-const logAuthEvent = (event: string, meta: Record<string, unknown> = {}) => {
-  console.info(`[AUTH] ${event}`, meta);
+const resolveRequestId = (req?: Request) => {
+  const header = req?.headers['x-request-id'];
+  if (Array.isArray(header)) return header[0];
+  if (typeof header === 'string') return header;
+  return undefined;
+};
+
+const logAuthEvent = (
+  event: string,
+  meta: Record<string, unknown> = {},
+  options?: { level?: LogLevel; req?: Request; userId?: string; ip?: string | null },
+) => {
+  logEvent({
+    event,
+    level: options?.level ?? 'info',
+    requestId: resolveRequestId(options?.req),
+    userId: options?.userId,
+    ip: options?.ip ?? options?.req?.ip,
+    meta,
+  });
 };
 
 export default function authRoutes(prisma: PrismaClient) {
@@ -173,8 +226,9 @@ export default function authRoutes(prisma: PrismaClient) {
    */
   router.post('/register', validate({ body: registerSchema }), async (req: Request, res: Response) => {
     try {
-      const { email, password, name } = req.body;
+      const { email, password, name, termsVersion } = req.body;
       const normalizedEmail = normalizeEmail(email);
+      const clientIp = resolveClientIp(req);
 
       const existingUser = await prisma.user.findUnique({ where: { email: normalizedEmail } });
 
@@ -203,7 +257,59 @@ export default function authRoutes(prisma: PrismaClient) {
         },
       });
 
-      logAuthEvent('auth.register.local', { userId: user.id, email: user.email });
+      await prisma.userConsent.create({
+        data: {
+          userId: user.id,
+          purpose: BASIC_TERMS_PURPOSE,
+          version: termsVersion,
+          ip: clientIp,
+        },
+      });
+
+      const { rawToken, expiresAt } = await createEmailVerificationToken({
+        prisma,
+        userId: user.id,
+        createdIp: clientIp,
+      });
+
+      const verificationUrl = `${config.frontendOrigin.replace(/\/$/, '')}/auth/verify-email?token=${rawToken}`;
+      logAuthEvent(
+        'auth.verify-email.token-created',
+        { userId: user.id, email: maskEmail(user.email), expiresAt: expiresAt.toISOString(), queue: EMAIL_VERIFICATION_QUEUE },
+        { req, userId: user.id, ip: clientIp },
+      );
+
+      if (!config.emailVerificationEnqueueEnabled) {
+        logAuthEvent(
+          'auth.verify-email.enqueue.skipped',
+          { userId: user.id, queue: EMAIL_VERIFICATION_QUEUE, reason: 'enqueue_disabled' },
+          { req, userId: user.id, ip: clientIp },
+        );
+      } else {
+        try {
+          await publishEmailJob({
+            type: 'VERIFY_EMAIL',
+            queue: EMAIL_VERIFICATION_QUEUE,
+            email: user.email,
+            userId: user.id,
+            verificationUrl,
+            expiresAt: expiresAt.toISOString(),
+          });
+          logAuthEvent(
+            'auth.verify-email.token-enqueued',
+            { userId: user.id, queue: EMAIL_VERIFICATION_QUEUE },
+            { req, userId: user.id, ip: clientIp },
+          );
+        } catch (publishError) {
+          logAuthEvent(
+            'auth.verify-email.enqueue.failed',
+            { userId: user.id, queue: EMAIL_VERIFICATION_QUEUE, error: publishError instanceof Error ? publishError.message : String(publishError) },
+            { req, userId: user.id, ip: clientIp, level: 'error' },
+          );
+        }
+      }
+
+      logAuthEvent('auth.register.local', { userId: user.id, email: maskEmail(user.email) }, { req, userId: user.id, ip: clientIp });
 
       return issueSession(res, user, 201);
     } catch (error) {
@@ -396,6 +502,150 @@ export default function authRoutes(prisma: PrismaClient) {
   });
 
   // ==========================================================================
+  // POST /api/auth/verify-email - Consome token de verificação
+  // ==========================================================================
+  router.post('/verify-email', validate({ body: verifyEmailSchema }), async (req: Request, res: Response) => {
+    try {
+      const { token } = verifyEmailSchema.parse(req.body);
+      const clientIp = resolveClientIp(req);
+      const outcome = await consumeToken(token, clientIp ?? null, { prisma });
+
+      if (outcome.status === EmailVerificationTokenStatus.NotFound) {
+        logAuthEvent(
+          'auth.verify-email.invalid-token',
+          { tokenHint: token.slice(-4) || 'none' },
+          { req, ip: clientIp },
+        );
+        return res.status(400).json({ error: 'INVALID_TOKEN', message: 'Token de verificação inválido.' });
+      }
+      if (outcome.status === EmailVerificationTokenStatus.Expired) {
+        logAuthEvent(
+          'auth.verify-email.expired',
+          { tokenId: outcome.token.id, userId: outcome.token.userId },
+          { req, userId: outcome.token.userId, ip: clientIp },
+        );
+        return res.status(410).json({ error: 'TOKEN_EXPIRED', message: 'Link de verificação expirou.' });
+      }
+      if (outcome.status === EmailVerificationTokenStatus.AlreadyUsed) {
+        logAuthEvent(
+          'auth.verify-email.already-used',
+          { tokenId: outcome.token.id, userId: outcome.token.userId, consumedAt: outcome.token.consumedAt },
+          { req, userId: outcome.token.userId, ip: clientIp },
+        );
+        return res.status(409).json({ error: 'TOKEN_ALREADY_USED', message: 'Este link já foi utilizado.' });
+      }
+
+      logAuthEvent(
+        'auth.verify-email.success',
+        {
+          userId: outcome.user.id,
+          tokenId: outcome.token.id,
+          emailVerifiedAt: outcome.user.emailVerifiedAt?.toISOString?.() ?? outcome.user.emailVerifiedAt,
+        },
+        { req, userId: outcome.user.id, ip: clientIp },
+      );
+
+      const user = await prisma.user.findUnique({ where: { id: outcome.user.id } });
+      if (!user) {
+        return res.status(404).json({ error: 'USER_NOT_FOUND', message: 'Usuário não encontrado.' });
+      }
+
+      const emailVerifiedAt = user.emailVerifiedAt?.toISOString() ?? null;
+
+      return res.json({
+        status: 'VERIFIED',
+        emailVerified: true,
+        emailVerifiedAt,
+        user: sanitizeUser(user),
+      });
+    } catch (error) {
+      console.error('[AUTH] Erro ao verificar e-mail:', error);
+      return res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Erro interno no servidor.' });
+    }
+  });
+
+  // ==========================================================================
+  // POST /api/auth/resend-verification - Reenvia e-mail de verificação autenticado
+  // ==========================================================================
+  router.post('/resend-verification', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const userId = req.auth?.userId || req.userId;
+      if (!userId) {
+        return res.status(401).json({ error: 'UNAUTHORIZED', message: 'Não autorizado.' });
+      }
+
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      if (!user) {
+        return res.status(404).json({ error: 'USER_NOT_FOUND', message: 'Usuário não encontrado.' });
+      }
+
+      if (user.emailVerifiedAt) {
+        logAuthEvent(
+          'auth.verify-email.resend-already-verified',
+          { userId, email: maskEmail(user.email) },
+          { req, userId, ip: req.ip },
+        );
+        return res.json({ status: 'ALREADY_VERIFIED' });
+      }
+
+      const { allowed, reason, lastTokenCreatedAt } = await canIssueNewToken(userId, { prisma });
+      if (!allowed) {
+        logAuthEvent(
+          'auth.verify-email.resend-rate-limited',
+          { userId, reason, lastTokenCreatedAt },
+          { req, userId, ip: req.ip, level: 'warn' },
+        );
+        return res.status(429).json({ error: 'RATE_LIMITED', message: 'Aguarde antes de reenviar o e-mail.' });
+      }
+
+      const clientIp = resolveClientIp(req);
+      const { rawToken, expiresAt } = await createEmailVerificationToken({ prisma, userId, createdIp: clientIp });
+      const verificationUrl = `${config.frontendOrigin.replace(/\/$/, '')}/auth/verify-email?token=${rawToken}`;
+      logAuthEvent(
+        'auth.verify-email.token-created',
+        { userId: user.id, email: maskEmail(user.email), expiresAt: expiresAt.toISOString(), queue: EMAIL_VERIFICATION_QUEUE },
+        { req, userId: user.id, ip: clientIp },
+      );
+
+      if (!config.emailVerificationEnqueueEnabled) {
+        logAuthEvent(
+          'auth.verify-email.enqueue.skipped',
+          { userId: user.id, queue: EMAIL_VERIFICATION_QUEUE, reason: 'enqueue_disabled' },
+          { req, userId: user.id, ip: clientIp },
+        );
+        return res.json({ status: 'RESENT' });
+      }
+
+      try {
+        await publishEmailJob({
+          type: 'VERIFY_EMAIL',
+          queue: EMAIL_VERIFICATION_QUEUE,
+          email: user.email,
+          userId: user.id,
+          verificationUrl,
+          expiresAt: expiresAt.toISOString(),
+        });
+        logAuthEvent(
+          'auth.verify-email.resend-requested',
+          { userId: user.id, queue: EMAIL_VERIFICATION_QUEUE },
+          { req, userId: user.id, ip: clientIp },
+        );
+        return res.json({ status: 'RESENT' });
+      } catch (publishError) {
+        logAuthEvent(
+          'auth.verify-email.enqueue.failed',
+          { userId: user.id, queue: EMAIL_VERIFICATION_QUEUE, error: publishError instanceof Error ? publishError.message : String(publishError) },
+          { req, userId: user.id, ip: clientIp, level: 'error' },
+        );
+        return res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Erro interno no servidor.' });
+      }
+    } catch (error) {
+      console.error('[AUTH] Erro ao reenviar verificação:', error);
+      return res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Erro interno no servidor.' });
+    }
+  });
+
+  // ==========================================================================
   // POST /api/auth/logout - Encerrar sessão (remover cookie)
   // ==========================================================================
   /**
@@ -474,6 +724,20 @@ export default function authRoutes(prisma: PrismaClient) {
             where: { id: byEmail.id },
             data: updateData,
           });
+
+          if (!user) {
+            user = {
+              ...byEmail,
+              ...updateData,
+              createdAt: byEmail.createdAt ?? new Date(),
+              passwordHash: byEmail.passwordHash ?? null,
+              googleId: updateData.googleId ?? byEmail.googleId ?? null,
+              avatar: updateData.avatar ?? byEmail.avatar ?? null,
+              provider: updateData.provider ?? Provider.GOOGLE,
+              emailVerifiedAt: byEmail.emailVerifiedAt ?? null,
+              emailVerifiedIp: byEmail.emailVerifiedIp ?? null,
+            } as PrismaUser;
+          }
         }
       }
 
@@ -487,6 +751,25 @@ export default function authRoutes(prisma: PrismaClient) {
             avatar: profile.avatar,
           },
         });
+
+        if (!user) {
+          user = {
+            id: profile.googleId,
+            email: normalizedEmail,
+            name: profile.name,
+            googleId: profile.googleId,
+            provider: Provider.GOOGLE,
+            avatar: profile.avatar ?? null,
+            passwordHash: null,
+            createdAt: new Date(),
+            emailVerifiedAt: null,
+            emailVerifiedIp: null,
+          } as PrismaUser;
+        }
+      }
+
+      if (!user) {
+        throw new Error('Falha ao criar ou atualizar usuário Google');
       }
 
       publishRecurringJob(user.id).catch((error) => {

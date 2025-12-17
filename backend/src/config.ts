@@ -21,6 +21,11 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(1, 'JWT_SECRET is required'),
   // Sanitizado: nunca incluir credenciais reais em default
   RABBIT_URL: z.string().min(1).default('amqp://localhost'),
+  REDIS_URL: z.string().optional(),
+  REDIS_HOST: z.string().optional(),
+  REDIS_PORT: z.string().optional(),
+  UPSTASH_REDIS_REST_URL: z.string().optional(),
+  UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
   CORS_ORIGINS: z.string().optional(),
   FRONTEND_ORIGIN: z
     .string({
@@ -71,6 +76,27 @@ const envSchema = z.object({
   AUTH_ACCOUNT_LINK_ENABLED: z.enum(['true', 'false']).optional()
     .transform(val => val !== 'false')
     .default('true' as any),
+  AUTH_EMAIL_VERIFICATION_REQUIRED: z.enum(['true', 'false']).optional()
+    .transform(val => val !== 'false')
+    .default('true' as any),
+  AUTH_EMAIL_VERIFICATION_TOKEN_TTL_MINUTES: z.string().optional(),
+  AUTH_EMAIL_VERIFICATION_RESEND_WINDOW_SECONDS: z.string().optional(),
+  AUTH_EMAIL_VERIFICATION_ENQUEUE_ENABLED: z.enum(['true', 'false']).optional(),
+  AUTH_EMAIL_PROVIDER: z.string().optional(),
+  EMAIL_VERIFICATION_TOKEN_TTL_HOURS: z
+    .string()
+    .optional()
+    .transform((val) => {
+      const parsed = Number(val ?? '24');
+      return Number.isNaN(parsed) ? 24 : parsed;
+    }),
+  EMAIL_VERIFICATION_RESEND_MINUTES: z
+    .string()
+    .optional()
+    .transform((val) => {
+      const parsed = Number(val ?? '10');
+      return Number.isNaN(parsed) ? 10 : parsed;
+    }),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
@@ -78,6 +104,21 @@ const parsedEnv = envSchema.safeParse(process.env);
 if (!parsedEnv.success) {
   console.error('❌ Invalid environment variables:', parsedEnv.error.format());
   throw new Error('Invalid environment configuration.');
+}
+
+const hasRedisServer = Boolean(
+  parsedEnv.data.REDIS_URL
+  || parsedEnv.data.REDIS_HOST
+  || parsedEnv.data.REDIS_PORT,
+);
+
+const hasUpstashRedis = Boolean(
+  parsedEnv.data.UPSTASH_REDIS_REST_URL
+  && parsedEnv.data.UPSTASH_REDIS_REST_TOKEN,
+);
+
+if (parsedEnv.data.NODE_ENV === 'production' && !hasRedisServer && !hasUpstashRedis) {
+  throw new Error('Redis configuration is missing: set REDIS_URL (or REDIS_HOST/REDIS_PORT) or UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN');
 }
 
 const resolvedSecurityMode =
@@ -100,12 +141,52 @@ const derivedCorsOrigins = Array.from(
   ].filter(Boolean)),
 );
 
+const tokenTtlMinutes = (() => {
+  if (parsedEnv.data.AUTH_EMAIL_VERIFICATION_TOKEN_TTL_MINUTES) {
+    const parsed = Number(parsedEnv.data.AUTH_EMAIL_VERIFICATION_TOKEN_TTL_MINUTES);
+    return Number.isNaN(parsed) ? 24 * 60 : parsed;
+  }
+  const hours = parsedEnv.data.EMAIL_VERIFICATION_TOKEN_TTL_HOURS ?? 24;
+  return hours * 60;
+})();
+
+const resendWindowSeconds = (() => {
+  if (parsedEnv.data.AUTH_EMAIL_VERIFICATION_RESEND_WINDOW_SECONDS) {
+    const parsed = Number(parsedEnv.data.AUTH_EMAIL_VERIFICATION_RESEND_WINDOW_SECONDS);
+    return Number.isNaN(parsed) ? 10 * 60 : parsed;
+  }
+  const minutes = parsedEnv.data.EMAIL_VERIFICATION_RESEND_MINUTES ?? 10;
+  return minutes * 60;
+})();
+
+const emailVerificationRequired = (() => {
+  if (parsedEnv.data.AUTH_EMAIL_VERIFICATION_REQUIRED !== undefined) {
+    return parsedEnv.data.AUTH_EMAIL_VERIFICATION_REQUIRED;
+  }
+  return true;
+})();
+
+const emailVerificationEnqueueEnabled = (() => {
+  if (parsedEnv.data.AUTH_EMAIL_VERIFICATION_ENQUEUE_ENABLED !== undefined) {
+    return parsedEnv.data.AUTH_EMAIL_VERIFICATION_ENQUEUE_ENABLED !== 'false';
+  }
+  return parsedEnv.data.NODE_ENV !== 'test';
+})();
+
+const emailProvider = parsedEnv.data.AUTH_EMAIL_PROVIDER
+  ?? (parsedEnv.data.NODE_ENV === 'production' ? 'resend' : 'noop');
+
 export const config = {
   nodeEnv: parsedEnv.data.NODE_ENV,
   port: parsedEnv.data.PORT,
   databaseUrl: parsedEnv.data.DATABASE_URL,
   jwtSecret: parsedEnv.data.JWT_SECRET,
   rabbitUrl: parsedEnv.data.RABBIT_URL,
+  redisUrl: parsedEnv.data.REDIS_URL,
+  redisHost: parsedEnv.data.REDIS_HOST,
+  redisPort: parsedEnv.data.REDIS_PORT,
+  upstashRedisRestUrl: parsedEnv.data.UPSTASH_REDIS_REST_URL,
+  upstashRedisRestToken: parsedEnv.data.UPSTASH_REDIS_REST_TOKEN,
   corsOrigins: derivedCorsOrigins,
   securityMode: resolvedSecurityMode,
   validationEnabled: parsedEnv.data.VALIDATION_ENABLED,
@@ -115,6 +196,11 @@ export const config = {
   googleClientSecret: parsedEnv.data.GOOGLE_CLIENT_SECRET,
   authGoogleEnabled: parsedEnv.data.AUTH_GOOGLE_ENABLED,
   authAccountLinkEnabled: parsedEnv.data.AUTH_ACCOUNT_LINK_ENABLED,
+  emailVerificationTokenTtlMinutes: tokenTtlMinutes,
+  emailVerificationResendWindowSeconds: resendWindowSeconds,
+  emailVerificationRequired,
+  emailVerificationEnqueueEnabled,
+  emailProvider,
 };
 
 export const isCorsAllowed = (origin?: string): boolean => {

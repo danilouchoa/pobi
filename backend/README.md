@@ -37,6 +37,7 @@ API financeira em Node.js 20 + Express que controla despesas, agrupamento de par
 | `npm run billing:migrate-enum` | Migrações do enum de `billingRolloverPolicy` (NEXT/PREVIOUS). |
 | `npm run fingerprints:backfill` / `npm run fingerprints:regenerate` | Scripts auxiliares de idempotência para lançamentos recorrentes. |
 | `npm run test:billing` | Teste de unidade focado em lógica de billing. |
+| `npm run worker:email` | Sobe o worker de e-mail (após `npm run build`) para consumir `EMAIL_VERIFICATION_QUEUE`. |
 | `npm run health:db` | Check rápido de conectividade com MongoDB. |
 | `npm run seed` | Semeia dados de desenvolvimento no banco. |
 | `npm run clean` | Remove a pasta `dist/` gerada pelo build. |
@@ -79,6 +80,16 @@ Responsabilidade por camada: `route` valida entrada e chama `service`; `service`
 - **Unitária**: `DELETE /expenses/:id` remove apenas a parcela alvo e invalida o cache do `billingMonth` afetado.
 - **Em lote**: `DELETE /expenses/group/:installment_group_id` remove todas as parcelas do grupo quando a intenção é eliminar o lançamento completo.
 
+### Acesso a recursos sensíveis (UX-06E)
+- Rotas que conversam com integrações externas ou que expõem dados sensíveis (ex.: `/api/jobs/*`, `/api/dlq/*` e `/api/salaryHistory/*`) agora utilizam o middleware `requireEmailVerified`.
+- Usuários com e-mail não verificado recebem `403` com payload `{ error: "EMAIL_NOT_VERIFIED", message: "Seu e-mail ainda não foi confirmado..." }`.
+- Usuários verificados mantêm o comportamento atual, sem regressão de permissões. Exports no frontend também exibem alerta e redirecionam para `/auth/check-email` quando o e-mail não está confirmado.
+
+### Configuração de verificação de e-mail (UX-06F)
+- Toggles via env: `AUTH_EMAIL_VERIFICATION_REQUIRED`, `AUTH_EMAIL_VERIFICATION_ENQUEUE_ENABLED`, `AUTH_EMAIL_VERIFICATION_TOKEN_TTL_MINUTES`, `AUTH_EMAIL_VERIFICATION_RESEND_WINDOW_SECONDS`, `AUTH_EMAIL_PROVIDER` (`noop` para dev/test, `resend` para prod).
+- Logs estruturados para todo o ciclo (`auth.verify-email.*`, `email.verify-email.*`, `email.worker.*`) incluem `event`, `ts`, `requestId` e metadados como `userId` e `tokenHint` (últimos 4 caracteres).
+- Se o enqueue estiver desabilitado, a API ainda cria o token e registra `auth.verify-email.enqueue.skipped`; o worker pode ser desligado sem quebrar o fluxo de registro/login.
+
 ### Dead Letter Queue e reprocessamento
 - Mensagens com falha após tentativas de retry são encaminhadas à DLQ. O fluxo padrão é: fila principal → retries com backoff → DLQ → reprocessamento manual via `/admin/dlq` ou purge.
 
@@ -86,6 +97,9 @@ Responsabilidade por camada: `route` valida entrada e chama `service`; `service`
 - **recurringWorker**: cria lançamentos recorrentes e reaplica cálculo de `billingMonth` com idempotência via fingerprints.
 - **bulkWorker**: executa operações em lote (ex.: criação massiva de parcelas) usando ConfirmChannel e `prefetch` configurado.
 - Ambos se reconectam ao RabbitMQ com backoff e respeitam a DLQ. Métricas básicas registram `[CACHE HIT/MISS]` e tentativas de consumo.
+- **emailWorker**: consome a fila `EMAIL_VERIFICATION_QUEUE` (`email-jobs`) processando jobs `VERIFY_EMAIL` com payload `{ email, userId, verificationUrl, expiresAt }`.
+  - Envia o e-mail de verificação usando o provider configurado e registra logs `email.verify-email.sent`/`failed`.
+  - Execução local: `npm run build && npm run worker:email` ou `docker compose up email-worker` (depende de RabbitMQ saudável).
 
 ## 8. Testes
 - Suíte principal com **Vitest** + **Supertest** para rotas e serviços. Rodar localmente: `npm ci && npm run coverage` (ou `npm run coverage -- --watch` para iteração).
