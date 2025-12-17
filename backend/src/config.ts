@@ -141,7 +141,7 @@ const resendWindowSeconds = (() => {
 
 const emailVerificationRequired = (() => {
   if (parsedEnv.data.AUTH_EMAIL_VERIFICATION_REQUIRED !== undefined) {
-    return parsedEnv.data.AUTH_EMAIL_VERIFICATION_REQUIRED !== 'false';
+    return parsedEnv.data.AUTH_EMAIL_VERIFICATION_REQUIRED;
   }
   return true;
 })();

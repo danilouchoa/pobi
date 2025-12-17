@@ -219,3 +219,7 @@ g
 - Structured logs padronizados para o ciclo de verificação: `auth.verify-email.token-created`, `*.resend-requested`, `*.resend-rate-limited`, `*.invalid-token`, `*.expired`, `*.already-used`, `*.success`, `*.enqueue.skipped/failed`, além dos eventos do worker (`email.verify-email.received/sent/failed/invalid-payload`, `email.worker.ready/fatal`).
 - Feature flags configuráveis via env: `AUTH_EMAIL_VERIFICATION_REQUIRED`, `AUTH_EMAIL_VERIFICATION_ENQUEUE_ENABLED`, `AUTH_EMAIL_VERIFICATION_TOKEN_TTL_MINUTES`, `AUTH_EMAIL_VERIFICATION_RESEND_WINDOW_SECONDS`, `AUTH_EMAIL_PROVIDER` (noop/resend). TTL e janela de resend agora usam minutos/segundos configuráveis.
 - Gating respeita o toggle `AUTH_EMAIL_VERIFICATION_REQUIRED`; quando desligado, o middleware apenas loga e libera. Enfileiramento pode ser desativado para dev/test (`enqueue.skipped`). Worker e rotas compartilham os mesmos logs e não vazam tokens (tokenHint com últimos 4 caracteres).
+
+## 2025-12-17 - UX-06F-HF01 (build unblock)
+- Corrigido parsing booleano de `AUTH_EMAIL_VERIFICATION_REQUIRED` em config para eliminar TS2367 no email-worker.
+- Removida importação duplicada de `config` em `backend/src/lib/email.ts` que causava TS2300 durante o build.

@@ -1,7 +1,5 @@
 import { config } from '../config';
 
-import { config } from '../config';
-
 export type EmailPayload = {
   to: string;
   subject: string;
