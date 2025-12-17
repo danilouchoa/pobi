@@ -272,7 +272,7 @@ export default function authRoutes(prisma: PrismaClient) {
         createdIp: clientIp,
       });
 
-      const verificationUrl = `${config.frontendOrigin.replace(/\/$/, '')}/auth/verify-email?token=${rawToken}`;
+      const verificationUrl = `${config.emailVerificationBaseUrl.replace(/\/$/, '')}/auth/verify-email?token=${rawToken}`;
       logAuthEvent(
         'auth.verify-email.token-created',
         { userId: user.id, email: maskEmail(user.email), expiresAt: expiresAt.toISOString(), queue: EMAIL_VERIFICATION_QUEUE },
@@ -600,7 +600,7 @@ export default function authRoutes(prisma: PrismaClient) {
 
       const clientIp = resolveClientIp(req);
       const { rawToken, expiresAt } = await createEmailVerificationToken({ prisma, userId, createdIp: clientIp });
-      const verificationUrl = `${config.frontendOrigin.replace(/\/$/, '')}/auth/verify-email?token=${rawToken}`;
+      const verificationUrl = `${config.emailVerificationBaseUrl.replace(/\/$/, '')}/auth/verify-email?token=${rawToken}`;
       logAuthEvent(
         'auth.verify-email.token-created',
         { userId: user.id, email: maskEmail(user.email), expiresAt: expiresAt.toISOString(), queue: EMAIL_VERIFICATION_QUEUE },

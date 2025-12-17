@@ -6,6 +6,7 @@ dotenv.config();
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   SECURITY_MODE: z.enum(['strict', 'relaxed']).optional(),
+  AUTH_VERIFY_URL_BASE: z.string().url('AUTH_VERIFY_URL_BASE must be a valid URL').optional(),
   PORT: z
     .string()
     .optional()
@@ -27,6 +28,9 @@ const envSchema = z.object({
   UPSTASH_REDIS_REST_URL: z.string().optional(),
   UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
   CORS_ORIGINS: z.string().optional(),
+  RESEND_API_KEY: z.string().optional(),
+  AUTH_EMAIL_FROM: z.string().trim().optional(),
+  RESEND_FROM: z.string().trim().optional(),
   FRONTEND_ORIGIN: z
     .string({
       required_error: 'FRONTEND_ORIGIN is required',
@@ -176,6 +180,13 @@ const emailVerificationEnqueueEnabled = (() => {
 const emailProvider = parsedEnv.data.AUTH_EMAIL_PROVIDER
   ?? (parsedEnv.data.NODE_ENV === 'production' ? 'resend' : 'noop');
 
+const authEmailFrom =
+  parsedEnv.data.AUTH_EMAIL_FROM?.trim()
+  || parsedEnv.data.RESEND_FROM?.trim()
+  || undefined;
+
+const emailVerificationBaseUrl = (parsedEnv.data.AUTH_VERIFY_URL_BASE ?? parsedEnv.data.FRONTEND_ORIGIN).replace(/\/$/, '');
+
 export const config = {
   nodeEnv: parsedEnv.data.NODE_ENV,
   port: parsedEnv.data.PORT,
@@ -201,6 +212,10 @@ export const config = {
   emailVerificationRequired,
   emailVerificationEnqueueEnabled,
   emailProvider,
+  resendApiKey: parsedEnv.data.RESEND_API_KEY,
+  authEmailFrom,
+  resendFrom: parsedEnv.data.RESEND_FROM,
+  emailVerificationBaseUrl,
 };
 
 export const isCorsAllowed = (origin?: string): boolean => {
