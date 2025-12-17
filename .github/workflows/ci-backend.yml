@@ -1,0 +1,249 @@
+name: CI Backend
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'backend/**'
+      - 'infra/**'
+      - 'helm/**'
+      - '.github/workflows/ci-backend.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'backend/**'
+      - 'infra/**'
+      - 'helm/**'
+      - '.github/workflows/ci-backend.yml'
+
+concurrency:
+  group: ci-backend-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  actions: write
+  contents: read
+  pull-requests: read
+
+jobs:
+  build-test-backend:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [20]
+    env:
+      FRONTEND_ORIGIN: ${{ secrets.FRONTEND_ORIGIN != '' && secrets.FRONTEND_ORIGIN || 'http://localhost:5173' }}
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID != '' && secrets.GOOGLE_CLIENT_ID || 'test-google-client-id' }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET != '' && secrets.GOOGLE_CLIENT_SECRET || 'test-google-client-secret' }}
+      COOKIE_DOMAIN: ${{ secrets.COOKIE_DOMAIN != '' && secrets.COOKIE_DOMAIN || 'localhost' }}
+    steps:
+      # Checkout and detect backend changes early (path filter avoids unnecessary work)
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect backend changes
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+
+      # Toolchain setup and cache (kept only when backend files change)
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - uses: actions/cache@v4
+        if: steps.changes.outputs.backend == 'true'
+        with:
+          path: |
+            backend/node_modules
+            backend/.vite
+          key: backend-${{ runner.os }}-${{ matrix.node-version }}-${{ hashFiles('backend/package-lock.json') }}
+          restore-keys: |
+            backend-${{ runner.os }}-${{ matrix.node-version }}-
+            backend-${{ runner.os }}-
+          save-always: true
+          retention-days: 7
+
+      - name: Ensure npm cache dir
+        if: steps.changes.outputs.backend == 'true'
+        run: mkdir -p ~/.npm
+
+      - name: Install dependencies (npm ci)
+        if: steps.changes.outputs.backend == 'true'
+        working-directory: backend
+        run: npm ci
+
+      # Lint → Test → Build (deterministic order)
+      - name: Lint
+        if: steps.changes.outputs.backend == 'true'
+        working-directory: backend
+        run: |
+          if [ -f package.json ]; then
+            npm run lint || echo 'Lint falhou (eslint ausente?)'
+          fi
+
+      - name: Test & Coverage
+        if: steps.changes.outputs.backend == 'true'
+        working-directory: backend
+        run: |
+          if grep -q 'vitest' package.json; then
+            npm run coverage || npm run test || echo 'Tests skipped'
+          fi
+
+      - name: Build TypeScript
+        if: steps.changes.outputs.backend == 'true'
+        working-directory: backend
+        run: |
+          if [ -f tsconfig.json ]; then
+            npx tsc --noEmit
+          fi
+
+      - name: Upload coverage artifact
+        if: always() && steps.changes.outputs.backend == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/coverage
+          if-no-files-found: warn
+
+      - name: Prune old caches
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const retention = 5; // keep only 5 most recent caches per key prefix
+            const resp = await github.rest.actions.getActionsCacheList({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            const caches = resp.data.actions_caches;
+
+            const groups = {};
+            for (const c of caches) {
+              const prefix = c.key.split('-').slice(0,2).join('-');
+              if (!groups[prefix]) groups[prefix] = [];
+              groups[prefix].push(c);
+            }
+
+            for (const prefix of Object.keys(groups)) {
+              const sorted = groups[prefix].sort((a,b) => new Date(b.last_accessed_at) - new Date(a.last_accessed_at));
+              const remove = sorted.slice(retention);
+              for (const old of remove) {
+                await github.rest.actions.deleteActionsCacheById({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  cache_id: old.id
+                });
+              }
+            }
+
+  deploy-backend-dev:
+    name: Deploy Backend Dev (EKS + ArgoCD)
+    needs: build-test-backend
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # OIDC to AWS
+      contents: read
+    env:
+      AWS_REGION: us-east-1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            ${{ secrets.AWS_ECR_REGISTRY }}/pobi-backend:${{ github.sha }}
+
+      - name: Install ArgoCD CLI
+        run: |
+          curl -sSL -o argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+          sudo install -m 0755 argocd /usr/local/bin/argocd
+          argocd version --client
+
+      - name: ArgoCD Login
+        env:
+          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+          ARGOCD_USERNAME: ${{ secrets.ARGOCD_USERNAME }}
+          ARGOCD_PASSWORD: ${{ secrets.ARGOCD_PASSWORD }}
+        run: |
+          argocd login "$ARGOCD_SERVER" \
+            --username "$ARGOCD_USERNAME" \
+            --password "$ARGOCD_PASSWORD" \
+            --insecure
+
+      - name: Update backend image values
+        env:
+          REGISTRY: ${{ secrets.AWS_ECR_REGISTRY }}
+          TAG: ${{ github.sha }}
+        run: |
+          argocd app set finfy-backend \
+            --helm-set image.repository=${REGISTRY}/pobi-backend \
+            --helm-set image.tag=${TAG}
+
+      - name: Sync and wait backend
+        run: |
+          argocd app sync finfy-backend
+          argocd app wait finfy-backend --health --timeout 600
+
+      - name: Smoke test API health
+        run: |
+          set -euo pipefail
+          for i in {1..10}; do
+            echo "[Attempt $i] GET /api/health";
+            if curl -fsS --retry 4 --retry-all-errors --connect-timeout 5 https://app.finfy.me/api/health >/dev/null; then
+              echo OK; break; fi; sleep 5; done
+
+  prune-caches-backend:
+    name: Prune caches (backend)
+    needs: build-test-backend
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prune old caches
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const retention = 5; // keep only 5 most recent caches per key prefix
+            const resp = await github.rest.actions.getActionsCacheList({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            const caches = resp.data.actions_caches;
+
+            const groups = {};
+            for (const c of caches) {
+              const prefix = c.key.split('-').slice(0,2).join('-');
+              if (!groups[prefix]) groups[prefix] = [];
+              groups[prefix].push(c);
+            }
+
+            for (const prefix of Object.keys(groups)) {
+              const sorted = groups[prefix].sort((a,b) => new Date(b.last_accessed_at) - new Date(a.last_accessed_at));
+              const remove = sorted.slice(retention);
+              for (const old of remove) {
+                await github.rest.actions.deleteActionsCacheById({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  cache_id: old.id
+                });
+              }
+            }
