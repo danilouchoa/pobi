@@ -1,0 +1,64 @@
+services:
+  backend:
+    build: ./backend
+    network_mode: host
+    ports:
+      - "4000:4000"
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    env_file:
+      - ./backend/.env
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:4000/api/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+
+  frontend:
+    build: ./frontend
+    network_mode: host
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    env_file:
+      - ./frontend/.env
+    ports:
+      - "5173:5173"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  worker:
+    build: ./backend
+    command: ["node", "dist/workers/recurringWorker.js"]
+    profiles: ["workers"]
+    network_mode: host
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    env_file:
+      - ./backend/.env
+
+  email-worker:
+    build: ./backend
+    command: ["node", "dist/workers/emailWorker.js"]
+    profiles: ["workers"]
+    network_mode: host
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    env_file:
+      - ./backend/.env
+
+  bulk-worker:
+    build: ./backend
+    command: ["node", "dist/workers/bulkWorker.js"]
+    profiles: ["workers"]
+    network_mode: host
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    env_file:
+      - ./backend/.env

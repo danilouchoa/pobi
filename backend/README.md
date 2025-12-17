@@ -66,6 +66,10 @@ Responsabilidade por camada: `route` valida entrada e chama `service`; `service`
 - Variáveis essenciais: `DATABASE_URL` (MongoDB com `replicaSet=rs0`), `REDIS_URL` (ou `UPSTASH_REDIS_*` em produção), `RABBIT_URL`, `JWT_SECRET`, `REFRESH_TOKEN_SECRET`, `ALLOWED_ORIGINS`, `COOKIE_DOMAIN`, `COOKIE_SECURE`, `COOKIE_SAMESITE`. A validação Zod bloqueia o boot se algo obrigatório faltar.
 - Execução via Docker Compose: o backend espera MongoDB, Redis e RabbitMQ saudáveis (ver `docker-compose.yaml` na raiz). Healthchecks dos serviços são requeridos antes do start.
 - Para detalhes gerais de infraestrutura e orquestração, consulte o README raiz (`../README.md`).
+- Verificação de e-mail (Resend):
+  - Produção/cloud: `AUTH_EMAIL_PROVIDER=resend`, `RESEND_API_KEY`, `AUTH_EMAIL_FROM` (ou `RESEND_FROM`) e opcional `AUTH_VERIFY_URL_BASE` para sobrescrever o frontend ao montar o link.
+  - Dev/testes: `AUTH_EMAIL_PROVIDER=noop` mantém o worker silencioso; mantenha `AUTH_EMAIL_VERIFICATION_ENQUEUE_ENABLED=true` para validar a fila.
+  - Smoke manual: `npm run smoke:email-worker` (envs `SMOKE_EMAIL`/`SMOKE_TOKEN` opcionais) publica em `email-jobs`; suba `npm run build && npm run worker:email` ou `docker compose -f ../docker-compose.cloud.yml --profile workers up -d email-worker`.
 
 ## 6. Fluxos Importantes
 ### BillingMonth e política NEXT/PREVIOUS
@@ -98,8 +102,8 @@ Responsabilidade por camada: `route` valida entrada e chama `service`; `service`
 - **bulkWorker**: executa operações em lote (ex.: criação massiva de parcelas) usando ConfirmChannel e `prefetch` configurado.
 - Ambos se reconectam ao RabbitMQ com backoff e respeitam a DLQ. Métricas básicas registram `[CACHE HIT/MISS]` e tentativas de consumo.
 - **emailWorker**: consome a fila `EMAIL_VERIFICATION_QUEUE` (`email-jobs`) processando jobs `VERIFY_EMAIL` com payload `{ email, userId, verificationUrl, expiresAt }`.
-  - Envia o e-mail de verificação usando o provider configurado e registra logs `email.verify-email.sent`/`failed`.
-  - Execução local: `npm run build && npm run worker:email` ou `docker compose up email-worker` (depende de RabbitMQ saudável).
+  - Envia o e-mail de verificação via provider (`AUTH_EMAIL_PROVIDER=resend|noop`), exigindo `RESEND_API_KEY` + `AUTH_EMAIL_FROM/RESEND_FROM` e logando `email.verify-email.sent/requeue/dlq`.
+  - Execução local/cloud-first: `npm run build && npm run worker:email` ou `docker compose -f ../docker-compose.cloud.yml --profile workers up -d email-worker` (RabbitMQ/CloudAMQP obrigatórios).
 
 ## 8. Testes
 - Suíte principal com **Vitest** + **Supertest** para rotas e serviços. Rodar localmente: `npm ci && npm run coverage` (ou `npm run coverage -- --watch` para iteração).

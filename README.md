@@ -71,16 +71,22 @@ flowchart LR
 
 ## 6. Como rodar em ambiente local (docker-compose up)
 1. Configure `.env` em `backend/` e `frontend/` (tokens JWT, URLs de fila/cache, variáveis Vite).
-2. Execute:
+2. Cloud-first (Atlas/CloudAMQP/Upstash/Resend, sem infra local):
+   ```bash
+   docker compose -f docker-compose.cloud.yml up -d --build backend frontend
+   docker compose -f docker-compose.cloud.yml --profile workers up -d --build email-worker
+   # Workers auxiliares (bulk/recorrência) também ficam no profile "workers"
+   ```
+3. (Legado) Compose local com dependências self-hosted:
    ```bash
    docker-compose up -d --build
    ```
-3. Endpoints principais:
+4. Endpoints principais:
    - API: `http://localhost:4000/api`
    - Frontend: `http://localhost:5173`
    - MongoDB: `localhost:27017`
-4. Healthcheck disponível em `/api/health` garante readiness antes de subir frontend/workers.
-5. Seed Prisma é apenas para DEV: execute `ENABLE_DEV_SEED=true npx prisma db seed` se precisar de usuário local temporário. Testes/CI não dependem desse seed.
+5. Healthcheck disponível em `/api/health` garante readiness antes de subir frontend/workers.
+6. Seed Prisma é apenas para DEV: execute `ENABLE_DEV_SEED=true npx prisma db seed` se precisar de usuário local temporário. Testes/CI não dependem desse seed.
 
 ### Auth & Sessão
 - Tokens JWT curtos (15m) com payload `{ sub, email, provider, googleLinked, tokenType }` e refresh JWT (7d) em cookie httpOnly (`secure` em produção).
