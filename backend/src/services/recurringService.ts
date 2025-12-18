@@ -26,8 +26,8 @@ export async function processRecurringExpenses(prisma: PrismaClient) {
     invalidationByUser.set(userId, bucket);
   };
 
+  const now = new Date();
   for (const expense of recurringExpenses) {
-    const now = new Date();
     let lastReplicated = expense.lastReplicatedAt ?? expense.date;
     let nextReplicationDate = addMonths(new Date(lastReplicated), 1);
     let createdForExpense = 0;
