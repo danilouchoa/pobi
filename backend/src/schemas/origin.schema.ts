@@ -46,12 +46,21 @@ const objectIdSchema = z.string()
 /**
  * Validador de valor monetário
  */
-const monetaryValueSchema = z.string()
+const monetaryValueSchema = z.preprocess((val) => {
+  if (typeof val === 'number') {
+    return val.toFixed(2);
+  }
+  if (typeof val === 'string') {
+    if (/^\d+$/.test(val)) return `${val}.00`;
+    return val;
+  }
+  return val;
+}, z.string()
   .regex(/^\d+\.\d{2}$/, 'Limite deve estar no formato "0.00"')
   .refine(
     (val) => parseFloat(val) > 0,
     'Limite deve ser maior que zero'
-  );
+  ));
 
 // ============================================================================
 // Enums e Tipos Permitidos
