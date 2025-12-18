@@ -18,6 +18,27 @@ type RedisLike = {
   keys?: (pattern: string) => Promise<string[]>;
 };
 
+const normalizeScanResult = (
+  result: unknown,
+  fallbackCursor: number | string
+): [string, string[]] => {
+  // Upstash and node-redis can return arrays or objects; normalize to tuple of strings.
+  if (Array.isArray(result) && result.length >= 2) {
+    const [cursor, keys] = result as [number | string, string[]];
+    return [String(cursor ?? fallbackCursor), Array.isArray(keys) ? keys : []];
+  }
+
+  if (result && typeof result === "object") {
+    const maybeCursor = (result as any).cursor ?? (result as any).nextCursor;
+    const keys = (result as any).keys;
+    if (keys && Array.isArray(keys)) {
+      return [String(maybeCursor ?? fallbackCursor), keys];
+    }
+  }
+
+  return [String(fallbackCursor), []];
+};
+
 class NodeRedisAdapter implements RedisLike {
   private ready: Promise<void>;
 
@@ -77,18 +98,7 @@ class NodeRedisAdapter implements RedisLike {
     if (options?.count) scanOptions.COUNT = options.count;
 
     const result = await (this.client as any).scan(cursor, scanOptions);
-
-    if (Array.isArray(result)) {
-      const [nextCursor, keys] = result as [number | string, string[]];
-      return [String(nextCursor ?? '0'), keys ?? []];
-    }
-
-    if (result && typeof result === 'object' && 'cursor' in result && 'keys' in result) {
-      const { cursor: nextCursor, keys } = result as { cursor?: number | string; keys?: string[] };
-      return [String(nextCursor ?? '0'), keys ?? []];
-    }
-
-    return ['0', []];
+    return normalizeScanResult(result, '0');
   }
 
   async keys(pattern: string) {
@@ -124,8 +134,7 @@ class UpstashRedisAdapter implements RedisLike {
       match: options?.match,
       count: options?.count,
     });
-    const [nextCursor, keys] = result as [number | string, string[]];
-    return [String(nextCursor ?? '0'), keys ?? []];
+    return normalizeScanResult(result, cursor);
   }
 
   async keys(pattern: string) {

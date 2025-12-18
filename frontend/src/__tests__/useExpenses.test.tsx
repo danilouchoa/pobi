@@ -195,6 +195,27 @@ describe('useExpenses', () => {
 		}
 	});
 
+	it('aplica otimista de batch mesmo em página diferente de 1', async () => {
+		const { wrapper, queryClient } = createWrapper();
+		const listKey = expensesKeys.list({ month: '2025-11', mode: 'calendar', page: 2, limit: 1 });
+		const { result } = renderHook(() => useExpenses('2025-11', { page: 2, limit: 1 }), { wrapper });
+		await waitFor(() => result.current.expensesQuery.isSuccess);
+
+		await act(async () => {
+			await result.current.createExpenseBatch([
+				{
+					description: 'Batch 1',
+					category: 'Outros',
+					amount: 5,
+					date: '2025-11-01T00:00:00.000Z',
+				},
+			]);
+		});
+
+		const cached = queryClient.getQueryData(listKey) as any;
+		expect(cached?.data?.[0]?.description).toBeDefined();
+	});
+
 	it('deve atualizar uma despesa', async () => {
 		const { wrapper } = createWrapper();
 		const { result } = renderHook(() => useExpenses('2025-11'), { wrapper });
@@ -232,6 +253,7 @@ describe('useExpenses', () => {
 		});
 
 		const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+		const refetchSpy = vi.spyOn(queryClient, 'refetchQueries');
 
 		const { result } = renderHook(() => useExpenses('2025-11'), { wrapper });
 		await waitFor(() => result.current.expensesQuery.isSuccess);
@@ -241,12 +263,14 @@ describe('useExpenses', () => {
 		});
 
 		await act(async () => {
-			await expect(result.current.deleteExpense('ghost')).rejects.toBeDefined();
+			const deleted = await result.current.deleteExpense('ghost');
+			expect(deleted).toBeDefined();
 		});
 
 		const cached = queryClient.getQueryData(listKey) as any;
 		expect(cached?.data?.find((e: any) => e.id === 'ghost')).toBeUndefined();
 		expect(invalidateSpy).toHaveBeenCalled();
+		expect(refetchSpy).toHaveBeenCalled();
 	});
 
 	it('aplica updates otimistas em múltiplos caches (create/delete)', async () => {

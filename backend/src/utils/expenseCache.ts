@@ -35,6 +35,21 @@ const DELETE_CHUNK_SIZE = 500;
 const SCAN_COUNT = 200;
 const MAX_SCAN_ITERATIONS = 10_000;
 
+const normalizeScanTuple = (result: unknown): [string, string[]] => {
+  if (Array.isArray(result) && result.length >= 2) {
+    const [cursor, keys] = result as [number | string, string[]];
+    return [String(cursor ?? '0'), Array.isArray(keys) ? keys : []];
+  }
+
+  if (result && typeof result === 'object' && 'keys' in (result as any)) {
+    const maybeCursor = (result as any).cursor ?? (result as any).nextCursor ?? '0';
+    const keys = Array.isArray((result as any).keys) ? (result as any).keys : [];
+    return [String(maybeCursor ?? '0'), keys];
+  }
+
+  return ['0', []];
+};
+
 const deleteInChunks = async (keys: string[]) => {
   let deleted = 0;
   for (let i = 0; i < keys.length; i += DELETE_CHUNK_SIZE) {
@@ -48,12 +63,20 @@ export async function deleteByPattern(pattern: string) {
   const client = redis as RedisWithScan;
   let deletedCount = 0;
 
+  const logDebug = () => {
+    if (CACHE_DEBUG_ENABLED) {
+      console.log(`[CACHE INVALIDATE] pattern=${pattern} deletedKeys=${deletedCount}`);
+    }
+  };
+
   if (typeof client.scan === 'function') {
-    let cursor: string = '0';
+    let cursor = '0';
     let iterations = 0;
 
     do {
-      const [nextCursorRaw, keys] = await client.scan(cursor, { match: pattern, count: SCAN_COUNT });
+      const [nextCursorRaw, keys] = normalizeScanTuple(
+        await client.scan(cursor, { match: pattern, count: SCAN_COUNT })
+      );
       const normalizedCursor = String(nextCursorRaw ?? '0');
 
       if (Array.isArray(keys) && keys.length) {
@@ -62,17 +85,16 @@ export async function deleteByPattern(pattern: string) {
 
       iterations += 1;
 
+      // Guard against stuck cursors to avoid infinite loops
       if (normalizedCursor === cursor || iterations >= MAX_SCAN_ITERATIONS) {
+        cursor = '0';
         break;
       }
 
       cursor = normalizedCursor;
     } while (cursor !== '0');
 
-    if (CACHE_DEBUG_ENABLED) {
-      console.log(`[CACHE INVALIDATE] pattern=${pattern} deletedKeys=${deletedCount}`);
-    }
-
+    logDebug();
     return deletedCount;
   }
 
@@ -81,14 +103,11 @@ export async function deleteByPattern(pattern: string) {
     if (Array.isArray(keys) && keys.length) {
       deletedCount += await deleteInChunks(keys);
     }
-
-    if (CACHE_DEBUG_ENABLED) {
-      console.log(`[CACHE INVALIDATE] pattern=${pattern} deletedKeys=${deletedCount}`);
-    }
-
+    logDebug();
     return deletedCount;
   }
 
+  logDebug();
   return deletedCount;
 }
 
