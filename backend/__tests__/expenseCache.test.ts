@@ -23,12 +23,16 @@ vi.mock('../src/lib/redisClient', () => ({
   },
 }));
 
+import { redis } from '../src/lib/redisClient';
 import { deleteByPattern, invalidateExpenseCache } from '../src/utils/expenseCache';
 
 const resetMocks = () => {
   scanMock.mockReset();
   delMock.mockReset();
   keysMock.mockReset();
+  (redis as any).scan = (...args: any[]) => scanMock(...args);
+  (redis as any).keys = (...args: any[]) => keysMock(...args);
+  (redis as any).del = (...args: any[]) => delMock(...args);
 };
 
 describe('expenseCache.deleteByPattern', () => {
@@ -70,6 +74,33 @@ describe('expenseCache.deleteByPattern', () => {
     expect(scanMock).toHaveBeenCalled();
     // Should break once cursor stops advancing
     expect(scanMock.mock.calls.length).toBe(2);
+  });
+
+  it('handles scan result as object shape and deletes keys', async () => {
+    scanMock
+      .mockResolvedValueOnce({ cursor: '2', keys: ['k1', 'k2'] })
+      .mockResolvedValueOnce({ cursor: '0', keys: [] });
+    delMock.mockResolvedValue(2);
+
+    const deleted = await deleteByPattern('finance:expenses:*');
+
+    expect(deleted).toBe(2);
+    expect(scanMock).toHaveBeenCalledTimes(2);
+    expect(delMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to KEYS when scan is unavailable', async () => {
+    (redis as any).scan = undefined;
+    keysMock.mockResolvedValue(['k1', 'k2', 'k3']);
+    delMock.mockResolvedValue(3);
+
+    const deleted = await deleteByPattern('finance:expenses:*');
+
+    expect(deleted).toBe(3);
+    expect(keysMock).toHaveBeenCalledWith('finance:expenses:*');
+    expect(delMock).toHaveBeenCalledTimes(1);
+    // restore for other tests
+    (redis as any).scan = (...args: any[]) => scanMock(...args);
   });
 });
 

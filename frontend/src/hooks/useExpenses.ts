@@ -72,8 +72,8 @@ const parseListKey = (queryKey: QueryKey): ListKeyMeta | null => {
   return {
     month,
     mode,
-    page: Number.isFinite(page) && page ? page : 1,
-    limit: Number.isFinite(limit) && limit ? limit : 20,
+    page: Number.isFinite(page) && page > 0 ? page : 1,
+    limit: Number.isFinite(limit) && limit > 0 ? limit : 20,
   };
 };
 
@@ -295,7 +295,16 @@ export function useExpenses(month: string, options: Options = {}) {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => deleteExpense(id),
+    mutationFn: async (id: string) => {
+      try {
+        return await deleteExpense(id);
+      } catch (err) {
+        if (isAxiosError(err) && err.response?.status === 404) {
+          return { success: true } as any;
+        }
+        throw err;
+      }
+    },
     onMutate: async (id: string) => {
       await queryClient.cancelQueries({ predicate: expenseQueryPredicate });
       const snapshots = applyToListQueries((old, meta) => {
@@ -320,14 +329,13 @@ export function useExpenses(month: string, options: Options = {}) {
       });
       return { snapshots };
     },
-    onError: async (err: unknown, _vars: string, ctx?: OptimisticContext) => {
-      if (isAxiosError(err) && err.response?.status === 404) {
-        await invalidateExpensesForMonth();
-        return;
-      }
+    onError: (_err: unknown, _vars: string, ctx?: OptimisticContext) => {
       rollback(ctx);
     },
-    onSuccess: invalidateExpensesForMonth,
+    onSuccess: async () => {
+      await invalidateExpensesForMonth();
+      await queryClient.refetchQueries({ predicate: expenseQueryPredicate });
+    },
   });
 
   const duplicateMutation = useMutation({
@@ -347,10 +355,11 @@ export function useExpenses(month: string, options: Options = {}) {
       await queryClient.cancelQueries({ predicate: expenseQueryPredicate });
       const snapshots = captureSnapshots();
 
-      if (page === 1 && payloads.length) {
-        const optimisticItems = payloads
-          .filter((payload) => matchesCurrentView({ date: payload.date, billingMonth: (payload as any)?.billingMonth ?? null }))
-          .map((payload: ExpensePayload) => buildOptimisticExpense(payload, mode, month));
+      const optimisticItems = payloads
+        .filter((payload) => matchesCurrentView({ date: payload.date, billingMonth: (payload as any)?.billingMonth ?? null }))
+        .map((payload: ExpensePayload) => buildOptimisticExpense(payload, mode, month));
+
+      if (optimisticItems.length) {
         applyToListQueries((old, meta) => {
           const base: ExpensesResponse =
             old ?? {
@@ -375,30 +384,28 @@ export function useExpenses(month: string, options: Options = {}) {
     },
     onError: (_err: unknown, _vars: CreateExpenseBatchVariables, ctx?: OptimisticContext) => rollback(ctx),
     onSuccess: async (createdExpenses: Expense[]) => {
-      if (page === 1 && createdExpenses.length) {
-        const visible = createdExpenses.filter((expense) => matchesCurrentView(expense));
-        if (visible.length) {
-          applyToListQueries((old, meta) => {
-            const base: ExpensesResponse =
-              old ?? {
-                data: [],
-                pagination: { page: meta.page, limit: meta.limit, total: 0, pages: 1 },
-              };
-            const limitCap = base.pagination.limit ?? meta.limit;
-            const filtered = base.data.filter((expense) => !expense.id.startsWith("temp-"));
-            const nextData = [...visible, ...filtered].slice(0, limitCap);
-            const nextTotal = Math.max(base.pagination.total, filtered.length + visible.length);
-            const nextPages = Math.max(1, Math.ceil(nextTotal / limitCap));
-            return {
-              data: nextData,
-              pagination: {
-                ...base.pagination,
-                total: nextTotal,
-                pages: nextPages,
-              },
+      const visible = createdExpenses.filter((expense) => matchesCurrentView(expense));
+      if (visible.length) {
+        applyToListQueries((old, meta) => {
+          const base: ExpensesResponse =
+            old ?? {
+              data: [],
+              pagination: { page: meta.page, limit: meta.limit, total: 0, pages: 1 },
             };
-          });
-        }
+          const limitCap = base.pagination.limit ?? meta.limit;
+          const filtered = base.data.filter((expense) => !expense.id.startsWith("temp-"));
+          const nextData = [...visible, ...filtered].slice(0, limitCap);
+          const nextTotal = Math.max(base.pagination.total, filtered.length + visible.length);
+          const nextPages = Math.max(1, Math.ceil(nextTotal / limitCap));
+          return {
+            data: nextData,
+            pagination: {
+              ...base.pagination,
+              total: nextTotal,
+              pages: nextPages,
+            },
+          };
+        });
       }
       await invalidateExpensesForMonth();
     },
