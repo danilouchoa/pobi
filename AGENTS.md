@@ -229,3 +229,14 @@ g
 - Sem `network_mode: host` nem overrides de localhost; usa somente `env_file` (backend/.env, frontend/.env) com credenciais de cloud (Atlas, CloudAMQP, Upstash, Resend, Google OAuth). Nunca commitar segredos — use apenas `.env.example`.
 - Healthcheck do backend usa `/api/status`; frontend depende do backend saudável.
 - Troubleshooting rápido: (1) CORS/OAuth: alinhar `FRONTEND_ORIGIN`/`VITE_API_URL`; (2) Redis: em produção é obrigatório `REDIS_URL` ou `UPSTASH_REDIS_REST_*`; (3) workers não processam fila: subir com `docker compose --profile workers up -d` e garantir `RABBIT_URL` correto.
+
+## 2025-12-18 - Pipeline de verificação de e-mail (Resend + worker dedicado)
+- Variáveis obrigatórias para entrega: `AUTH_EMAIL_PROVIDER` (`noop`|`resend`), `RESEND_API_KEY`, `AUTH_EMAIL_FROM` (ou `RESEND_FROM`), `AUTH_EMAIL_VERIFICATION_ENQUEUE_ENABLED`, `RABBIT_URL`, `FRONTEND_ORIGIN` e opcional `AUTH_VERIFY_URL_BASE` para sobrescrever o host da URL de verificação.
+- Comandos cloud-first:
+  - Backend + frontend: `docker compose -f docker-compose.cloud.yml up -d --build backend frontend`
+  - Worker de e-mail: `docker compose -f docker-compose.cloud.yml --profile workers up -d --build email-worker`
+- Troubleshooting rápido:
+  - `Consumers = 0` em `email-jobs`: habilite o profile `workers` e valide `RABBIT_URL`/credenciais do CloudAMQP.
+  - Mensagens presas: verifique DLQ/`x-retry-count`, logs `email.verify-email.requeue|dlq` e status de resposta do Resend.
+  - Domínio/remetente não verificado: ajuste `AUTH_EMAIL_FROM`/`RESEND_FROM` para um domínio aprovado no Resend; sem isso produção falha.
+  - Smoke/local: `npm run smoke:email-worker` publica um job em `email-jobs`; o provider `noop` só loga (nenhum e-mail real).

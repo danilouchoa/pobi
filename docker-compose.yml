@@ -1,11 +1,14 @@
 services:
   backend:
     build: ./backend
-    container_name: finance_backend
-    env_file:
-      - ./backend/.env
+    network_mode: host
     ports:
       - "4000:4000"
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    env_file:
+      - ./backend/.env
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:4000/api/status || exit 1"]
       interval: 30s
@@ -15,7 +18,10 @@ services:
 
   frontend:
     build: ./frontend
-    container_name: finance_frontend
+    network_mode: host
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     env_file:
       - ./frontend/.env
     ports:
@@ -26,21 +32,30 @@ services:
 
   worker:
     build: ./backend
-    profiles: ["workers"]
     command: ["node", "dist/workers/recurringWorker.js"]
+    network_mode: host
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     env_file:
       - ./backend/.env
 
   email-worker:
     build: ./backend
-    profiles: ["workers"]
     command: ["node", "dist/workers/emailWorker.js"]
+    network_mode: host
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     env_file:
       - ./backend/.env
 
   bulk-worker:
     build: ./backend
-    profiles: ["workers"]
     command: ["node", "dist/workers/bulkWorker.js"]
+    network_mode: host
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     env_file:
       - ./backend/.env

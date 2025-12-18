@@ -22,17 +22,17 @@ describe('emailWorker', () => {
   it('processa job válido de verificação', async () => {
     const result = await handleEmailJob(baseJob);
 
-    expect(result).toEqual({ ack: true, handled: true });
+    expect(result).toMatchObject({ ack: true, handled: true });
     expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({
       to: 'worker@test.app',
       subject: 'Confirme seu e-mail no Finfy',
-    }));
+    }), expect.objectContaining({ type: 'VERIFY_EMAIL' }));
   });
 
   it('descarta payload inválido sem tentar enviar', async () => {
     const result = await handleEmailJob({ type: 'VERIFY_EMAIL' });
 
-    expect(result).toEqual({ ack: true, handled: false });
+    expect(result).toMatchObject({ ack: true, handled: false });
     expect(sendEmail).not.toHaveBeenCalled();
   });
 
@@ -41,7 +41,7 @@ describe('emailWorker', () => {
 
     const result = await handleEmailJob(baseJob);
 
-    expect(result).toEqual({ ack: false, handled: true });
+    expect(result).toMatchObject({ ack: false, handled: true, retryable: true });
   });
 
   it('registra evento quando provider é noop', async () => {
@@ -50,7 +50,7 @@ describe('emailWorker', () => {
 
     const result = await handleEmailJob(baseJob);
 
-    expect(result).toEqual({ ack: true, handled: true });
+    expect(result).toMatchObject({ ack: true, handled: true });
     const logged = consoleSpy.mock.calls.some((call) => String(call[0]).includes('email.verify-email.sent'));
     expect(logged).toBe(true);
     consoleSpy.mockRestore();
