@@ -128,6 +128,12 @@ class UpstashRedisAdapter implements RedisLike {
 
   async scan(
     cursor: number | string,
+    options?: { match?: string; count?: number }
+  ): Promise<[number | string, string[]]> {
+    const result = await (this.client as any).scan(String(cursor), {
+      match: options?.match,
+      count: options?.count,
+    });
 
     let nextCursor: number | string | undefined;
     let keys: string[] | undefined;
@@ -154,11 +160,6 @@ class UpstashRedisAdapter implements RedisLike {
     }
 
     return [String(nextCursor ?? "0"), keys ?? []];
-    const result = await (this.client as any).scan(String(cursor), {
-      match: options?.match,
-      count: options?.count,
-    });
-    return normalizeScanResult(result, cursor);
   }
 
   async keys(pattern: string) {
