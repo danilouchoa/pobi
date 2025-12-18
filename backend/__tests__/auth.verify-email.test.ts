@@ -3,9 +3,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import app from '../src/index';
 import { getCsrfToken } from './utils/csrf';
 import { createLocalUser, getUsers, getVerificationTokens, resetUserFactory, userFactoryPrisma } from './factories/userFactory';
-import { generateVerificationToken } from '../src/services/emailVerification';
+import { generateVerificationToken , EMAIL_VERIFICATION_QUEUE } from '../src/services/emailVerification';
 import { publishEmailJob } from '../src/lib/rabbit';
-import { EMAIL_VERIFICATION_QUEUE } from '../src/services/emailVerification';
 
 const createTokenForUser = async (userId: string, overrides: Partial<{ expiresAt: Date; consumedAt: Date | null }> = {}) => {
   const { rawToken, tokenHash } = generateVerificationToken();
