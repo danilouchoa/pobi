@@ -391,7 +391,6 @@ export function useExpenses(month: string, options: Options = {}) {
       const visible = createdExpenses.filter((expense) => matchesCurrentView(expense));
       upsertVisibleExpenses(visible);
       await invalidateExpensesForMonth();
-      upsertVisibleExpenses(visible);
     },
   });
 
