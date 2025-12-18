@@ -67,7 +67,10 @@ class NodeRedisAdapter implements RedisLike {
     return this.client.ping();
   }
 
-  async scan(cursor: number | string, options?: { match?: string; count?: number }) {
+  async scan(
+    cursor: number | string,
+    options?: { match?: string; count?: number }
+  ): Promise<[number | string, string[]]> {
     await this.ensureConnection();
     const scanOptions: Record<string, string | number> = {};
     if (options?.match) scanOptions.MATCH = options.match;
@@ -113,7 +116,10 @@ class UpstashRedisAdapter implements RedisLike {
     return this.client.ping();
   }
 
-  async scan(cursor: number | string, options?: { match?: string; count?: number }) {
+  async scan(
+    cursor: number | string,
+    options?: { match?: string; count?: number }
+  ): Promise<[number | string, string[]]> {
     const result = await (this.client as any).scan(String(cursor), {
       match: options?.match,
       count: options?.count,
