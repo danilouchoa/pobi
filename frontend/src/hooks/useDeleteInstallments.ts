@@ -29,7 +29,7 @@ export function useDeleteInstallments({ month, mode }: UseDeleteInstallmentsOpti
         flushSync(() => setIsDeletingInstallments(false));
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: expensesKeys.all }),
-          queryClient.invalidateQueries({ queryKey: expensesKeys.month(month, mode) }),
+          queryClient.invalidateQueries({ queryKey: expensesKeys.month({ month, mode }) }),
         ]);
       }
     },

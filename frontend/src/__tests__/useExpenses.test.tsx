@@ -1,6 +1,21 @@
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { expensesKeys } from '../lib/queryKeys';
+
+const baseExpense = {
+	category: 'Outros',
+	parcela: 'Único',
+	originId: null,
+	debtorId: null,
+	recurring: false,
+	recurrenceType: null,
+	fixed: false,
+	installments: null,
+	sharedWith: null,
+	sharedAmount: null,
+	billingMonth: null,
+};
 
 // Mock ANTES do import do hook: sobrescreve serviços usados nos testes e inclui bulkExpensesAction
 vi.mock('../services/expenseService', async (importOriginal) => {
@@ -16,53 +31,49 @@ vi.mock('../services/expenseService', async (importOriginal) => {
 		getRecurringExpenses: vi.fn(() => Promise.resolve([])),
 		getSharedExpenses: vi.fn(() => Promise.resolve([])),
 		createExpense: vi.fn(() =>
-			Promise.resolve({ id: '1', description: 'Nova', amount: 10 })
+			Promise.resolve({
+				id: '1',
+				description: 'Nova',
+				amount: 10,
+				date: '2025-11-01T00:00:00.000Z',
+				...baseExpense,
+			})
 		),
 		createExpensesBatch: vi.fn(() =>
 			Promise.resolve([
 				{
 					id: '10',
 					description: 'Batch 1',
-					category: 'Outros',
-					parcela: '1/2',
 					amount: 5,
 					date: '2025-11-01T00:00:00.000Z',
-					originId: null,
-					debtorId: null,
-					recurring: false,
-					fixed: false,
 					installments: 2,
-					sharedWith: null,
-					sharedAmount: null,
-					billingMonth: null,
+					...baseExpense,
 				},
 				{
 					id: '11',
 					description: 'Batch 2',
-					category: 'Outros',
-					parcela: '2/2',
 					amount: 5,
 					date: '2025-12-01T00:00:00.000Z',
-					originId: null,
-					debtorId: null,
-					recurring: false,
-					fixed: false,
 					installments: 2,
-					sharedWith: null,
-					sharedAmount: null,
-					billingMonth: null,
+					...baseExpense,
 				},
 			])
 		),
 		updateExpense: vi.fn(() =>
-			Promise.resolve({ id: '1', description: 'Editada', amount: 20 })
+			Promise.resolve({
+				id: '1',
+				description: 'Editada',
+				amount: 20,
+				date: '2025-11-01T00:00:00.000Z',
+				...baseExpense,
+			})
 		),
 		deleteExpense: vi.fn(() => Promise.resolve({ success: true })),
 		duplicateExpense: vi.fn(() =>
-			Promise.resolve({ id: '2', description: 'Duplicada', amount: 10 })
+			Promise.resolve({ id: '2', description: 'Duplicada', amount: 10, date: '2025-11-01T00:00:00.000Z', ...baseExpense })
 		),
 		createRecurringExpense: vi.fn(() =>
-			Promise.resolve({ id: '3', description: 'Recorrente', amount: 30 })
+			Promise.resolve({ id: '3', description: 'Recorrente', amount: 30, date: '2025-11-01T00:00:00.000Z', recurring: true, ...baseExpense })
 		),
 		bulkUpdateExpenses: vi.fn(() => Promise.resolve({ jobId: 'job-1', status: 'queued' })),
 		bulkExpensesAction: vi.fn().mockResolvedValue({ success: true }),
@@ -72,11 +83,16 @@ vi.mock('../services/expenseService', async (importOriginal) => {
 import { useExpenses } from '../hooks/useExpenses';
 
 describe('useExpenses', () => {
-	const wrapper = ({ children }: { children: React.ReactNode }) => (
-		<QueryClientProvider client={new QueryClient()}>{children}</QueryClientProvider>
-	);
+	const createWrapper = () => {
+		const queryClient = new QueryClient();
+		const wrapper = ({ children }: { children: React.ReactNode }) => (
+			<QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+		);
+		return { wrapper, queryClient };
+	};
 
 	it('deve buscar despesas corretamente', async () => {
+		const { wrapper } = createWrapper();
 		const { result } = renderHook(() => useExpenses('2025-11'), { wrapper });
 		await waitFor(() => result.current.expensesQuery.isSuccess);
 			// Aceita undefined (placeholder) ou objeto válido
@@ -90,6 +106,7 @@ describe('useExpenses', () => {
 	});
 
 	it('deve criar uma despesa', async () => {
+		const { wrapper } = createWrapper();
 		const { result } = renderHook(() => useExpenses('2025-11'), { wrapper });
 		await waitFor(() => result.current.expensesQuery.isSuccess);
 		await act(async () => {
@@ -103,7 +120,30 @@ describe('useExpenses', () => {
 			expect(created.description).toBe('Nova');
 		});
 	});
+
+	it('invalida e refaz fetch após criar despesa', async () => {
+		const { wrapper, queryClient } = createWrapper();
+		const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+		const refetchSpy = vi.spyOn(queryClient, 'refetchQueries');
+		const listKey = expensesKeys.list({ month: '2025-11', mode: 'calendar', page: 1, limit: 20 });
+
+		const { result } = renderHook(() => useExpenses('2025-11'), { wrapper });
+		await waitFor(() => result.current.expensesQuery.isSuccess);
+		await act(async () => {
+			await result.current.createExpense({
+				description: 'Nova',
+				category: 'Outros',
+				amount: 10,
+				date: '2025-11-01T00:00:00.000Z',
+			});
+		});
+		expect(invalidateSpy).toHaveBeenCalled();
+		expect(refetchSpy).toHaveBeenCalledWith({ queryKey: listKey, type: 'active' });
+	});
+
 	it('deve criar despesas em lote', async () => {
+		const { wrapper, queryClient } = createWrapper();
+		const listKey = expensesKeys.list({ month: '2025-11', mode: 'calendar', page: 1, limit: 20 });
 		const { result } = renderHook(() => useExpenses('2025-11'), { wrapper });
 		await waitFor(() => result.current.expensesQuery.isSuccess);
 		await act(async () => {
@@ -118,15 +158,24 @@ describe('useExpenses', () => {
 					description: 'Batch 2',
 					category: 'Outros',
 					amount: 5,
-					date: '2025-11-01T00:00:00.000Z',
+					date: '2025-12-01T00:00:00.000Z',
 				},
 			]);
 			expect(created).toBeDefined();
 			expect(Array.isArray(created)).toBe(true);
 			expect(created?.length).toBe(2);
 		});
+
+		const cached = queryClient.getQueryData(listKey) as any;
+		// Only current-month items should remain optimistic if present; cross-month items must not leak
+		if (cached?.data?.length) {
+			expect(cached.data.some((exp: any) => exp.id === '10' || String(exp.id).startsWith('temp-'))).toBe(true);
+			expect(cached.data.some((exp: any) => exp.id === '11')).toBe(false);
+		}
 	});
+
 	it('deve atualizar uma despesa', async () => {
+		const { wrapper } = createWrapper();
 		const { result } = renderHook(() => useExpenses('2025-11'), { wrapper });
 		await waitFor(() => result.current.expensesQuery.isSuccess);
 		await act(async () => {
@@ -142,6 +191,7 @@ describe('useExpenses', () => {
 	});
 
 	it('deve deletar uma despesa', async () => {
+		const { wrapper } = createWrapper();
 		const { result } = renderHook(() => useExpenses('2025-11'), { wrapper });
 		await waitFor(() => result.current.expensesQuery.isSuccess);
 		await act(async () => {
@@ -152,6 +202,7 @@ describe('useExpenses', () => {
 	});
 
 	it('deve duplicar uma despesa', async () => {
+		const { wrapper } = createWrapper();
 		const { result } = renderHook(() => useExpenses('2025-11'), { wrapper });
 		await waitFor(() => result.current.expensesQuery.isSuccess);
 		await act(async () => {
@@ -162,6 +213,7 @@ describe('useExpenses', () => {
 	});
 
 	it('deve criar despesa recorrente', async () => {
+		const { wrapper } = createWrapper();
 		const { result } = renderHook(() => useExpenses('2025-11'), { wrapper });
 		await waitFor(() => result.current.expensesQuery.isSuccess);
 		await act(async () => {
@@ -179,6 +231,7 @@ describe('useExpenses', () => {
 	});
 
 		it('deve fazer bulk update', async () => {
+			const { wrapper } = createWrapper();
 			const { result } = renderHook(() => useExpenses('2025-11'), { wrapper });
 			await waitFor(() => result.current.expensesQuery.isSuccess);
 			await act(async () => {
@@ -192,6 +245,7 @@ describe('useExpenses', () => {
 		});
 
 		it('deve buscar despesas recorrentes', async () => {
+			const { wrapper } = createWrapper();
 			const { result } = renderHook(() => useExpenses('2025-11'), { wrapper });
 			await waitFor(() => result.current.expensesQuery.isSuccess);
 			await act(async () => {
@@ -202,6 +256,7 @@ describe('useExpenses', () => {
 		});
 
 		it('deve buscar despesas compartilhadas', async () => {
+			const { wrapper } = createWrapper();
 			const { result } = renderHook(() => useExpenses('2025-11'), { wrapper });
 			await waitFor(() => result.current.expensesQuery.isSuccess);
 			await act(async () => {

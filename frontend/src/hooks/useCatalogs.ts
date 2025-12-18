@@ -26,7 +26,7 @@ export function useCatalogs(options: Options = {}) {
   const enabled = options.enabled ?? true;
 
   const originsQuery = useQuery({
-    queryKey: catalogKeys.origins,
+    queryKey: catalogKeys.origins(),
     queryFn: getOrigins,
     enabled,
     staleTime: 1000 * 60 * 5,
@@ -34,7 +34,7 @@ export function useCatalogs(options: Options = {}) {
   });
 
   const debtorsQuery = useQuery({
-    queryKey: catalogKeys.debtors,
+    queryKey: catalogKeys.debtors(),
     queryFn: getDebtors,
     enabled,
     staleTime: 1000 * 60 * 5,
@@ -42,9 +42,9 @@ export function useCatalogs(options: Options = {}) {
   });
 
   const invalidateOrigins = () =>
-    queryClient.invalidateQueries({ queryKey: catalogKeys.origins });
+    queryClient.invalidateQueries({ queryKey: catalogKeys.origins() });
   const invalidateDebtors = () =>
-    queryClient.invalidateQueries({ queryKey: catalogKeys.debtors });
+    queryClient.invalidateQueries({ queryKey: catalogKeys.debtors() });
 
   const createOriginMutation = useMutation({
     mutationFn: (payload: OriginPayload) => createOrigin(payload),

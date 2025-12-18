@@ -240,3 +240,10 @@ g
   - Mensagens presas: verifique DLQ/`x-retry-count`, logs `email.verify-email.requeue|dlq` e status de resposta do Resend.
   - Domínio/remetente não verificado: ajuste `AUTH_EMAIL_FROM`/`RESEND_FROM` para um domínio aprovado no Resend; sem isso produção falha.
   - Smoke/local: `npm run smoke:email-worker` publica um job em `email-jobs`; o provider `noop` só loga (nenhum e-mail real).
+
+## 2025-12-18 - React Query: invalidação imediata das despesas
+- Query keys padronizados em `frontend/src/lib/queryKeys.ts` via factories (`expensesKeys.list/month/recurring/shared/summary`, `catalogKeys.*`, `salaryKeys.month`) para evitar colisões entre meses, modos e paginação.
+- Mutations de despesas (criar/atualizar/deletar/duplicar/recorrente/batch/bulk) agora invalidam e refazem fetch da lista ativa, chave mensal e listas derivadas (recorrentes/compartilhadas), com otimistas condicionais apenas quando a despesa pertence ao mês/visão atual.
+- `useDeleteInstallments` ajustado para os novos query keys; AuthProvider segue limpando o cache em login/logout.
+- Testes de `useExpenses` atualizados para cobrir invalidação + refetch imediato e filtragem de batch cross-month; rodar `npm run test:unit -- src/__tests__/useExpenses.test.tsx` após instalar dependências.
+- Ao adicionar novas mutações, sempre derive a queryKey pelo factory, restrinja otimismos ao mês visível e finalize com `invalidate + refetch` da lista ativa e das listas relacionadas.
