@@ -128,8 +128,32 @@ class UpstashRedisAdapter implements RedisLike {
 
   async scan(
     cursor: number | string,
-    options?: { match?: string; count?: number }
-  ): Promise<[number | string, string[]]> {
+
+    let nextCursor: number | string | undefined;
+    let keys: string[] | undefined;
+
+    if (Array.isArray(result)) {
+      // Result is a tuple-like [cursor, keys]
+      [nextCursor, keys] = result as [number | string, string[]];
+    } else if (result && typeof result === "object") {
+      // Handle object-style responses, e.g. { cursor, keys }
+      const obj = result as any;
+      nextCursor =
+        obj.cursor ??
+        obj.nextCursor ??
+        obj[0] ??
+        cursor;
+      keys =
+        obj.keys ??
+        obj[1] ??
+        [];
+    } else {
+      // Fallback if result is null/undefined or an unexpected type
+      nextCursor = cursor;
+      keys = [];
+    }
+
+    return [String(nextCursor ?? "0"), keys ?? []];
     const result = await (this.client as any).scan(String(cursor), {
       match: options?.match,
       count: options?.count,
