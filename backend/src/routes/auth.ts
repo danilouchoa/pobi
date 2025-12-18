@@ -8,7 +8,7 @@ import { publishEmailJob, publishRecurringJob } from '../lib/rabbit';
 import { logEvent, type LogLevel, maskEmail } from '../lib/logger';
 import { validate } from '../middlewares/validation';
 import { registerSchema, loginSchema, googleLoginSchema, googleResolveConflictSchema, linkGoogleSchema, verifyEmailSchema } from '../schemas/auth.schema';
-import rateLimit from 'express-rate-limit';
+import { rateLimit } from 'express-rate-limit';
 import { authenticate, type AuthenticatedRequest } from '../middlewares/auth';
 import { mergeUsersUsingGoogleAsCanonical } from '../services/userMerge';
 import {

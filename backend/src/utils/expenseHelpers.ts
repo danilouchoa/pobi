@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
-import Decimal from 'decimal.js';
+import { Decimal } from 'decimal.js';
 import { toDecimalString } from './formatters';
 
 export const generateFingerprint = (seed?: string): string => {

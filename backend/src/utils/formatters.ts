@@ -1,4 +1,4 @@
-import Decimal from 'decimal.js';
+import { Decimal } from 'decimal.js';
 
 export const parseDecimal = (value?: string | number | null): number => {
   if (value === null || value === undefined) return 0;
