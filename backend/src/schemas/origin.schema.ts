@@ -46,12 +46,21 @@ const objectIdSchema = z.string()
 /**
  * Validador de valor monetário
  */
-const monetaryValueSchema = z.string()
+const monetaryValueSchema = z.preprocess((val) => {
+  if (typeof val === 'number') {
+    return val.toFixed(2);
+  }
+  if (typeof val === 'string') {
+    if (/^\d+$/.test(val)) return `${val}.00`;
+    return val;
+  }
+  return val;
+}, z.string()
   .regex(/^\d+\.\d{2}$/, 'Limite deve estar no formato "0.00"')
   .refine(
     (val) => parseFloat(val) > 0,
     'Limite deve ser maior que zero'
-  );
+  ));
 
 // ============================================================================
 // Enums e Tipos Permitidos
@@ -86,7 +95,8 @@ const originStatusSchema = z.enum(['Ativo', 'Inativo', 'Bloqueado'], {
 
 export const createOriginSchema = z.object({
   name: z.string()
-    .min(3, 'Nome deve ter no mínimo 3 caracteres')
+    .trim()
+    .min(2, 'Nome deve ter no mínimo 2 caracteres')
     .max(100, 'Nome muito longo (máximo 100 caracteres)'),
   
   type: originTypeSchema,
@@ -108,7 +118,10 @@ export const createOriginSchema = z.object({
     .max(31, 'Dia de fechamento deve estar entre 1 e 31')
     .optional(),
   
-  billingRolloverPolicy: billingRolloverPolicySchema.optional(),
+  billingRolloverPolicy: z.preprocess((val) => {
+    if (val === null || val === '') return undefined;
+    return val;
+  }, billingRolloverPolicySchema.optional()),
 })
 .strict()
 .refine(
@@ -149,7 +162,8 @@ export const createOriginSchema = z.object({
  */
 export const updateOriginSchema = z.object({
   name: z.string()
-    .min(3, 'Nome deve ter no mínimo 3 caracteres')
+    .trim()
+    .min(2, 'Nome deve ter no mínimo 2 caracteres')
     .max(100, 'Nome muito longo (máximo 100 caracteres)')
     .optional(),
   
@@ -171,7 +185,10 @@ export const updateOriginSchema = z.object({
     .max(31, 'Dia de fechamento deve estar entre 1 e 31')
     .optional(),
   
-  billingRolloverPolicy: billingRolloverPolicySchema.optional(),
+  billingRolloverPolicy: z.preprocess((val) => {
+    if (val === null || val === '') return undefined;
+    return val;
+  }, billingRolloverPolicySchema.optional()),
 })
 .strict();
 // Nota: validação condicional type+closingDay não é aplicada em updates
