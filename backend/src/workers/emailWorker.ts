@@ -4,7 +4,7 @@ import { config } from '../config';
 import { sendEmail } from '../lib/email';
 import { createRabbit } from '../lib/rabbit';
 import { EMAIL_VERIFICATION_QUEUE } from '../lib/queues';
-import { logEvent } from '../lib/logger';
+import { logEvent, sanitizeUrlForLog } from '../lib/logger';
 import crypto from 'crypto';
 
 export const verifyEmailJobSchema = z.object({
@@ -170,7 +170,7 @@ export const startEmailWorker = async () => {
     }
   });
 
-  logEmailEvent('email.worker.ready', { queue: EMAIL_VERIFICATION_QUEUE, rabbitUrl: config.rabbitUrl });
+  logEmailEvent('email.worker.ready', { queue: EMAIL_VERIFICATION_QUEUE, rabbitUrl: sanitizeUrlForLog(config.rabbitUrl) });
 };
 
 if (process.env.NODE_ENV !== 'test') {

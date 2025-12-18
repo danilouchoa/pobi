@@ -3,6 +3,8 @@ import { PrismaClient } from '@prisma/client';
 import { createRabbit } from '../lib/rabbit';
 import { applyBulkUpdate } from '../services/bulkUpdateService';
 import { BulkUpdateData } from '../schemas/bulkUpdate.schema';
+import { config } from '../config';
+import { sanitizeUrlForLog } from '../lib/logger';
 
 // Handler puro para teste unitário
 export async function handleBulkJob({ msg, channel, prisma }: { msg: any, channel: any, prisma: any }) {
@@ -38,6 +40,11 @@ const formatError = (error: unknown) =>
   error instanceof Error ? `${error.name}: ${error.message}` : String(error);
 
 async function startBulkWorker() {
+  const mongoTarget = sanitizeUrlForLog(config.databaseUrl);
+  console.log(`[BulkWorker] Connecting Prisma to ${mongoTarget}...`);
+  await prisma.$connect();
+  console.log(`[BulkWorker] Prisma connected to ${mongoTarget}`);
+  console.log(`[BulkWorker] RabbitMQ target: ${sanitizeUrlForLog(config.rabbitUrl)}`);
   const { connection, channel } = await createRabbit({ queue: QUEUE_NAME, prefetch: PREFETCH });
   let shuttingDown = false;
 

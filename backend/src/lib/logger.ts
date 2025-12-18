@@ -36,3 +36,16 @@ export const maskEmail = (email: string) => {
   if (local.length <= 2) return `${local[0] ?? ''}***@${domain}`;
   return `${local.slice(0, 1)}***${local.slice(-1)}@${domain}`;
 };
+
+export const sanitizeUrlForLog = (raw?: string | null) => {
+  if (!raw) return '';
+  const [scheme, rest] = raw.split('://');
+  if (!rest) return raw;
+  const withoutCreds = rest.includes('@') ? rest.slice(rest.indexOf('@') + 1) : rest;
+  return `${scheme}://${withoutCreds}`;
+};
+
+export const describeTarget = (label: string, raw?: string | null) => {
+  if (!raw) return `${label}: not configured`;
+  return `${label}: ${sanitizeUrlForLog(raw)}`;
+};
