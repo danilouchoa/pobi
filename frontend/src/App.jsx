@@ -31,6 +31,7 @@ import VerifyEmail from "./components/auth/VerifyEmail";
 import { useAuth } from "./context/useAuth";
 import { UnverifiedEmailBanner } from "./components/auth/UnverifiedEmailBanner";
 import { registerEmailNotVerifiedHandler } from "./services/api";
+import Onboarding from "./pages/Onboarding";
 
 const TABS = [
   { id: "dashboard", label: "Resumo Mensal" },
@@ -312,13 +313,27 @@ function AuthRoutes() {
 }
 
 function App() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
 
   const isAuthPath = location.pathname.startsWith("/auth/");
   const isVerificationFlow =
     location.pathname.startsWith("/auth/check-email") ||
     location.pathname.startsWith("/auth/verify-email");
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const needsOnboarding = Boolean(user?.onboarding?.needsOnboarding);
+    if (needsOnboarding && location.pathname !== "/onboarding") {
+      navigate("/onboarding", { replace: true });
+    }
+
+    if (!needsOnboarding && location.pathname === "/onboarding") {
+      navigate("/", { replace: true });
+    }
+  }, [isAuthenticated, user?.onboarding?.needsOnboarding, location.pathname, navigate]);
 
   if (!isAuthenticated) {
     return <AuthRoutes />;
@@ -330,6 +345,10 @@ function App() {
 
   if (isAuthPath && isVerificationFlow) {
     return <AuthRoutes />;
+  }
+
+  if (location.pathname === "/onboarding") {
+    return <Onboarding />;
   }
 
   return <AuthenticatedApp />;
