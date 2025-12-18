@@ -252,6 +252,4 @@ model UserPreferences {
   step3CompletedAt        DateTime?
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
-
-  @@index([userId])
 }
