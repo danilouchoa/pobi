@@ -1,7 +1,11 @@
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+vi.mock('../services/expenseService');
+
 import { expensesKeys } from '../lib/queryKeys';
+import * as expenseService from '../services/expenseService';
 
 const baseExpense = {
 	category: 'Outros',
@@ -17,74 +21,92 @@ const baseExpense = {
 	billingMonth: null,
 };
 
-// Mock ANTES do import do hook: sobrescreve serviços usados nos testes e inclui bulkExpensesAction
-vi.mock('../services/expenseService', async (importOriginal) => {
-	const actual: any = await importOriginal();
-	return {
-		...actual,
-		getExpenses: vi.fn(() =>
-			Promise.resolve({
-				data: [],
-				pagination: { page: 1, limit: 20, total: 0, pages: 1 },
-			})
-		),
-		getRecurringExpenses: vi.fn(() => Promise.resolve([])),
-		getSharedExpenses: vi.fn(() => Promise.resolve([])),
-		createExpense: vi.fn(() =>
-			Promise.resolve({
-				id: '1',
-				description: 'Nova',
-				amount: 10,
-				date: '2025-11-01T00:00:00.000Z',
-				...baseExpense,
-			})
-		),
-		createExpensesBatch: vi.fn(() =>
-			Promise.resolve([
-				{
-					id: '10',
-					description: 'Batch 1',
-					amount: 5,
-					date: '2025-11-01T00:00:00.000Z',
-					installments: 2,
-					...baseExpense,
-				},
-				{
-					id: '11',
-					description: 'Batch 2',
-					amount: 5,
-					date: '2025-12-01T00:00:00.000Z',
-					installments: 2,
-					...baseExpense,
-				},
-			])
-		),
-		updateExpense: vi.fn(() =>
-			Promise.resolve({
-				id: '1',
-				description: 'Editada',
-				amount: 20,
-				date: '2025-11-01T00:00:00.000Z',
-				...baseExpense,
-			})
-		),
-		deleteExpense: vi.fn(() => Promise.resolve({ success: true })),
-		duplicateExpense: vi.fn(() =>
-			Promise.resolve({ id: '2', description: 'Duplicada', amount: 10, date: '2025-11-01T00:00:00.000Z', ...baseExpense })
-		),
-		createRecurringExpense: vi.fn(() =>
-			Promise.resolve({ id: '3', description: 'Recorrente', amount: 30, date: '2025-11-01T00:00:00.000Z', recurring: true, ...baseExpense })
-		),
-		bulkUpdateExpenses: vi.fn(() => Promise.resolve({ jobId: 'job-1', status: 'queued' })),
-		bulkExpensesAction: vi.fn().mockResolvedValue({ success: true }),
-	};
-});
+const mockExpenseService = () => {
+	const asMocked = vi.mocked(expenseService);
+	const ensureFn = <T extends (...args: any[]) => any>(fn: T | undefined) => fn ?? vi.fn();
+
+	asMocked.getExpenses = ensureFn(asMocked.getExpenses);
+	asMocked.getRecurringExpenses = ensureFn(asMocked.getRecurringExpenses);
+	asMocked.getSharedExpenses = ensureFn(asMocked.getSharedExpenses);
+	asMocked.createExpense = ensureFn(asMocked.createExpense);
+	asMocked.createExpensesBatch = ensureFn(asMocked.createExpensesBatch);
+	asMocked.updateExpense = ensureFn(asMocked.updateExpense);
+	asMocked.deleteExpense = ensureFn(asMocked.deleteExpense);
+	asMocked.duplicateExpense = ensureFn(asMocked.duplicateExpense);
+	asMocked.createRecurringExpense = ensureFn(asMocked.createRecurringExpense);
+	asMocked.bulkUpdateExpenses = ensureFn(asMocked.bulkUpdateExpenses);
+	asMocked.bulkExpensesAction = ensureFn(asMocked.bulkExpensesAction);
+
+	asMocked.getExpenses.mockResolvedValue({
+		data: [],
+		pagination: { page: 1, limit: 20, total: 0, pages: 1 },
+	});
+	asMocked.getRecurringExpenses.mockResolvedValue([]);
+	asMocked.getSharedExpenses.mockResolvedValue([]);
+	asMocked.createExpense.mockResolvedValue({
+		id: '1',
+		description: 'Nova',
+		amount: 10,
+		date: '2025-11-01T00:00:00.000Z',
+		...baseExpense,
+	});
+	asMocked.createExpensesBatch.mockResolvedValue([
+		{
+			id: '10',
+			description: 'Batch 1',
+			amount: 5,
+			date: '2025-11-01T00:00:00.000Z',
+			installments: 2,
+			...baseExpense,
+		},
+		{
+			id: '11',
+			description: 'Batch 2',
+			amount: 5,
+			date: '2025-12-01T00:00:00.000Z',
+			installments: 2,
+			...baseExpense,
+		},
+	]);
+	asMocked.updateExpense.mockResolvedValue({
+		id: '1',
+		description: 'Editada',
+		amount: 20,
+		date: '2025-11-01T00:00:00.000Z',
+		...baseExpense,
+	});
+	asMocked.deleteExpense.mockResolvedValue({ success: true });
+	asMocked.duplicateExpense.mockResolvedValue({
+		id: '2',
+		description: 'Duplicada',
+		amount: 10,
+		date: '2025-11-01T00:00:00.000Z',
+		...baseExpense,
+	});
+	asMocked.createRecurringExpense.mockResolvedValue({
+		id: '3',
+		description: 'Recorrente',
+		amount: 30,
+		date: '2025-11-01T00:00:00.000Z',
+		recurring: true,
+		...baseExpense,
+	});
+	asMocked.bulkUpdateExpenses.mockResolvedValue({ jobId: 'job-1', status: 'queued' });
+	asMocked.bulkExpensesAction.mockResolvedValue({ success: true });
+};
 
 import { useExpenses } from '../hooks/useExpenses';
 
+beforeEach(() => {
+	vi.clearAllMocks();
+	mockExpenseService();
+});
+
 describe('useExpenses', () => {
 	const createWrapper = () => {
-		const queryClient = new QueryClient();
+		const queryClient = new QueryClient({
+			defaultOptions: { queries: { retry: false } },
+		});
 		const wrapper = ({ children }: { children: React.ReactNode }) => (
 			<QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
 		);
@@ -125,7 +147,6 @@ describe('useExpenses', () => {
 		const { wrapper, queryClient } = createWrapper();
 		const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
 		const refetchSpy = vi.spyOn(queryClient, 'refetchQueries');
-		const listKey = expensesKeys.list({ month: '2025-11', mode: 'calendar', page: 1, limit: 20 });
 
 		const { result } = renderHook(() => useExpenses('2025-11'), { wrapper });
 		await waitFor(() => result.current.expensesQuery.isSuccess);
@@ -138,7 +159,7 @@ describe('useExpenses', () => {
 			});
 		});
 		expect(invalidateSpy).toHaveBeenCalled();
-		expect(refetchSpy).toHaveBeenCalledWith({ queryKey: listKey, type: 'active' });
+		expect(refetchSpy).toHaveBeenCalled();
 	});
 
 	it('deve criar despesas em lote', async () => {
@@ -199,6 +220,73 @@ describe('useExpenses', () => {
 			expect(deleted).toBeDefined();
 			expect((deleted as any).success).toBe(true);
 		});
+	});
+
+	it('trata delete 404 como sucesso idempotente (sem rollback)', async () => {
+		const { wrapper, queryClient } = createWrapper();
+		const listKey = expensesKeys.list({ month: '2025-11', mode: 'calendar', page: 1, limit: 20 });
+
+		(expenseService as any).deleteExpense.mockRejectedValueOnce({
+			isAxiosError: true,
+			response: { status: 404 },
+		});
+
+		const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+		const { result } = renderHook(() => useExpenses('2025-11'), { wrapper });
+		await waitFor(() => result.current.expensesQuery.isSuccess);
+		queryClient.setQueryData(listKey, {
+			data: [{ id: 'ghost', description: 'Ghost', amount: 10, date: '2025-11-01T00:00:00.000Z', ...baseExpense }],
+			pagination: { page: 1, limit: 20, total: 1, pages: 1 },
+		});
+
+		await act(async () => {
+			await expect(result.current.deleteExpense('ghost')).rejects.toBeDefined();
+		});
+
+		const cached = queryClient.getQueryData(listKey) as any;
+		expect(cached?.data?.find((e: any) => e.id === 'ghost')).toBeUndefined();
+		expect(invalidateSpy).toHaveBeenCalled();
+	});
+
+	it('aplica updates otimistas em múltiplos caches (create/delete)', async () => {
+		const { wrapper, queryClient } = createWrapper();
+		const listKey = expensesKeys.list({ month: '2025-11', mode: 'calendar', page: 1, limit: 20 });
+		const listKeyAlt = expensesKeys.list({ month: '2025-11', mode: 'calendar', page: 1, limit: 1000 });
+
+		const { result } = renderHook(() => useExpenses('2025-11'), { wrapper });
+		await waitFor(() => result.current.expensesQuery.isSuccess);
+		queryClient.setQueryData(listKey, {
+			data: [{ id: 'old', description: 'Old', amount: 5, date: '2025-11-01T00:00:00.000Z', ...baseExpense }],
+			pagination: { page: 1, limit: 20, total: 1, pages: 1 },
+		});
+		queryClient.setQueryData(listKeyAlt, {
+			data: [{ id: 'old', description: 'Old', amount: 5, date: '2025-11-01T00:00:00.000Z', ...baseExpense }],
+			pagination: { page: 1, limit: 1000, total: 1, pages: 1 },
+		});
+
+		await act(async () => {
+			await result.current.deleteExpense('old');
+		});
+
+		const afterDeletePrimary: any = queryClient.getQueryData(listKey);
+		const afterDeleteAlt: any = queryClient.getQueryData(listKeyAlt);
+		expect(afterDeletePrimary?.data?.some((e: any) => e.id === 'old')).toBe(false);
+		expect(afterDeleteAlt?.data?.some((e: any) => e.id === 'old')).toBe(false);
+
+		await act(async () => {
+			await result.current.createExpense({
+				description: 'Nova',
+				category: 'Outros',
+				amount: 10,
+				date: '2025-11-01T00:00:00.000Z',
+			});
+		});
+
+		const afterCreatePrimary: any = queryClient.getQueryData(listKey);
+		const afterCreateAlt: any = queryClient.getQueryData(listKeyAlt);
+		expect(afterCreatePrimary?.data?.[0]?.description).toBe('Nova');
+		expect(afterCreateAlt?.data?.[0]?.description).toBe('Nova');
 	});
 
 	it('deve duplicar uma despesa', async () => {

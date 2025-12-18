@@ -1,5 +1,6 @@
 import { Redis } from "@upstash/redis";
 import { createClient } from "redis";
+import { config } from "../config";
 import { sanitizeUrlForLog } from "./logger";
 
 type NodeRedisClient = ReturnType<typeof createClient>;
@@ -10,6 +11,11 @@ type RedisLike = {
   setex(key: string, ttlSeconds: number, value: string): Promise<"OK" | null>;
   del(...keys: string[]): Promise<number>;
   ping(): Promise<string>;
+  scan?: (
+    cursor: number | string,
+    options?: { match?: string; count?: number }
+  ) => Promise<[number | string, string[]]>;
+  keys?: (pattern: string) => Promise<string[]>;
 };
 
 class NodeRedisAdapter implements RedisLike {
@@ -60,6 +66,32 @@ class NodeRedisAdapter implements RedisLike {
     await this.ensureConnection();
     return this.client.ping();
   }
+
+  async scan(cursor: number | string, options?: { match?: string; count?: number }) {
+    await this.ensureConnection();
+    const scanOptions: Record<string, string | number> = {};
+    if (options?.match) scanOptions.MATCH = options.match;
+    if (options?.count) scanOptions.COUNT = options.count;
+
+    const result = await (this.client as any).scan(cursor, scanOptions);
+
+    if (Array.isArray(result)) {
+      const [nextCursor, keys] = result as [number | string, string[]];
+      return [String(nextCursor ?? '0'), keys ?? []];
+    }
+
+    if (result && typeof result === 'object' && 'cursor' in result && 'keys' in result) {
+      const { cursor: nextCursor, keys } = result as { cursor?: number | string; keys?: string[] };
+      return [String(nextCursor ?? '0'), keys ?? []];
+    }
+
+    return ['0', []];
+  }
+
+  async keys(pattern: string) {
+    await this.ensureConnection();
+    return (this.client as any).keys(pattern);
+  }
 }
 
 class UpstashRedisAdapter implements RedisLike {
@@ -80,13 +112,29 @@ class UpstashRedisAdapter implements RedisLike {
   ping() {
     return this.client.ping();
   }
+
+  async scan(cursor: number | string, options?: { match?: string; count?: number }) {
+    const result = await (this.client as any).scan(String(cursor), {
+      match: options?.match,
+      count: options?.count,
+    });
+    const [nextCursor, keys] = result as [number | string, string[]];
+    return [String(nextCursor ?? '0'), keys ?? []];
+  }
+
+  async keys(pattern: string) {
+    if (typeof (this.client as any).keys === 'function') {
+      return (this.client as any).keys(pattern);
+    }
+    throw new Error('Upstash Redis does not support KEYS; use scan instead.');
+  }
 }
 
 function buildNodeRedis(): RedisLike {
-  const host = process.env.REDIS_HOST ?? "redis";
-  const port = process.env.REDIS_PORT ?? "6379";
-  const url = process.env.REDIS_URL ?? `redis://${host}:${port}`;
-  const connectTimeout = Number(process.env.REDIS_CONNECT_TIMEOUT_MS ?? "15000");
+  const host = config.redisHost ?? "redis";
+  const port = config.redisPort ?? "6379";
+  const url = config.redisUrl ?? `redis://${host}:${port}`;
+  const connectTimeout = 15000;
 
   const client = createClient({
     url,
@@ -104,8 +152,9 @@ function buildNodeRedis(): RedisLike {
 }
 
 function buildUpstashRedis(): RedisLike {
-  const requiredEnv = ["UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN"] as const;
-  const missing = requiredEnv.filter((key) => !process.env[key]);
+  const missing: string[] = [];
+  if (!config.upstashRedisRestUrl) missing.push("UPSTASH_REDIS_REST_URL");
+  if (!config.upstashRedisRestToken) missing.push("UPSTASH_REDIS_REST_TOKEN");
 
   if (missing.length) {
     console.warn(
@@ -114,18 +163,18 @@ function buildUpstashRedis(): RedisLike {
   }
 
   const client = new Redis({
-    url: process.env.UPSTASH_REDIS_REST_URL!,
-    token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+    url: config.upstashRedisRestUrl!,
+    token: config.upstashRedisRestToken!,
   });
 
-  console.log(`[REDIS] Using Upstash REST at ${sanitizeUrlForLog(process.env.UPSTASH_REDIS_REST_URL)}`);
+  console.log(`[REDIS] Using Upstash REST at ${sanitizeUrlForLog(config.upstashRedisRestUrl)}`);
 
   return new UpstashRedisAdapter(client);
 }
 
-const nodeEnv = process.env.NODE_ENV ?? "development";
-const hasUpstash = Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
-const hasNodeRedis = Boolean(process.env.REDIS_URL || process.env.REDIS_HOST || process.env.REDIS_PORT);
+const nodeEnv = config.nodeEnv ?? "development";
+const hasUpstash = Boolean(config.upstashRedisRestUrl && config.upstashRedisRestToken);
+const hasNodeRedis = Boolean(config.redisUrl || config.redisHost || config.redisPort);
 
 if (nodeEnv === "production" && !hasUpstash && !hasNodeRedis) {
   throw new Error("Redis configuration is missing: set REDIS_URL (or REDIS_HOST/REDIS_PORT) or UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN");

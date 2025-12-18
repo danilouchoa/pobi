@@ -1,4 +1,5 @@
 import { format } from 'date-fns';
+import { config } from '../config';
 import { redis } from '../lib/redisClient';
 
 export type ExpenseViewMode = 'calendar' | 'billing';
@@ -29,28 +30,66 @@ type RedisWithScan = typeof redis & {
   keys?: (pattern: string) => Promise<string[]>;
 };
 
+const CACHE_DEBUG_ENABLED = config.cacheDebugEnabled;
+const DELETE_CHUNK_SIZE = 500;
+const SCAN_COUNT = 200;
+const MAX_SCAN_ITERATIONS = 10_000;
+
+const deleteInChunks = async (keys: string[]) => {
+  let deleted = 0;
+  for (let i = 0; i < keys.length; i += DELETE_CHUNK_SIZE) {
+    const slice = keys.slice(i, i + DELETE_CHUNK_SIZE);
+    deleted += await redis.del(...slice);
+  }
+  return deleted;
+};
+
 export async function deleteByPattern(pattern: string) {
   const client = redis as RedisWithScan;
+  let deletedCount = 0;
 
   if (typeof client.scan === 'function') {
-    let cursor: number = 0;
+    let cursor: string = '0';
+    let iterations = 0;
+
     do {
-      const [nextCursor, keys] = await client.scan(cursor, { match: pattern, count: 200 });
+      const [nextCursorRaw, keys] = await client.scan(cursor, { match: pattern, count: SCAN_COUNT });
+      const normalizedCursor = String(nextCursorRaw ?? '0');
+
       if (Array.isArray(keys) && keys.length) {
-        await redis.del(...keys);
+        deletedCount += await deleteInChunks(keys);
       }
-      cursor =
-        typeof nextCursor === 'string' ? Number.parseInt(nextCursor, 10) || 0 : Number(nextCursor);
-    } while (cursor !== 0);
-    return;
+
+      iterations += 1;
+
+      if (normalizedCursor === cursor || iterations >= MAX_SCAN_ITERATIONS) {
+        break;
+      }
+
+      cursor = normalizedCursor;
+    } while (cursor !== '0');
+
+    if (CACHE_DEBUG_ENABLED) {
+      console.log(`[CACHE INVALIDATE] pattern=${pattern} deletedKeys=${deletedCount}`);
+    }
+
+    return deletedCount;
   }
 
   if (typeof client.keys === 'function') {
     const keys = await client.keys(pattern);
     if (Array.isArray(keys) && keys.length) {
-      await redis.del(...keys);
+      deletedCount += await deleteInChunks(keys);
     }
+
+    if (CACHE_DEBUG_ENABLED) {
+      console.log(`[CACHE INVALIDATE] pattern=${pattern} deletedKeys=${deletedCount}`);
+    }
+
+    return deletedCount;
   }
+
+  return deletedCount;
 }
 
 export async function invalidateExpenseCache(

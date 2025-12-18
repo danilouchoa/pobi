@@ -27,6 +27,9 @@ const envSchema = z.object({
   REDIS_PORT: z.string().optional(),
   UPSTASH_REDIS_REST_URL: z.string().optional(),
   UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
+  EXPENSES_CACHE_ENABLED: z.enum(['true', 'false']).optional(),
+  EXPENSES_CACHE_TTL_SECONDS: z.string().optional(),
+  CACHE_DEBUG: z.enum(['true', 'false']).optional(),
   CORS_ORIGINS: z.string().optional(),
   RESEND_API_KEY: z.string().optional(),
   AUTH_EMAIL_FROM: z.string().trim().optional(),
@@ -187,6 +190,23 @@ const authEmailFrom =
 
 const emailVerificationBaseUrl = (parsedEnv.data.AUTH_VERIFY_URL_BASE ?? parsedEnv.data.FRONTEND_ORIGIN).replace(/\/$/, '');
 
+const expensesCacheEnabled = (() => {
+  const raw = parsedEnv.data.EXPENSES_CACHE_ENABLED;
+  if (raw === 'false') return false;
+  if (raw === 'true') return true;
+  return true;
+})();
+
+const expensesCacheTtlSeconds = (() => {
+  const raw = parsedEnv.data.EXPENSES_CACHE_TTL_SECONDS;
+  if (raw == null) return 3600;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) return 3600;
+  return parsed;
+})();
+
+const cacheDebugEnabled = parsedEnv.data.CACHE_DEBUG === 'true';
+
 export const config = {
   nodeEnv: parsedEnv.data.NODE_ENV,
   port: parsedEnv.data.PORT,
@@ -216,6 +236,9 @@ export const config = {
   authEmailFrom,
   resendFrom: parsedEnv.data.RESEND_FROM,
   emailVerificationBaseUrl,
+  expensesCacheEnabled,
+  expensesCacheTtlSeconds,
+  cacheDebugEnabled,
 };
 
 export const isCorsAllowed = (origin?: string): boolean => {

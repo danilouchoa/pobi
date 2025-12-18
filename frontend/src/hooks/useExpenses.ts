@@ -1,9 +1,11 @@
 import {
+  QueryKey,
   keepPreviousData,
   useMutation,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { isAxiosError } from "axios";
 import {
   bulkUpdateExpenses,
   bulkExpensesAction,
@@ -28,8 +30,13 @@ type Options = {
   limit?: number;
 };
 
+type OptimisticSnapshot = {
+  queryKey: QueryKey;
+  data: ExpensesResponse | undefined;
+};
+
 type OptimisticContext = {
-  previous: ExpensesResponse | undefined;
+  snapshots: OptimisticSnapshot[];
 };
 
 type CreateExpenseVariables = {
@@ -38,6 +45,36 @@ type CreateExpenseVariables = {
 
 type CreateExpenseBatchVariables = {
   payloads: ExpensePayload[];
+};
+
+type ListKeyMeta = {
+  month: string;
+  mode: "calendar" | "billing";
+  page: number;
+  limit: number;
+};
+
+const parseListKey = (queryKey: QueryKey): ListKeyMeta | null => {
+  if (!Array.isArray(queryKey)) return null;
+  const [root, scope, params] = queryKey;
+  if (root !== "expenses" || scope !== "list") return null;
+  if (!params || typeof params !== "object") return null;
+
+  const { month, mode = "calendar", page = 1, limit = 20 } = params as {
+    month?: string;
+    mode?: "calendar" | "billing";
+    page?: number;
+    limit?: number;
+  };
+
+  if (!month) return null;
+
+  return {
+    month,
+    mode,
+    page: Number.isFinite(page) && page ? page : 1,
+    limit: Number.isFinite(limit) && limit ? limit : 20,
+  };
 };
 
 const mergeExpenseWithPayload = (
@@ -98,6 +135,32 @@ export function useExpenses(month: string, options: Options = {}) {
   const recurringKey = expensesKeys.recurring();
   const sharedKey = expensesKeys.shared();
 
+  const expenseQueryPredicate = ({ queryKey: key }: { queryKey: QueryKey }) => {
+    const meta = parseListKey(key);
+    if (!meta) return false;
+    if (meta.month !== month) return false;
+    if ((meta.mode ?? "calendar") !== mode) return false;
+    return true;
+  };
+
+  const listQueriesForCurrentView = () =>
+    queryClient
+      .getQueriesData<ExpensesResponse>({ predicate: expenseQueryPredicate })
+      .map(([key, data]) => ({ queryKey: key, data, meta: parseListKey(key)! }));
+
+  const captureSnapshots = (): OptimisticSnapshot[] =>
+    listQueriesForCurrentView().map(({ queryKey, data }) => ({ queryKey, data }));
+
+  const applyToListQueries = (
+    updater: (current: ExpensesResponse | undefined, meta: ListKeyMeta) => ExpensesResponse | undefined
+  ) => {
+    const entries = listQueriesForCurrentView();
+    entries.forEach(({ queryKey, meta }) => {
+      queryClient.setQueryData<ExpensesResponse | undefined>(queryKey, (old) => updater(old, meta));
+    });
+    return entries.map(({ queryKey, data }) => ({ queryKey, data }));
+  };
+
   const toMonth = (value?: string | null) => (value ? value.slice(0, 7) : "");
 
   const matchesCurrentView = (expense: { date?: string; billingMonth?: string | null }) => {
@@ -108,8 +171,10 @@ export function useExpenses(month: string, options: Options = {}) {
   };
 
   const rollback = (ctx?: OptimisticContext) => {
-    if (!ctx?.previous) return;
-    queryClient.setQueryData<ExpensesResponse | undefined>(queryKey, ctx.previous);
+    if (!ctx?.snapshots?.length) return;
+    ctx.snapshots.forEach(({ queryKey: key, data }) => {
+      queryClient.setQueryData<ExpensesResponse | undefined>(key, data);
+    });
   };
 
   const expensesQuery = useQuery({
@@ -132,38 +197,28 @@ export function useExpenses(month: string, options: Options = {}) {
     enabled: false,
   });
 
-  const invalidateAll = async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: expensesKeys.all }),
-      queryClient.invalidateQueries({ queryKey: monthKey }),
-      queryClient.invalidateQueries({ queryKey: recurringKey }),
-      queryClient.invalidateQueries({ queryKey: sharedKey }),
-    ]);
-  };
-
-  const refetchActiveList = async () => {
-    await queryClient.refetchQueries({ queryKey, type: "active" });
-  };
-
-  const invalidateAndRefetch = async () => {
-    await invalidateAll();
-    await refetchActiveList();
+  const invalidateExpensesForMonth = async () => {
+    await queryClient.invalidateQueries({ predicate: expenseQueryPredicate, refetchType: "inactive" });
+    await queryClient.invalidateQueries({ queryKey: monthKey, refetchType: "inactive" });
+    await queryClient.invalidateQueries({ queryKey: recurringKey, refetchType: "inactive" });
+    await queryClient.invalidateQueries({ queryKey: sharedKey, refetchType: "inactive" });
   };
 
   const createMutation = useMutation({
     mutationFn: ({ payload }: CreateExpenseVariables) => createExpense(payload),
     onMutate: async ({ payload }: CreateExpenseVariables) => {
-      await queryClient.cancelQueries({ queryKey });
-      const previous = queryClient.getQueryData<ExpensesResponse | undefined>(queryKey);
-      if (page === 1 && matchesCurrentView({ date: payload.date, billingMonth: (payload as any)?.billingMonth ?? null })) {
+      await queryClient.cancelQueries({ predicate: expenseQueryPredicate });
+      const snapshots = captureSnapshots();
+
+      if (matchesCurrentView({ date: payload.date, billingMonth: (payload as any)?.billingMonth ?? null })) {
         const optimistic = buildOptimisticExpense(payload, mode, month);
-        queryClient.setQueryData<ExpensesResponse | undefined>(queryKey, (old: ExpensesResponse | undefined) => {
+        applyToListQueries((old, meta) => {
           const base: ExpensesResponse =
             old ?? {
               data: [],
-              pagination: { page: 1, limit, total: 0, pages: 1 },
+              pagination: { page: meta.page, limit: meta.limit, total: 0, pages: 1 },
             };
-          const limitCap = base.pagination.limit ?? limit;
+          const limitCap = base.pagination.limit ?? meta.limit;
           const nextTotal = base.pagination.total + 1;
           const nextPages = Math.max(1, Math.ceil(nextTotal / limitCap));
           return {
@@ -176,19 +231,21 @@ export function useExpenses(month: string, options: Options = {}) {
           };
         });
       }
-      return { previous };
+      return { snapshots };
     },
     onError: (_err: unknown, _vars: CreateExpenseVariables, ctx?: OptimisticContext) => rollback(ctx),
     onSuccess: async (created: Expense) => {
-      if (page === 1 && matchesCurrentView(created)) {
-        queryClient.setQueryData<ExpensesResponse | undefined>(queryKey, (old) => {
+      if (matchesCurrentView(created)) {
+        applyToListQueries((old, meta) => {
           const base: ExpensesResponse =
             old ?? {
               data: [],
-              pagination: { page: 1, limit, total: 0, pages: 1 },
+              pagination: { page: meta.page, limit: meta.limit, total: 0, pages: 1 },
             };
-          const limitCap = base.pagination.limit ?? limit;
-          const filtered = base.data.filter((expense) => expense.id !== created.id && !expense.id.startsWith("temp-"));
+          const limitCap = base.pagination.limit ?? meta.limit;
+          const filtered = base.data.filter(
+            (expense) => expense.id !== created.id && !expense.id.startsWith("temp-")
+          );
           const nextData = [created, ...filtered].slice(0, limitCap);
           const nextTotal = Math.max(base.pagination.total, filtered.length + 1);
           const nextPages = Math.max(1, Math.ceil(nextTotal / limitCap));
@@ -202,7 +259,7 @@ export function useExpenses(month: string, options: Options = {}) {
           };
         });
       }
-      await invalidateAndRefetch();
+      await invalidateExpensesForMonth();
     },
   });
 
@@ -210,9 +267,9 @@ export function useExpenses(month: string, options: Options = {}) {
     mutationFn: ({ id, payload }: { id: string; payload: ExpensePayload }) =>
       updateExpense(id, payload),
     onMutate: async ({ id, payload }: { id: string; payload: ExpensePayload }) => {
-      await queryClient.cancelQueries({ queryKey });
-      const previous = queryClient.getQueryData<ExpensesResponse | undefined>(queryKey);
-      queryClient.setQueryData<ExpensesResponse | undefined>(queryKey, (old: ExpensesResponse | undefined) => {
+      await queryClient.cancelQueries({ predicate: expenseQueryPredicate });
+      const snapshots = captureSnapshots();
+      applyToListQueries((old) => {
         if (!old) return old;
         return {
           ...old,
@@ -221,34 +278,33 @@ export function useExpenses(month: string, options: Options = {}) {
           ),
         };
       });
-      return { previous };
+      return { snapshots };
     },
     onError: (_err: unknown, _vars: { id: string; payload: ExpensePayload }, ctx?: OptimisticContext) =>
       rollback(ctx),
     onSuccess: async (updated: Expense) => {
-      queryClient.setQueryData<ExpensesResponse | undefined>(queryKey, (old) => {
+      applyToListQueries((old) => {
         if (!old) return old;
         return {
           ...old,
           data: old.data.map((expense) => (expense.id === updated.id ? updated : expense)),
         };
       });
-      await invalidateAndRefetch();
+      await invalidateExpensesForMonth();
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteExpense(id),
     onMutate: async (id: string) => {
-      await queryClient.cancelQueries({ queryKey });
-      const previous = queryClient.getQueryData<ExpensesResponse | undefined>(queryKey);
-      queryClient.setQueryData<ExpensesResponse | undefined>(queryKey, (old: ExpensesResponse | undefined) => {
+      await queryClient.cancelQueries({ predicate: expenseQueryPredicate });
+      const snapshots = applyToListQueries((old, meta) => {
         if (!old) return old;
         const nextData = old.data.filter((expense: Expense) => expense.id !== id);
         if (nextData.length === old.data.length) {
           return old;
         }
-        const limitCap = old.pagination.limit ?? limit;
+        const limitCap = old.pagination.limit ?? meta.limit;
         const nextTotal = Math.max(0, old.pagination.total - 1);
         const nextPages = Math.max(1, Math.ceil(nextTotal / limitCap));
         const nextPage = Math.min(old.pagination.page, nextPages);
@@ -262,10 +318,16 @@ export function useExpenses(month: string, options: Options = {}) {
           },
         };
       });
-      return { previous };
+      return { snapshots };
     },
-    onError: (_err: unknown, _vars: string, ctx?: OptimisticContext) => rollback(ctx),
-    onSuccess: invalidateAndRefetch,
+    onError: async (err: unknown, _vars: string, ctx?: OptimisticContext) => {
+      if (isAxiosError(err) && err.response?.status === 404) {
+        await invalidateExpensesForMonth();
+        return;
+      }
+      rollback(ctx);
+    },
+    onSuccess: invalidateExpensesForMonth,
   });
 
   const duplicateMutation = useMutation({
@@ -276,26 +338,26 @@ export function useExpenses(month: string, options: Options = {}) {
       id: string;
       options?: { incrementMonth?: boolean; customDate?: string };
     }) => duplicateExpense(id, duplicateOptions),
-    onSuccess: invalidateAndRefetch,
+    onSuccess: invalidateExpensesForMonth,
   });
 
   const createBatchMutation = useMutation({
     mutationFn: ({ payloads }: CreateExpenseBatchVariables) => createExpensesBatch(payloads),
     onMutate: async ({ payloads }: CreateExpenseBatchVariables) => {
-      await queryClient.cancelQueries({ queryKey });
-      const previous = queryClient.getQueryData<ExpensesResponse | undefined>(queryKey);
+      await queryClient.cancelQueries({ predicate: expenseQueryPredicate });
+      const snapshots = captureSnapshots();
 
       if (page === 1 && payloads.length) {
         const optimisticItems = payloads
           .filter((payload) => matchesCurrentView({ date: payload.date, billingMonth: (payload as any)?.billingMonth ?? null }))
           .map((payload: ExpensePayload) => buildOptimisticExpense(payload, mode, month));
-        queryClient.setQueryData<ExpensesResponse | undefined>(queryKey, (old: ExpensesResponse | undefined) => {
+        applyToListQueries((old, meta) => {
           const base: ExpensesResponse =
             old ?? {
               data: [],
-              pagination: { page: 1, limit, total: 0, pages: 1 },
+              pagination: { page: meta.page, limit: meta.limit, total: 0, pages: 1 },
             };
-          const limitCap = base.pagination.limit ?? limit;
+          const limitCap = base.pagination.limit ?? meta.limit;
           const nextTotal = base.pagination.total + optimisticItems.length;
           const nextPages = Math.max(1, Math.ceil(nextTotal / limitCap));
           return {
@@ -309,20 +371,20 @@ export function useExpenses(month: string, options: Options = {}) {
         });
       }
 
-      return { previous };
+      return { snapshots };
     },
     onError: (_err: unknown, _vars: CreateExpenseBatchVariables, ctx?: OptimisticContext) => rollback(ctx),
     onSuccess: async (createdExpenses: Expense[]) => {
       if (page === 1 && createdExpenses.length) {
         const visible = createdExpenses.filter((expense) => matchesCurrentView(expense));
         if (visible.length) {
-          queryClient.setQueryData<ExpensesResponse | undefined>(queryKey, (old) => {
+          applyToListQueries((old, meta) => {
             const base: ExpensesResponse =
               old ?? {
                 data: [],
-                pagination: { page: 1, limit, total: 0, pages: 1 },
+                pagination: { page: meta.page, limit: meta.limit, total: 0, pages: 1 },
               };
-            const limitCap = base.pagination.limit ?? limit;
+            const limitCap = base.pagination.limit ?? meta.limit;
             const filtered = base.data.filter((expense) => !expense.id.startsWith("temp-"));
             const nextData = [...visible, ...filtered].slice(0, limitCap);
             const nextTotal = Math.max(base.pagination.total, filtered.length + visible.length);
@@ -338,23 +400,23 @@ export function useExpenses(month: string, options: Options = {}) {
           });
         }
       }
-      await invalidateAndRefetch();
+      await invalidateExpensesForMonth();
     },
   });
 
   const createRecurringMutation = useMutation({
     mutationFn: (payload: ExpensePayload) => createRecurringExpense(payload),
-    onSuccess: invalidateAndRefetch,
+    onSuccess: invalidateExpensesForMonth,
   });
 
   const bulkUpdateMutation = useMutation({
     mutationFn: bulkUpdateExpenses,
-    onSuccess: invalidateAndRefetch,
+    onSuccess: invalidateExpensesForMonth,
   });
 
   const bulkActionMutation = useMutation({
     mutationFn: bulkExpensesAction,
-    onSuccess: invalidateAndRefetch,
+    onSuccess: invalidateExpensesForMonth,
   });
 
   const pagination: Pagination =

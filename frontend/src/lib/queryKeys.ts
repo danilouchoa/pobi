@@ -10,6 +10,9 @@ export type ExpenseMonthKeyArgs = {
   mode?: "calendar" | "billing";
 };
 
+// Expense keys follow a stable shape for predicates across variants (mode/page/limit):
+// ['expenses', 'list', { month, mode, page, limit }]
+// ['expenses', 'month', { month, mode }]
 export const expensesKeys = {
   all: ["expenses"] as const,
   list: ({ month, mode = "calendar", page = 1, limit = 20 }: ExpenseListKeyArgs) =>

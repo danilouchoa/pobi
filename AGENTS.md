@@ -141,6 +141,7 @@ g
 | | | | | | | |Modal com confirmação clara antes da deleção.| | | | |
 | | | | | | | |Próximos passos: finalizar delete unitário e ruleset do bulk delete.| | | | |
 | | | |27|[Security/DX] Toggle de Segurança Dev vs Prod|🟡 Em progresso|Introduzir flag SECURITY_MODE para alternar entre modo relaxado (dev) e estrito (prod).|Estrutura conceitual definida; Express 5 exige remoção total de rotas wildcard.| | | | |
+| | | |28|[UX-09A] Cache Consistency (Expenses)|🟡 Em progresso|Garantir invalidação de cache de despesas com SCAN/keys e UI atualizando imediatamente em create/delete.|Key files: backend/src/lib/redisClient.ts, backend/src/utils/expenseCache.ts, backend/src/routes/expenses.ts, frontend/src/hooks/useExpenses.ts, frontend/src/lib/queryKeys.ts.|Verificação: criar/deletar despesa reflete na hora; logs mostram CACHE MISS após mutação; logout/login não exibe itens fantasmas.| | |
 | | | | | | | |Garantir CORS+helmet funcionais em modo relaxado sem quebrar build.| |Necessário aplicar CORS global sem app.options(*).|Implementar SECURITY_MODE="relaxed" (CORS aberto) e "strict" (CORS restrito + rate limiting).| |
 
 ## 2025-11-22 - Mongo replica set para Prisma

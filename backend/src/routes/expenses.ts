@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { PrismaClient, Origin, Expense, Prisma } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { addMonths, startOfMonth, format } from 'date-fns';
+import { config } from '../config';
 import {
   addByRecurrence,
   buildCreateData,
@@ -39,6 +40,9 @@ import {
 
 // Timeout para transações de batch (suporta até MAX_BATCH_SIZE parcelas)
 const BATCH_TRANSACTION_TIMEOUT_MS = 30000; // 30 segundos
+const EXPENSES_CACHE_ENABLED = config.expensesCacheEnabled;
+const EXPENSES_CACHE_TTL_SECONDS = config.expensesCacheTtlSeconds;
+const SHOULD_CACHE_EXPENSES = EXPENSES_CACHE_ENABLED && EXPENSES_CACHE_TTL_SECONDS > 0;
 
 const generateInstallmentGroupId = () => randomBytes(12).toString('hex');
 
@@ -116,6 +120,20 @@ const serializeExpense = (expense: any) => ({
 export default function expensesRoutes(prisma: PrismaClient) {
   const router = Router();
 
+  router.use((_req, res, next) => {
+    res.set('Cache-Control', 'private, no-store');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    next();
+  });
+
+  const maybeCacheExpenses = async <T>(cacheKey: string, fetcher: () => Promise<T>) => {
+    if (!SHOULD_CACHE_EXPENSES) {
+      return fetcher();
+    }
+    return getOrSetCache(cacheKey, fetcher, EXPENSES_CACHE_TTL_SECONDS);
+  };
+
   router.get('/', validate({ query: queryExpenseSchema }), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const userId = req.userId;
@@ -141,7 +159,7 @@ export default function expensesRoutes(prisma: PrismaClient) {
         }
 
         const cacheKey = buildExpenseCacheKey(userId, monthQuery, 'billing', page, limit);
-        const expenses = await getOrSetCache(cacheKey, async () => {
+        const expenses = await maybeCacheExpenses(cacheKey, async () => {
           const where = { userId, billingMonth: monthQuery };
           const [items, total] = await prisma.$transaction([
             prisma.expense.findMany({
@@ -206,7 +224,7 @@ export default function expensesRoutes(prisma: PrismaClient) {
 
       const monthKey = format(start, 'yyyy-MM');
       const cacheKey = buildExpenseCacheKey(userId, monthKey, 'calendar', page, limit);
-      const expenses = await getOrSetCache(cacheKey, async () => {
+      const expenses = await maybeCacheExpenses(cacheKey, async () => {
         const [items, total] = await prisma.$transaction([
           prisma.expense.findMany({ where, orderBy: { date: 'desc' }, skip: (page - 1) * limit, take: limit }),
           prisma.expense.count({ where }),
