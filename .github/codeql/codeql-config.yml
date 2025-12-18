@@ -1,0 +1,56 @@
+# CodeQL Configuration for POBI Project
+# Custom security queries and analysis settings
+#
+# Documentation: https://docs.github.com/en/code-security/code-scanning/creating-an-advanced-setup-for-code-scanning/customizing-your-advanced-setup-for-code-scanning
+
+name: "POBI Security Analysis"
+
+# Disable default queries to use only custom ones
+disable-default-queries: false
+
+# Query packs to run
+queries:
+  # Security-focused queries
+  - uses: security-extended
+  - uses: security-and-quality
+
+# Paths to analyze
+paths:
+  - backend/src
+  - frontend/src
+
+# Paths to ignore
+paths-ignore:
+  - "**/__tests__"
+  - "**/coverage"
+  - "**/dist"
+  - "**/build"
+  - "**/node_modules"
+  - "**/*.test.ts"
+  - "**/*.test.tsx"
+  - "**/*.spec.ts"
+  - "**/*.spec.tsx"
+  - "**/stories"
+  - "**/.storybook"
+  - "**/storybook-static"
+  - "**/*.md"
+
+# Query filters - focus on high/medium severity
+query-filters:
+  - include:
+      kind:
+        - problem
+        - path-problem
+      tags contain:
+        - security
+        - external/cwe
+  - exclude:
+      tags contain:
+        - experimental
+
+# Analysis configuration
+# Increase timeout for complex analysis
+timeout: 120
+
+# Enable additional checks
+extended-check: true

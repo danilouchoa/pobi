@@ -1,0 +1,102 @@
+# name: Deploy Dev
+
+# on:
+#   push:
+#     branches:
+#       - main
+
+# permissions:
+#   id-token: write
+#   contents: read
+
+# jobs:
+#   build-and-push:
+#     runs-on: ubuntu-latest
+#     environment: dev
+#     outputs:
+#       backend_tag: ${{ steps.meta.outputs.backend_tag }}
+#       frontend_tag: ${{ steps.meta.outputs.frontend_tag }}
+#     env:
+#       AWS_REGION: us-east-1
+#     steps:
+#       - name: Checkout repository
+#         uses: actions/checkout@v4
+
+#       - name: Configure AWS credentials (OIDC)
+#         uses: aws-actions/configure-aws-credentials@v4
+#         with:
+#           role-to-assume: ${{ secrets.AWS_IAM_ROLE }}
+#           aws-region: ${{ env.AWS_REGION }}
+
+#       - name: Login to ECR
+#         run: |
+#           aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin ${{ secrets.AWS_ECR_REGISTRY }}
+
+#       - name: Prepare image tags
+#         id: meta
+#         run: |
+#           TAG=${GITHUB_SHA}
+#           echo "backend_tag=$TAG" >> $GITHUB_OUTPUT
+#           echo "frontend_tag=$TAG" >> $GITHUB_OUTPUT
+
+#       - name: Build backend image
+#         run: |
+#           docker build ./backend \
+#             -t ${{ secrets.AWS_ECR_REGISTRY }}/pobi-backend:${{ steps.meta.outputs.backend_tag }}
+
+#       - name: Push backend image
+#         run: |
+#           docker push ${{ secrets.AWS_ECR_REGISTRY }}/pobi-backend:${{ steps.meta.outputs.backend_tag }}
+
+#       - name: Build frontend image
+#         run: |
+#           docker build ./frontend \
+#             -t ${{ secrets.AWS_ECR_REGISTRY }}/pobi-frontend:${{ steps.meta.outputs.frontend_tag }}
+
+#       - name: Push frontend image
+#         run: |
+#           docker push ${{ secrets.AWS_ECR_REGISTRY }}/pobi-frontend:${{ steps.meta.outputs.frontend_tag }}
+
+#   deploy-argocd:
+#     runs-on: ubuntu-latest
+#     needs: build-and-push
+#     environment: dev
+#     steps:
+#       - name: Install ArgoCD CLI
+#         run: |
+#           curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/download/v2.11.6/argocd-linux-amd64
+#           chmod +x /usr/local/bin/argocd
+
+#       - name: ArgoCD login
+#         run: |
+#           argocd login ${{ secrets.ARGOCD_SERVER }} \
+#             --username ${{ secrets.ARGOCD_USERNAME }} \
+#             --password ${{ secrets.ARGOCD_PASSWORD }} \
+#             --insecure
+
+#       - name: Update backend application
+#         run: |
+#           argocd app set finfy-backend \
+#             --helm-set image.repository=${{ secrets.AWS_ECR_REGISTRY }}/pobi-backend \
+#             --helm-set image.tag=${{ needs.build-and-push.outputs.backend_tag }}
+
+#       - name: Update frontend application
+#         run: |
+#           argocd app set finfy-frontend \
+#             --helm-set image.repository=${{ secrets.AWS_ECR_REGISTRY }}/pobi-frontend \
+#             --helm-set image.tag=${{ needs.build-and-push.outputs.frontend_tag }}
+
+#       - name: Sync backend application
+#         run: |
+#           argocd app sync finfy-backend
+#           argocd app wait finfy-backend --health --timeout 300
+
+#       - name: Sync frontend application
+#         run: |
+#           argocd app sync finfy-frontend
+#           argocd app wait finfy-frontend --health --timeout 300
+
+#       - name: Smoke tests
+#         run: |
+#           curl -f https://app.finfy.me/login
+#           curl -f https://app.finfy.me/api/health

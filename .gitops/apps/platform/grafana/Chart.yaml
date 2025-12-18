@@ -1,0 +1,7 @@
+apiVersion: v2
+name: grafana-wrapper
+version: 0.1.0
+dependencies:
+  - name: grafana
+    version: "*"
+    repository: https://grafana.github.io/helm-charts

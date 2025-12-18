@@ -1,0 +1,250 @@
+# Sheet1
+
+|codex_memory| | | | | | | | | | | |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+|project|version|description|milestones| | | | |last_action|session_achievements|next_steps|commit_template|
+| | | |id|tag|status|summary|notes| | | | |
+|Finance App Project|v6.7.0 (Parcelas Agrupadas + UX de Exclusão Segura)|Aplicação fullstack de controle financeiro (React + Express + Prisma + MongoDB + RabbitMQ + Upstash Redis + httpOnly Cookies), com foco em modularização, segurança, resiliência, validação robusta, autenticação segura e agora com fluxo de parcelas agrupadas (installment_group_id) e exclusão segura no frontend.|0|[BUG] Fatura de Cartão (closingDay + dia útil + billingMonth)|🟢 Concluído (Backend)|Classificar despesas de cartão na fatura correta com base no dia de fechamento (ajustado para dia útil), gravando billingMonth automaticamente.|Schema Origin com closingDay e billingRolloverPolicy (NEXT"|PREVIOUS).|Sessões até 18/11/2025: consolidadas integrações de segurança/CI (Qodana, gestão de secrets, pipelines estáveis) e iniciada refatoração da UX de exclusão de parcelas com foco em agrupamento por installment_group_id. Identificado bug no backend onde parcelas parceladas ainda são persistidas com installment_group_id nulo, apesar da lógica de agrupamento planejada.|Refinada a memória do projeto para refletir v6.7.0 com foco em parcelas agrupadas e exclusão segura.|Corrigir o fluxo de criação de despesas parceladas no backend para gerar um único installment_group_id e reutilizá-lo em todas as parcelas do mesmo lançamento.|• [Feature/Refactor/Fix/Security] Descrição da mudança. • Relacionado ao(s) Milestone(s): #[ID] • Verificado por: Qodana/Snyk/Semgrep/ZAP|
+| | | | | | | |Campo Expense.billingMonth (YYYY-MM) com índice por userId + billingMonth.| |Definida a UX de exclusão de parcelas: seleção múltipla, validação de agrupamento e confirmação via modal.|Conectar o frontend à API de deleção de parcelas por agrupamento, garantindo que apenas parcelas com o mesmo installment_group_id sejam enviadas.| |
+| | | | | | | |Helpers deriveBillingMonth() e adjustToBusinessDay() implementados no backend.| |Conectado o fluxo de exclusão de parcelas à camada de toasts e feedback visual existente.|Implementar testes unitários e de integração para useSelectedInstallments/useDeleteInstallments e para o endpoint de deleção em massa.| |
+| | | | | | | |POST/PUT /api/expenses calculam billingMonth automaticamente; GET com mode=billing funcional.| |Diagnosticado o problema de backend que persiste installment_group_id como null em lançamentos parcelados, direcionando o próximo passo para correção da lógica de criação.|Revalidar os impactos da exclusão de parcelas no billingMonth, cache Redis e relatórios mensais.| |
+| | | | | | | |Script de backfill para preencher billingMonth retroativo.| | |Aprofundar a integração dos scanners Semgrep/Snyk/ZAP na pipeline de segurança, fechando o ciclo de v6.7.0.| |
+| | | | | | | |Enum de policy migrado e documentado em MIGRATION_ENUM_BILLING.md.| | |Planejar o ajuste de versão futura (ex.: v6.8.0) focada na estabilização completa de billing e cartões.| |
+| | | | | | | |Frontend atualizado para lidar com NEXT/PREVIOUS nas origens.| | | | |
+| | | | | | | |Frontend para mode=billing e UI de agrupamento por fatura ainda em evolução.| | | | |
+| | | |1|[BUG] Replicação e idempotência|🟢 Resolvido|Eliminar duplicações de lançamentos recorrentes garantindo idempotência.|Fingerprint único por recorrência com índice único no banco.| | | | |
+| | | | | | | |Backfill idempotente executado sem criar duplicados.| | | | |
+| | | | | | | |Critério de aceite: reprocessar fila sem gerar lançamentos repetidos.| | | | |
+| | | |2|[DB] Float → String precision|🟢 Concluído|Evitar erros de arredondamento em valores monetários usando string ao invés de float.|Valores monetários persistidos como string ('0.00') com parsing centralizado.| | | | |
+| | | | | | | |Helpers dedicados para conversão e comparação monetária determinística.| | | | |
+| | | | | | | |Testes cobrindo casos de arredondamento e soma de múltiplas parcelas.| | | | |
+| | | |3|[API] Security & Config ENV|🟢 Concluído|Endurecer configuração e headers de segurança na API.|Validação de ENVs críticos com Zod.| | | | |
+| | | | | | | |Helmet configurado com headers de segurança padrão.| | | | |
+| | | | | | | |CORS dinâmico com allowlist por ambiente.| | | | |
+| | | | | | | |Boot da aplicação falha se ENVs obrigatórios estiverem ausentes.| | | | |
+| | | |4|[Worker] RabbitMQ Robustness|🟢 Concluído|Resiliência no processamento assíncrono de jobs recorrentes.|Reconexão com backoff exponencial.| | | | |
+| | | | | | | |Uso de ConfirmChannel e prefetch(10).| | | | |
+| | | | | | | |Shutdown limpo dos workers.| | | | |
+| | | | | | | |Critério de aceite: worker estável em cenários de queda do broker.| | | | |
+| | | |5|[API] Índices e filtros UTC|🟢 Implementado|Normalizar consultas mensais por UTC para evitar desvios de timezone.|Índices criados por userId + date.| | | | |
+| | | | | | | |Filtros mensais utilizando Date.UTC centralizado.| | | | |
+| | | | | | | |Mesma query retorna os mesmos dados independentemente do timezone do host.| | | | |
+| | | |6|[FE] MUI Only Theme|🟢 Implementado|Unificar o design system em MUI, removendo resíduos de Tailwind.|ThemeProvider central com paleta e tipografia padronizadas.| | | | |
+| | | | | | | |Componentes migrados para MUI; classes Tailwind removidas.| | | | |
+| | | | | | | |UI consistente nas principais telas (dashboard, lançamentos, cadastros).| | | | |
+| | | |7|[FE] Hooks Tipados + Query Cache|🟢 Concluído|Refatorar useFinanceApp em hooks modulares com TanStack Query e serviços REST tipados.|Hooks criados: useExpenses, useCatalogs, useSalary, etc.| | | | |
+| | | | | | | |Query keys centralizadas em queryKeys.ts.| | | | |
+| | | | | | | |Axios com interceptors e tipagem forte de DTOs.| | | | |
+| | | | | | | |Cache por mês com invalidação após mutações.| | | | |
+| | | |8|[FE/BE] Navegação mensal + Cache Redis + Build Estabilizado|🟢 Concluído|Navegação temporal suave, cache distribuído em Redis e build Docker estável com Prisma.|MonthNavigator com animações (Framer Motion).| | | | |
+| | | | | | | |Upstash Redis por usuário/mês com logs de [CACHE HIT/MISS].| | | | |
+| | | | | | | |Docker multi-stage com prisma generate no builder e assets corretos no runtime.| | | | |
+| | | | | | | |Todos os containers com healthcheck saudável.| | | | |
+| | | |9|[FE] Toasts & Empty States|🟢 Concluído|Toasts consistentes e empty states padronizados em todas as telas CRUD.|notistack configurado globalmente com SnackbarProvider.| | | | |
+| | | | | | | |Hook useToast() com helpers success/error/info/warning e debounce.| | | | |
+| | | | | | | |Componente EmptyState reutilizável com título, descrição, CTA e ícone.| | | | |
+| | | | | | | |Erros de backend traduzidos em mensagens legíveis com mapBackendError().| | | | |
+| | | | | | | |Integrado em lançamentos, cadastros, salário e demais fluxos CRUD.| | | | |
+| | | |10|[DX] Healthchecks e Docker Prod|🟢 Concluído|Observabilidade básica e robustez de execução em contêineres.|Endpoint /api/health checando Mongo, Redis e RabbitMQ com latência.| | | | |
+| | | | | | | |Status HTTP 200/503 conforme saúde dos serviços.| | | | |
+| | | | | | | |Healthchecks Docker configurados para backend, workers e Mongo.| | | | |
+| | | | | | | |Depends_on com condition: service_healthy em docker-compose.| | | | |
+| | | | | | | |Endpoint /ready preparado para futuramente servir como readiness probe em Kubernetes.| | | | |
+| | | |11|[Security] Validação de Rota (Zod)|🟢 Concluído|Validação completa de entrada (body/query/params) usando Zod.|Schemas criados para expense, origin, auth, salary e catálogo.| | | | |
+| | | | | | | |Middleware genérico validation.ts aceitando body/query/params.| | | | |
+| | | | | | | |Feature flag VALIDATION_ENABLED para rollback rápido.| | | | |
+| | | | | | | |Erros 400 com payload padronizado e sem stack-trace.| | | | |
+| | | | | | | |Validações monetárias e de ObjectId centralizadas.| | | | |
+| | | | | | | |Sistema estabilizado após correções v6.2.1 (queryExpenseSchema, req.query).| | | | |
+| | | |13|[Security] Auth httpOnly Cookies|🟢 Concluído|Migração de localStorage para cookies httpOnly com tokens em memória e refresh automático.|Arquitetura de 2 tokens: access (memória, curto prazo) + refresh (cookie httpOnly, 7 dias).| | | | |
+| | | | | | | |Endpoints de auth (login, register, refresh, logout) com bcrypt + JWT.| | | | |
+| | | | | | | |CORS configurado com credentials: true; frontend usa withCredentials.| | | | |
+| | | | | | | |Proteção contra XSS (httpOnly) e CSRF (sameSite strict).| | | | |
+| | | | | | | |Documentação detalhada no README com fluxos e troubleshooting.| | | | |
+| | | |14|[BE] Dead Letter Queue (DLQ)|🟢 Concluído|DLQ implementada no RabbitMQ com retry, backoff e endpoints administrativos.|dead-letter-exchange configurado para filas críticas.| | | | |
+| | | | | | | |Retry automático com backoff exponencial antes de DLQ.| | | | |
+| | | | | | | |Endpoints admin para stats, listagem, reprocessamento e purge.| | | | |
+| | | | | | | |Proteção JWT nestes endpoints.| | | | |
+| | | | | | | |Workers bulk/recurring integrados à DLQ.| | | | |
+| | | |15|[Refactor] Service/Repository Layer|🟡 Planejado|Separar responsabilidades em rotas, services e repositories.|Rotas focadas em validação e orquestração.| | | | |
+| | | | | | | |Services contendo regras de negócio sem dependência direta de Prisma.| | | | |
+| | | | | | | |Repositories encapsulando acesso ao banco.| | | | |
+| | | | | | | |Refactor dependente da suíte de testes (#16) para segurança.| | | | |
+| | | |16|[DX] Testes Automatizados|🟢 Concluído (Base) / 🟡 Em expansão em parcelas|Testes automatizados backend/frontend com foco em estabilidade e confiança; suites específicas para fluxo de parcelas ainda em evolução.|Backend com Vitest + Supertest para rotas e serviços principais.| | | | |
+| | | | | | | |Frontend com React Testing Library + Vitest para componentes e hooks centrais.| | | | |
+| | | | | | | |Cobertura mínima de ~80% nas áreas críticas (auth, expenses, billing).| | | | |
+| | | | | | | |Mocks centralizados, clock global e seeds fixos.| | | | |
+| | | | | | | |Pendência: testes unitários e de integração específicos para useSelectedInstallments/useDeleteInstallments e exclusão agrupada de parcelas.| | | | |
+| | | |18|[Security] Autenticação Avançada (MFA + Google Login)|🟡 Planejado|Adicionar MFA e login social com Google OAuth2 sobre a base de httpOnly cookies.|Botão 'Entrar com o Google' previsto na tela de login.| | | | |
+| | | | | | | |Integração planejada com SDK oficial Google Sign-In.| | | | |
+| | | | | | | |Endpoint /auth/google para validação de token/código no backend.| | | | |
+| | | | | | | |MFA opcional via envio de OTP (ex.: Resend) planejado.| | | | |
+| | | | | | | |Critério de aceite: fluxo end-to-end funcional com Google e MFA opcional.| | | | |
+| | | |19|[DX] Atualização Automática de Dependências|🟢 Concluído|Dependabot diário com auto-label e auto-merge condicional.|dependabot.yml configurado para backend e frontend.| | | | |
+| | | | | | | |Labels automáticas para PRs de dependência.| | | | |
+| | | | | | | |Workflow de auto-merge condicionado a CI verde e checks de segurança.| | | | |
+| | | | | | | |Objetivo: manter libs críticas sempre atualizadas.| | | | |
+| | | |20|[DX] CI Pipeline (Backend & Frontend)|🟢 Concluído|Pipelines GitHub Actions para backend e frontend com lint, build, testes e proteção de branch.|Workflows separados para backend e frontend.| | | | |
+| | | | | | | |Node 20 com cache de dependências.| | | | |
+| | | | | | | |Execução de lint, build/tsc e testes com cobertura.| | | | |
+| | | | | | | |Checks requeridos antes de merge em main e integração com Dependabot.| | | | |
+| | | |21|[Security/DX] Qodana, Semgrep, Snyk e OWASP ZAP Integrados|🟡 Em progresso|Integração de ferramentas de análise estática e dinâmica de segurança (SAST/DAST) nos pipelines.|Qodana JS integrado em workflow dedicado com comentários em PR.| | | | |
+| | | | | | | |Findings iniciais mapeados (lint, possíveis secrets e má práticas).| | | | |
+| | | | | | | |Semgrep configurado para regras de injeção, SSRF, secrets e XSS (tuning em andamento).| | | | |
+| | | | | | | |Snyk integrado para análise de vulnerabilidades em dependências.| | | | |
+| | | | | | | |Planejada integração de ZAP para DAST em ambiente de staging.| | | | |
+| | | | | | | |Falhas High/Critical tendem a bloquear merge após calibração.| | | | |
+| | | | | | | |Documentação inicial em SECURITY_SCANNERS.md.| | | | |
+| | | |22|[Security] Gestão de Secrets e ENVs|🟢 Concluído (Fase 1)|Centralização de segredos em GitHub Secrets e padronização de .env.|Tokens, keys e conexões migrados para GitHub Secrets.| | | | |
+| | | | | | | |Workflows atualizados para consumir secrets em vez de valores hardcoded.| | | | |
+| | | | | | | |Template .env.example revisado com placeholders claros.| | | | |
+| | | | | | | |Logs de CI mascarando dados sensíveis.| | | | |
+| | | | | | | |Próxima fase: integração direta de secrets em manifests Kubernetes.| | | | |
+| | | |23|[CI/CD] Continuous Deployment no Kubernetes (OCI OKE)|🟡 Em Progresso|CD automatizado no cluster OKE com pipelines GitHub Actions.|Deploy via GitHub Actions com kubectl/Helm apontando para OKE.| | | | |
+| | | | | | | |Imagens publicadas no OCIR com autenticação por secrets.| | | | |
+| | | | | | | |Namespaces de staging e production definidos.| | | | |
+| | | | | | | |Estratégia básica de rollback via Helm/kubectl rollout.| | | | |
+| | | | | | | |GitOps pleno e Canary planejados para próxima fase.| | | | |
+| | | |24|[Security] GitOps & Canary Strategy|🟡 Planejado|Adotar GitOps (ArgoCD/FluxCD) com Canary Deploy em produção.|Meta de ter configuração declarativa de ambientes.| | | | |
+| | | | | | | |Canary deploy para promoções progressivas de versões.| | | | |
+| | | | | | | |Rollback automatizado baseado em métricas de saúde.| | | | |
+| | | | | | | |Integração futura com stack de observabilidade (Prometheus/Grafana/Loki).| | | | |
+| | | |25|[DX/Security] Código Seguro e Ocultação de Variáveis|🟢 Concluído|Remoção de secrets hardcoded e padronização de uso de process.env.|Variáveis sensíveis removidas do código e substituídas por ENVs.| | | | |
+| | | | | | | |Fixtures seguros para testes no lugar de credenciais de exemplo.| | | | |
+| | | | | | | |Repositório higienizado (histórico crítico sanitizado).| | | | |
+| | | | | | | |Guia SAFE_ENV_CODING_GUIDE.md documentando boas práticas.| | | | |
+| | | |26|[FE/BE] Parcelas Agrupadas + Exclusão Segura (installment_group_id)|🟡 Em Progresso (Frontend avançado, Backend ajustando agrupamento)|Implementar fluxo de criação e exclusão de parcelas com agrupamento por installment_group_id, garantindo UX fluida e segurança na deleção em lote.|Frontend refatorado para permitir seleção de uma ou múltiplas parcelas via checkboxes.| | | | |
+| | | | | | | |Botão de exclusão inteligente: adapta o rótulo para singular/plural conforme quantidade selecionada.| | | | |
+| | | | | | | |Validação no frontend para garantir que apenas parcelas com o mesmo installment_group_id sejam excluídas em conjunto.| | | | |
+| | | | | | | |Planejado modal de confirmação com resumo de quantidade de parcelas e agrupamento antes da deleção.| | | | |
+| | | | | | | |UX com toasts de sucesso/erro aproveitando infraestrutura do Milestone #9.| | | | |
+| | | | | | | |Bug identificado no backend: parcelas sendo criadas com installment_group_id = null; investigação focada no service de criação de despesas parceladas.| | | | |
+| | | | | | | |Próximos passos: corrigir geração única do installment_group_id no backend e criar testes unitários para useSelectedInstallments e useDeleteInstallments.| | | | |
+| | | | | | | |Objetivo final: exclusão em massa segura, coerente com billingMonth e sem riscos de apagar parcelas erradas.| | | | |
+# Sheet2
+g
+|codex_memory| | | | | | | | | | | |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+|project|version|description|milestones| | | | |last_action|session_achievements|next_steps|commit_template|
+| | | |id|tag|status|summary|notes| | | | |
+|Finance App Project|v6.7.1 (Hotfix: Exclusão Unitária vs Agrupada)|Aplicação fullstack de controle financeiro (React + Express + Prisma + MongoDB + RabbitMQ + Upstash Redis + httpOnly Cookies), com foco em modularização, segurança, resiliência, validação robusta, autenticação segura e fluxo de parcelas agrupadas.|0|[BUG] Fatura de Cartão (closingDay + dia útil + billingMonth)|🟢 Concluído (Backend)|Classificar despesas de cartão na fatura correta com base no dia de fechamento (ajustado para dia útil), gravando billingMonth automaticamente.|Schema Origin com closingDay e billingRolloverPolicy (NEXT / PREVIOUS).|Sessões até 19/11/2025: iniciada correção completa do fluxo de exclusão de parcelas. Identificado bug crítico: mesmo escolhendo “Excluir só esta parcela”, o backend executava delete em cascata, removendo todo o grupo. Diagnosticado que rotas e services utilizavam exclusivamente `deleteExpenseCascade`. Mapeado plano de correção com separação backend: delete unitário (novo) vs delete por grupo. Frontend precisará ajustar rótulos, modal e lógica do botão de bulk delete. Sessão atual: endurecido cache consistency (normalizeScanResult + deleteByPattern) e useExpenses (page/limit > 0, delete 404 idempotente, batch otimista cross-page); backend coverage e lint/test/build do frontend verdes.|Frontend já validado para abrir modal corretamente (ícone de lixeira). Backend pendente de ajuste do delete unitário. Planejada reescrita do fluxo de bulk delete garantindo consistência entre seleção parcial / seleção completa. Toggle de segurança (SECURITY_MODE) ainda pendente de implementação final.|Implementar `deleteSingleExpense()` no backend. Atualizar rota `DELETE /expenses/:id` para ação estritamente unitária. Manter `DELETE /expenses/group/:id` para exclusão integral. Reescrever `applyBulkDelete()` para interpretar corretamente grupos completos vs incompletos. Ajustar frontend para: (1) rótulo dinâmico, (2) modal correto, (3) diferenciação total/parcelada. Em seguida, validar Redis invalidation por item/grupo.|• [Feature/Refactor/Fix/Security] Descrição. • Relacionado ao(s) Milestone(s): #[ID] • Verificado por: Qodana/Snyk/Semgrep/ZAP|
+| | | | | | | |Campo Expense.billingMonth (YYYY-MM) com índice por userId + billingMonth.| |UX de exclusão granular definida.|Criar testes automatizados específicos para exclusão unitária e exclusão em grupo.| |
+| | | | | | | |Helpers deriveBillingMonth() e adjustToBusinessDay() implementados.| |Fluxo com toasts integrado; UX confirmada.|Revalidar impactos em billingMonth e no cache Redis após hotfix.| |
+| | | | | | | |POST/PUT /api/expenses calculam billingMonth automaticamente; GET com mode=billing funcional.| |Investigação concluída: backend errava ao sempre cascatar.|Conferir consistência entre deleções parciais vs integrais.| |
+| | | | | | | |Script de backfill para preencher billingMonth retroativo.| | |Aprimorar scanners Semgrep/Snyk/ZAP e incluir regras para cascatas indevidas.| |
+| | | | | | | |Enum migrado e documentado em MIGRATION_ENUM_BILLING.md.| | |Planejar incremento v6.8 com foco em billing resiliente.| |
+| | | | | | | |Frontend atualizado para NEXT/PREVIOUS.| | | | |
+| | | | | | | |UI de agrupamento de fatura ainda em evolução.| | | | |
+| | | |26|[FE/BE] Parcelas Agrupadas + Exclusão Segura (installment_group_id)|🟡 Em progresso (Frontend refinado / Backend corrigindo deleção)|Implementar fluxo de criação e exclusão de parcelas com agrupamento por installment_group_id, garantindo UX fluida e segurança na deleção.|Frontend implementou corretamente: modal para 1 parcela vs grupo, seleção múltipla com checkboxes, rótulo dinâmico em construção.| | | | |
+| | | | | | | |Botão de exclusão inteligente: adapta para singular/plural.| |Bug detectado: backend sempre apagava o grupo.|Backend deverá criar delete unitário e reescrever bulk delete.| |
+| | | | | | | |Validação para garantir que apenas parcelas do mesmo grupo sejam apagadas em conjunto.| |Fluxo real mapeado: granularidade por item, parcial, ou total.|Testar efeitos colaterais em billingMonth/Redis.| |
+| | | | | | | |Modal com confirmação clara antes da deleção.| | | | |
+| | | | | | | |Próximos passos: finalizar delete unitário e ruleset do bulk delete.| | | | |
+| | | |27|[Security/DX] Toggle de Segurança Dev vs Prod|🟡 Em progresso|Introduzir flag SECURITY_MODE para alternar entre modo relaxado (dev) e estrito (prod).|Estrutura conceitual definida; Express 5 exige remoção total de rotas wildcard.| | | | |
+| | | |28|[UX-09A] Cache Consistency (Expenses)|🟡 Em progresso|Garantir invalidação de cache de despesas com SCAN/keys e UI atualizando imediatamente em create/delete.|Key files: backend/src/lib/redisClient.ts, backend/src/utils/expenseCache.ts, backend/src/routes/expenses.ts, frontend/src/hooks/useExpenses.ts, frontend/src/lib/queryKeys.ts.|Verificação: criar/deletar despesa reflete na hora; logs mostram CACHE MISS após mutação; logout/login não exibe itens fantasmas.|Session: normalizeScanResult + deleteByPattern reescritos; useExpenses valida page/limit > 0, trata delete 404 como sucesso com refetch, otimiza batch cross-page; lint/test/build frontend e coverage backend ok.| |
+| | | | | | | |Garantir CORS+helmet funcionais em modo relaxado sem quebrar build.| |Necessário aplicar CORS global sem app.options(*).|Implementar SECURITY_MODE="relaxed" (CORS aberto) e "strict" (CORS restrito + rate limiting).| |
+
+## 2025-11-22 - Mongo replica set para Prisma
+- MongoDB agora inicia como replica set rs0 (3 nós host: 27017/27018/27019) com serviço de init idempotente compartilhando o namespace da instância para rodar `rs.initiate`.
+- `DATABASE_URL` aponta para `localhost:27017,localhost:27018,localhost:27019` com `replicaSet=rs0&retryWrites=true&w=majority`, habilitando transações do Prisma.
+- Seed (`npm run seed`) validado para usuário padrão `danilo.uchoa@finance.app` / `finance123` em ambiente com rede de containers funcional, permitindo login.
+
+## 2025-11-23 - Login estateless via frontend
+- Corrigida configuração local do frontend: `VITE_API_URL` agora aponta para `http://localhost:4000` (antes estava `http://localhost:3000` e causava requisições para porta morta com status 0 no navegador).
+- Login validado end-to-end no fluxo React → API usando usuário seed `danilo.uchoa@finance.app / finance123`.
+- Tratamento de erro do login diferencia falha de conexão (backend fora do ar/CORS) de credenciais inválidas.
+- Script `backend/scripts/debug-login.ts` documentado como utilitário de desenvolvimento para validar credenciais direto no banco usando mesma normalização/bcrypt do backend.
+
+## 2025-11-23 - UX-02A Auth Design System Hardening
+- Tokens de Auth centralizados em `frontend/src/ui/tokens.ts` e aplicados globalmente via `TokenProvider`/variáveis CSS `--finfy-*` para reutilização além do domínio de Auth.
+- Componentes de Auth (`Button`, `TextField`, `FormField`, `Card`, `Alert`) alinhados ao guia `docs/ux/auth-benchmark-and-principles.md`, com foco em labels persistentes, estados de foco acessíveis e mensagens inline de erro/ajuda.
+- Warnings conhecidos: aviso de chunk >500 kB em `npm run build`/`npm run build-storybook` e aviso do builder do Storybook sobre `@mui/icons-material` (pacote presente). Detalhes em `docs/ux/auth-design-system-notes.md`. `npm audit` sem vulnerabilidades altas registradas em `frontend/audit-report.json`.
+
+## 2025-11-24 - UX-03 Auth Shell
+- Novo componente `AuthShell` (`frontend/src/components/auth/AuthShell.tsx`) criado usando apenas os primitives do Design System para servir como contêiner de todas as telas de autenticação.
+- Tela de login integrada ao `AuthShell` mantendo o comportamento existente (login, cadastro, Google e diálogo de conflito) com layout mobile-first e copy inspirada no visual “Ethereum/SaaS”.
+- Storybook atualizado com `AuthShell.stories.tsx` e testes adicionados (`src/components/auth/__tests__/AuthShell.test.tsx`, `src/__tests__/Login.test.tsx`) para cobrir o shell e a integração do login.
+
+## 2025-11-25 - UX-04 – Refino do fluxo de Login
+- Modelo de erros de login padronizado (`LOGIN_ERROR_MESSAGES`/`loginError`) separando claramente credenciais inválidas, falhas de rede e erros de servidor, alinhado aos códigos do backend.
+- UI do login refinada no `AuthShell`: alertas globais para rede/servidor, erros inline nos campos para credenciais inválidas, carregamento/disparo único do botão e foco pós-erro para acessibilidade.
+- Testes ampliados (`frontend/src/__tests__/Login.test.tsx`) cobrindo sucesso, credenciais inválidas, rede/500 e estado de loading; Storybook ilustra estados de erro. Comandos executados no frontend: `npm run lint`, `npm run coverage`, `npm run build`, `npm run build-storybook`.
+
+## 2025-11-26 - UX-04A – Correção de mensagens de erro (sessão expirada x credenciais inválidas)
+- `loginError.ts` agora diferencia explicitamente `SESSION_EXPIRED` de `INVALID_CREDENTIALS`, ajustando o mapeamento de códigos do backend e mantendo mensagens alinhadas ao UX-04.
+- `AuthProvider` e `Login.tsx` refinados para exibir erro global apenas para sessão expirada/rede/servidor, mantendo credenciais inválidas como erro inline nos campos (cópia “E-mail ou senha incorretos.”).
+- Testes de login atualizados/em novos cenários (`frontend/src/__tests__/Login.test.tsx`) cobrindo sessão expirada vs credenciais inválidas. Comandos executados no frontend: `npm run lint`, `npm run coverage`, `npm run build`, `npm run build-storybook`.
+
+## UX-04B - Axios 401 Interceptor Refinement
+- Refined Axios 401 handling — login 401 (INVALID_CREDENTIALS) no longer triggers SESSION_EXPIRED; only 401 from protected endpoints with a token in memory trigger the session-expired flow.
+
+## 2025-11-27 - UX-05 – Cadastro mínimo e consentimento base
+- Implementado fluxo de cadastro com campos mínimos (e-mail, senha e nome opcional) usando o AuthShell e componentes do design system.
+- Checkbox obrigatório de Termos/Privacidade com versão registrada e consentimento `BASIC_TERMS_AND_PRIVACY` persistido no backend junto ao IP quando disponível.
+- Nenhum dado financeiro solicitado no cadastro; erros de sign-up não reutilizam o alerta de “Sessão expirada”.
+
+## 2025-11-28 - UX-06A – Blueprint de verificação de e-mail & estados da conta
+- Criado `docs/ux/auth-email-verification-flow.md` com o blueprint UX-06 para verificação de e-mail.
+- Modelo de estados de conta (UNVERIFIED/VERIFIED + futuro REVERIFY_REQUIRED), jornada completa (sign-up ➜ check-email ➜ verify ➜ pós-verificação) e regras de light double opt-in documentadas.
+- Contratos de backend (modelos, endpoints verify/resend, códigos de erro dedicados e eventos), contratos de frontend (rotas/screen AuthShell, integração com AuthProvider), regras de acesso para não verificados e visão de microservices/BFF registradas.
+- Backlog derivado para UX-06B…UX-06F descrito; card apenas de documentação, sem alterações em código front/back.
+
+## UX-06B – Backend: email verification data model & token service
+- Extendido o modelo `User` com campos `emailVerifiedAt` e `emailVerifiedIp`.
+- Introduzido o modelo `EmailVerificationToken` (Mongo compatível com `@id`/`_id`, hash do token, TTL e metadados de criação/consumo).
+- Implementado serviço `emailVerification` (`createEmailVerificationToken`, `resolveToken`, `consumeToken`, `canIssueNewToken`) com hashing `sha256` e status tipados.
+- Configurações de TTL/janela de reenvio expostas via helper de config (sem acessar `process.env` diretamente).
+- Testes unitários adicionados cobrindo ciclo de vida do token e rate limiting.
+
+## UX-06B – Backend: email verification fixups
+- Removido o `PrismaClient` interno de `emailVerification.ts`, exigindo injeção explícita de Prisma em todos os métodos.
+- Normalizado o import de `config` entre serviço e testes para permitir mocking consistente.
+- Rota `/api/auth/verify-email` agora delega totalmente a `consumeToken` o consumo do token e a marcação do usuário como verificado, mantendo os mesmos códigos de status e payloads de erro/sucesso.
+
+## UX-06C – Backend: verificação de e-mail (endpoints, fila e worker)
+- `/api/auth/register` cria token de verificação e enfileira job `VERIFY_EMAIL` na `EMAIL_VERIFICATION_QUEUE` com URL e expiração.
+- `/api/auth/verify-email` e `/api/auth/resend-verification` utilizam o serviço `emailVerification` e respeitam janela de reenvio.
+- Worker dedicado consome a fila de verificação e envia e-mails via provider, rodando como serviço separado em Docker.
+- UX-06C micro: centralizado `EMAIL_VERIFICATION_QUEUE` em `lib/queues`, `publishEmailJob` usa a constante compartilhada e os testes de RabbitMQ usam `config.rabbitUrl` (`RABBIT_URL`).
+
+## UX-06D – Frontend: verificação de e-mail (estabilidade)
+- Tipagem do `verifyEmail/resendVerification` alinhada aos códigos de erro do backend (`INVALID_TOKEN`, `TOKEN_EXPIRED`, `TOKEN_ALREADY_USED`, `RATE_LIMITED`) e ao payload de `emailVerified/emailVerifiedAt`, com `AuthProvider` sempre normalizando o usuário persistido.
+
+## UX-06E – Regras de acesso para usuários não verificados
+- Middleware `requireEmailVerified` protege rotas sensíveis no backend (aplicado em `/api/jobs/*`, `/api/dlq/*` e `/api/salaryHistory/*`), retornando `403` com `{ error: "EMAIL_NOT_VERIFIED", message: "Seu e-mail ainda não foi confirmado..." }` para contas sem verificação.
+- No dashboard autenticado, usuários não verificados veem um banner persistente com CTA de reenvio de verificação e mensagens de sucesso/throttling alinhadas ao tom das telas de Auth.
+- Tela de exportação no frontend bloqueia ações quando o e-mail não está verificado, mostrando alerta + CTA para `/auth/check-email` e reaproveitando toasts amigáveis.
+- Erros `EMAIL_NOT_VERIFIED` vindos da API são tratados centralmente no frontend, exibindo aviso amigável e atalho para `/auth/check-email` sem quebrar a sessão.
+
+## UX-06F – Observabilidade e toggles da verificação de e-mail
+- Structured logs padronizados para o ciclo de verificação: `auth.verify-email.token-created`, `*.resend-requested`, `*.resend-rate-limited`, `*.invalid-token`, `*.expired`, `*.already-used`, `*.success`, `*.enqueue.skipped/failed`, além dos eventos do worker (`email.verify-email.received/sent/failed/invalid-payload`, `email.worker.ready/fatal`).
+- Feature flags configuráveis via env: `AUTH_EMAIL_VERIFICATION_REQUIRED`, `AUTH_EMAIL_VERIFICATION_ENQUEUE_ENABLED`, `AUTH_EMAIL_VERIFICATION_TOKEN_TTL_MINUTES`, `AUTH_EMAIL_VERIFICATION_RESEND_WINDOW_SECONDS`, `AUTH_EMAIL_PROVIDER` (noop/resend). TTL e janela de resend agora usam minutos/segundos configuráveis.
+- Gating respeita o toggle `AUTH_EMAIL_VERIFICATION_REQUIRED`; quando desligado, o middleware apenas loga e libera. Enfileiramento pode ser desativado para dev/test (`enqueue.skipped`). Worker e rotas compartilham os mesmos logs e não vazam tokens (tokenHint com últimos 4 caracteres).
+
+## 2025-12-17 - UX-06F-HF01 (build unblock)
+- Corrigido parsing booleano de `AUTH_EMAIL_VERIFICATION_REQUIRED` em config para eliminar TS2367 no email-worker.
+- Removida importação duplicada de `config` em `backend/src/lib/email.ts` que causava TS2300 durante o build.
+
+## 2025-12-17 - Cloud-first Docker Compose
+- docker-compose agora sobe apenas backend (porta 4000) + frontend (porta 5173); workers (`worker`, `email-worker`, `bulk-worker`) ficam em `--profile workers`.
+- Sem `network_mode: host` nem overrides de localhost; usa somente `env_file` (backend/.env, frontend/.env) com credenciais de cloud (Atlas, CloudAMQP, Upstash, Resend, Google OAuth). Nunca commitar segredos — use apenas `.env.example`.
+- Healthcheck do backend usa `/api/status`; frontend depende do backend saudável.
+- Troubleshooting rápido: (1) CORS/OAuth: alinhar `FRONTEND_ORIGIN`/`VITE_API_URL`; (2) Redis: em produção é obrigatório `REDIS_URL` ou `UPSTASH_REDIS_REST_*`; (3) workers não processam fila: subir com `docker compose --profile workers up -d` e garantir `RABBIT_URL` correto.
+
+## 2025-12-18 - Pipeline de verificação de e-mail (Resend + worker dedicado)
+- Variáveis obrigatórias para entrega: `AUTH_EMAIL_PROVIDER` (`noop`|`resend`), `RESEND_API_KEY`, `AUTH_EMAIL_FROM` (ou `RESEND_FROM`), `AUTH_EMAIL_VERIFICATION_ENQUEUE_ENABLED`, `RABBIT_URL`, `FRONTEND_ORIGIN` e opcional `AUTH_VERIFY_URL_BASE` para sobrescrever o host da URL de verificação.
+- Comandos cloud-first:
+  - Backend + frontend: `docker compose -f docker-compose.cloud.yml up -d --build backend frontend`
+  - Worker de e-mail: `docker compose -f docker-compose.cloud.yml --profile workers up -d --build email-worker`
+- Troubleshooting rápido:
+  - `Consumers = 0` em `email-jobs`: habilite o profile `workers` e valide `RABBIT_URL`/credenciais do CloudAMQP.
+  - Mensagens presas: verifique DLQ/`x-retry-count`, logs `email.verify-email.requeue|dlq` e status de resposta do Resend.
+  - Domínio/remetente não verificado: ajuste `AUTH_EMAIL_FROM`/`RESEND_FROM` para um domínio aprovado no Resend; sem isso produção falha.
+  - Smoke/local: `npm run smoke:email-worker` publica um job em `email-jobs`; o provider `noop` só loga (nenhum e-mail real).
+
+## 2025-12-18 - React Query: invalidação imediata das despesas
+- Query keys padronizados em `frontend/src/lib/queryKeys.ts` via factories (`expensesKeys.list/month/recurring/shared/summary`, `catalogKeys.*`, `salaryKeys.month`) para evitar colisões entre meses, modos e paginação.
+- Mutations de despesas (criar/atualizar/deletar/duplicar/recorrente/batch/bulk) agora invalidam e refazem fetch da lista ativa, chave mensal e listas derivadas (recorrentes/compartilhadas), com otimistas condicionais apenas quando a despesa pertence ao mês/visão atual.
+- `useDeleteInstallments` ajustado para os novos query keys; AuthProvider segue limpando o cache em login/logout.
+- Testes de `useExpenses` atualizados para cobrir invalidação + refetch imediato e filtragem de batch cross-month; rodar `npm run test:unit -- src/__tests__/useExpenses.test.tsx` após instalar dependências.
+- Ao adicionar novas mutações, sempre derive a queryKey pelo factory, restrinja otimismos ao mês visível e finalize com `invalidate + refetch` da lista ativa e das listas relacionadas.

@@ -1,0 +1,32 @@
+version: 2
+updates:
+  - package-ecosystem: 'npm'
+    directory: '/backend'
+    schedule:
+      interval: 'weekly'
+      day: 'sunday'
+      time: '14:02'
+      timezone: 'America/Sao_Paulo'
+    target-branch: 'main'
+    commit-message:
+      prefix: 'chore'
+      include: 'scope'
+    open-pull-requests-limit: 10
+    labels:
+      - 'dependencies'
+      - 'auto-update'
+  - package-ecosystem: 'npm'
+    directory: '/frontend'
+    schedule:
+      interval: 'weekly'
+      day: 'sunday'
+      time: '14:02'
+      timezone: 'America/Sao_Paulo'
+    target-branch: 'main'
+    commit-message:
+      prefix: 'chore'
+      include: 'scope'
+    open-pull-requests-limit: 10
+    labels:
+      - 'dependencies'
+      - 'auto-update'

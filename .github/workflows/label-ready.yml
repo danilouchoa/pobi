@@ -1,0 +1,174 @@
+name: Label - Ready to Merge
+
+on:
+  workflow_run:
+    workflows:
+      - CI Backend
+      - CI Frontend
+      - CodeQL Security Analysis
+    types: [completed]
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: read
+
+concurrency:
+  group: label-ready-${{ github.workflow }}-${{ github.event.workflow_run.head_branch || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  label-ready:
+    if: github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validar checks dinâmicos e aplicar label
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // --- CONFIGURAÇÃO DE REGRAS DE PATH ---
+            // Define quais jobs são necessários baseados nos arquivos alterados.
+            // Isso deve espelhar os filtros 'paths' dos seus workflows de CI.
+            const PATH_RULES = [
+              {
+                job: 'build-test-backend',
+                patterns: [
+                  /^backend\//, 
+                  /^infra\//, 
+                  /^helm\//, 
+                  /\.github\/workflows\/ci-backend\.yml$/
+                ]
+              },
+              {
+                job: 'build-test-frontend',
+                patterns: [
+                  /^frontend\//, 
+                  /^infra\//, 
+                  /^helm\//, 
+                  /\.github\/workflows\/ci-frontend\.yml$/
+                ]
+              }
+            ];
+
+            const { owner, repo } = context.repo;
+            const sha = context.payload.workflow_run?.head_sha;
+            const headBranch = context.payload.workflow_run?.head_branch;
+            core.info(`workflow_run concluído para branch='${headBranch}', sha='${sha}'`);
+
+            // 1. Encontrar PR associado a este commit/branch
+            let pr = null;
+            try {
+              const assoc = await github.rest.repos.listPullRequestsAssociatedWithCommit({ owner, repo, commit_sha: sha });
+              const openPRs = assoc.data.filter(p => p.state === 'open');
+              if (openPRs.length) pr = openPRs[0];
+            } catch (e) {
+              core.warning(`Falha ao buscar PRs pelo commit: ${e.message}`);
+            }
+            if (!pr) {
+              try {
+                const prs = await github.rest.pulls.list({ owner, repo, state: 'open', head: `${owner}:${headBranch}`, per_page: 10 });
+                if (prs.data.length) pr = prs.data[0];
+              } catch (e) {
+                core.warning(`Falha ao buscar PRs pelo branch: ${e.message}`);
+              }
+            }
+            if (!pr) {
+              core.info('Nenhum PR aberto encontrado para este workflow_run. Encerrando.');
+              return;
+            }
+            core.info(`PR encontrado: #${pr.number} -> base='${pr.base.ref}'`);
+
+            // 2. Determinar quais checks são obrigatórios para ESTE PR (Dinâmico)
+            const changedFiles = await github.paginate(github.rest.pulls.listFiles, {
+              owner,
+              repo,
+              pull_number: pr.number
+            });
+            
+            const requiredChecksSet = new Set();
+            
+            for (const file of changedFiles) {
+              const filename = file.filename;
+              for (const rule of PATH_RULES) {
+                // Se o arquivo der match em algum padrão da regra, adiciona o job
+                if (rule.patterns.some(regex => regex.test(filename))) {
+                  requiredChecksSet.add(rule.job);
+                }
+              }
+            }
+            
+            const REQUIRED_CHECKS = Array.from(requiredChecksSet);
+            core.info(`Arquivos alterados: ${changedFiles.length}`);
+            core.info(`Checks obrigatórios calculados: ${JSON.stringify(REQUIRED_CHECKS)}`);
+
+            if (REQUIRED_CHECKS.length === 0) {
+              core.info('Nenhum path relevante alterado (apenas docs?). Nenhum check CI específico é obrigatório.');
+              // Opcional: Você pode querer dar return aqui se não quiser label em mudanças de README, 
+              // mas geralmente deixa passar para aplicar a label se não tiver nada quebrado.
+            }
+
+            // 3. Listar check runs do commit
+            const checksResp = await github.rest.checks.listForRef({ owner, repo, ref: sha, per_page: 100 });
+            const runs = checksResp.data.check_runs || [];
+            core.info(`Total de check runs encontrados no commit: ${runs.length}`);
+
+            // Normaliza nome removendo sufixos de matrix como (20)
+            const normalize = (name) => {
+              if (!name) return '';
+              const parts = String(name).split(' / ');
+              let jobName = parts[parts.length - 1];
+              return jobName.replace(/\s*\(.*?\)$/, '').trim();
+            };
+
+            const byName = new Map();
+            for (const run of runs) {
+              const key = normalize(run.name);
+              const list = byName.get(key) || [];
+              list.push(run);
+              byName.set(key, list);
+            }
+
+            // 4. Validação
+            let allOk = true;
+            for (const req of REQUIRED_CHECKS) {
+              const candidates = byName.get(req) || [];
+              
+              if (!candidates.length) {
+                core.warning(`Check obrigatório AINDA não encontrado: '${req}'. O workflow pode não ter iniciado ou tem nome diferente.`);
+                allOk = false;
+                continue;
+              }
+              
+              // Pega o run mais recente desse job
+              const completed = candidates
+                .filter(r => r.status === 'completed')
+                .sort((a,b) => new Date(b.completed_at || 0) - new Date(a.completed_at || 0))[0];
+                
+              if (!completed) {
+                core.warning(`Check '${req}' existe mas ainda não completou (status=${candidates[0].status}).`);
+                allOk = false;
+                continue;
+              }
+              
+              core.info(`Check '${req}': status='${completed.status}', conclusão='${completed.conclusion}'`);
+              if (completed.conclusion !== 'success') {
+                core.warning(`Check '${req}' falhou ou foi cancelado.`);
+                allOk = false;
+              }
+            }
+
+            if (!allOk) {
+              core.info('Checks obrigatórios ainda não estão todos verdes. Label será aplicada na próxima execução bem sucedida.');
+              return;
+            }
+
+            // 5. Aplicar Label
+            const existing = await github.rest.issues.listLabelsOnIssue({ owner, repo, issue_number: pr.number, per_page: 100 });
+            const hasReady = existing.data.some(l => l.name === 'Ready to Merge');
+            if (hasReady) {
+              core.info("Label 'Ready to Merge' já existe no PR. Nada a fazer.");
+              return;
+            }
+
+            await github.rest.issues.addLabels({ owner, repo, issue_number: pr.number, labels: ['Ready to Merge'] });
+            core.info("Label 'Ready to Merge' aplicada com sucesso.");

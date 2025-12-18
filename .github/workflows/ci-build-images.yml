@@ -1,0 +1,118 @@
+# name: CI Build Images
+
+# on:
+#   push:
+#     branches: [ main ]
+#     paths:
+#       - 'backend/**'
+#       - 'frontend/**'
+#       - 'docker-compose.yaml'
+#       - 'helm/**'
+#       - 'infra/**'
+#       - '.github/workflows/ci-build-images.yml'
+
+# concurrency:
+#   group: ci-build-images-${{ github.workflow }}-${{ github.ref }}
+#   cancel-in-progress: true
+
+# jobs:
+#   build-and-push:
+#     runs-on: ubuntu-latest
+#     permissions:
+#       contents: read
+#       id-token: write # for OIDC to AWS if using role assumption
+#     env:
+#       AWS_REGION: us-east-1
+#       BACKEND_IMAGE_REPO: 211125320014.dkr.ecr.us-east-1.amazonaws.com/finfy-backend
+#       FRONTEND_IMAGE_REPO: 211125320014.dkr.ecr.us-east-1.amazonaws.com/finfy-frontend
+#     steps:
+#       - name: Checkout
+#         uses: actions/checkout@v4
+
+#       - name: Configure AWS Credentials (ECR)
+#         uses: aws-actions/configure-aws-credentials@v4
+#         with:
+#           aws-region: ${{ env.AWS_REGION }}
+#           role-to-assume: ${{ secrets.AWS_GITHUB_OIDC_ROLE_ARN }}
+#           role-session-name: github-actions-ecr
+
+#       - name: Login to ECR
+#         run: |
+#           aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin 211125320014.dkr.ecr.$AWS_REGION.amazonaws.com
+
+#       - name: Derive tags
+#         id: meta
+#         run: |
+#           SHORT_SHA=${GITHUB_SHA::12}
+#           echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
+#           echo "backend_tag=$BACKEND_IMAGE_REPO:$SHORT_SHA" >> $GITHUB_OUTPUT
+#           echo "frontend_tag=$FRONTEND_IMAGE_REPO:$SHORT_SHA" >> $GITHUB_OUTPUT
+
+#       - name: Build backend image
+#         run: |
+#           docker build \
+#             --file backend/Dockerfile \
+#             --cache-from=type=gha,scope=finfy-backend \
+#             --cache-to=type=gha,scope=finfy-backend,mode=max \
+#             -t "${{ steps.meta.outputs.backend_tag }}" \
+#             -t "$BACKEND_IMAGE_REPO:latest" \
+#             .
+
+#       - name: Build frontend image
+#         run: |
+#           docker build \
+#             --file frontend/Dockerfile \
+#             --cache-from=type=gha,scope=finfy-frontend \
+#             --cache-to=type=gha,scope=finfy-frontend,mode=max \
+#             -t "${{ steps.meta.outputs.frontend_tag }}" \
+#             -t "$FRONTEND_IMAGE_REPO:latest" \
+#             .
+
+#       - name: Push images
+#         run: |
+#           docker push "${{ steps.meta.outputs.backend_tag }}"
+#           docker push "$BACKEND_IMAGE_REPO:latest"
+#           docker push "${{ steps.meta.outputs.frontend_tag }}"
+#           docker push "$FRONTEND_IMAGE_REPO:latest"
+
+#       - name: Export image tags artifact
+#         run: |
+#           echo "BACKEND_IMAGE=${{ steps.meta.outputs.backend_tag }}" >> image-tags.env
+#           echo "FRONTEND_IMAGE=${{ steps.meta.outputs.frontend_tag }}" >> image-tags.env
+        
+#       - name: Upload artifact
+#         uses: actions/upload-artifact@v4
+#         with:
+#           name: image-tags
+#           path: image-tags.env
+
+#       - name: Prune old caches
+#         if: always()
+#         uses: actions/github-script@v7
+#         with:
+#           script: |
+#             const retention = 5; // keep only 5 most recent caches per key prefix
+#             const resp = await github.rest.actions.getActionsCacheList({
+#               owner: context.repo.owner,
+#               repo: context.repo.repo,
+#             });
+#             const caches = resp.data.actions_caches;
+
+#             const groups = {};
+#             for (const c of caches) {
+#               const prefix = c.key.split('-').slice(0,2).join('-');
+#               if (!groups[prefix]) groups[prefix] = [];
+#               groups[prefix].push(c);
+#             }
+
+#             for (const prefix of Object.keys(groups)) {
+#               const sorted = groups[prefix].sort((a,b) => new Date(b.last_accessed_at) - new Date(a.last_accessed_at));
+#               const remove = sorted.slice(retention);
+#               for (const old of remove) {
+#                 await github.rest.actions.deleteActionsCacheById({
+#                   owner: context.repo.owner,
+#                   repo: context.repo.repo,
+#                   cache_id: old.id
+#                 });
+#               }
+#             }

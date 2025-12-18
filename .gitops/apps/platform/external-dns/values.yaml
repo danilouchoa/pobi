@@ -1,0 +1,49 @@
+# External DNS configuration for Cloudflare
+provider: cloudflare
+
+domainFilters:
+  - finfy.me
+
+policy: sync
+registry: txt
+txtOwnerId: finfy-externaldns
+txtPrefix: "externaldns-"
+
+interval: 1m
+
+sources:
+  - service
+  - istio-gateway
+
+env:
+  - name: CF_API_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: external-dns-secret
+        key: cloudflare_api_token
+
+logLevel: info
+logFormat: text
+
+serviceAccount:
+  create: true
+  name: external-dns
+
+rbac:
+  create: true
+
+resources:
+  limits:
+    memory: 128Mi
+  requests:
+    cpu: 25m
+    memory: 64Mi
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "7979"
+
+securityContext:
+  fsGroup: 65534
+  runAsNonRoot: true
+  runAsUser: 65534
