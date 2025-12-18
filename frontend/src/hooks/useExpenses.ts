@@ -93,7 +93,19 @@ export function useExpenses(month: string, options: Options = {}) {
   const mode = options.mode ?? "calendar";
   const page = options.page ?? 1;
   const limit = options.limit ?? 20;
-  const queryKey = expensesKeys.list(month, mode, page, limit);
+  const queryKey = expensesKeys.list({ month, mode, page, limit });
+  const monthKey = expensesKeys.month({ month, mode });
+  const recurringKey = expensesKeys.recurring();
+  const sharedKey = expensesKeys.shared();
+
+  const toMonth = (value?: string | null) => (value ? value.slice(0, 7) : "");
+
+  const matchesCurrentView = (expense: { date?: string; billingMonth?: string | null }) => {
+    if (mode === "billing") {
+      return expense.billingMonth ? expense.billingMonth === month : false;
+    }
+    return toMonth(expense.date ?? null) === month;
+  };
 
   const rollback = (ctx?: OptimisticContext) => {
     if (!ctx?.previous) return;
@@ -109,19 +121,33 @@ export function useExpenses(month: string, options: Options = {}) {
   });
 
   const recurringQuery = useQuery({
-    queryKey: expensesKeys.recurring,
+    queryKey: recurringKey,
     queryFn: getRecurringExpenses,
     enabled: false,
   });
 
   const sharedQuery = useQuery({
-    queryKey: expensesKeys.shared,
+    queryKey: sharedKey,
     queryFn: getSharedExpenses,
     enabled: false,
   });
 
-  const invalidateAll = () => {
-    queryClient.invalidateQueries({ queryKey: expensesKeys.all });
+  const invalidateAll = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: expensesKeys.all }),
+      queryClient.invalidateQueries({ queryKey: monthKey }),
+      queryClient.invalidateQueries({ queryKey: recurringKey }),
+      queryClient.invalidateQueries({ queryKey: sharedKey }),
+    ]);
+  };
+
+  const refetchActiveList = async () => {
+    await queryClient.refetchQueries({ queryKey, type: "active" });
+  };
+
+  const invalidateAndRefetch = async () => {
+    await invalidateAll();
+    await refetchActiveList();
   };
 
   const createMutation = useMutation({
@@ -129,7 +155,7 @@ export function useExpenses(month: string, options: Options = {}) {
     onMutate: async ({ payload }: CreateExpenseVariables) => {
       await queryClient.cancelQueries({ queryKey });
       const previous = queryClient.getQueryData<ExpensesResponse | undefined>(queryKey);
-      if (page === 1) {
+      if (page === 1 && matchesCurrentView({ date: payload.date, billingMonth: (payload as any)?.billingMonth ?? null })) {
         const optimistic = buildOptimisticExpense(payload, mode, month);
         queryClient.setQueryData<ExpensesResponse | undefined>(queryKey, (old: ExpensesResponse | undefined) => {
           const base: ExpensesResponse =
@@ -152,9 +178,31 @@ export function useExpenses(month: string, options: Options = {}) {
       }
       return { previous };
     },
-  onError: (_err: unknown, _vars: CreateExpenseVariables, ctx?: OptimisticContext) => rollback(ctx),
-    onSettled: () => {
-      invalidateAll();
+    onError: (_err: unknown, _vars: CreateExpenseVariables, ctx?: OptimisticContext) => rollback(ctx),
+    onSuccess: async (created: Expense) => {
+      if (page === 1 && matchesCurrentView(created)) {
+        queryClient.setQueryData<ExpensesResponse | undefined>(queryKey, (old) => {
+          const base: ExpensesResponse =
+            old ?? {
+              data: [],
+              pagination: { page: 1, limit, total: 0, pages: 1 },
+            };
+          const limitCap = base.pagination.limit ?? limit;
+          const filtered = base.data.filter((expense) => expense.id !== created.id && !expense.id.startsWith("temp-"));
+          const nextData = [created, ...filtered].slice(0, limitCap);
+          const nextTotal = Math.max(base.pagination.total, filtered.length + 1);
+          const nextPages = Math.max(1, Math.ceil(nextTotal / limitCap));
+          return {
+            data: nextData,
+            pagination: {
+              ...base.pagination,
+              total: nextTotal,
+              pages: nextPages,
+            },
+          };
+        });
+      }
+      await invalidateAndRefetch();
     },
   });
 
@@ -177,7 +225,16 @@ export function useExpenses(month: string, options: Options = {}) {
     },
     onError: (_err: unknown, _vars: { id: string; payload: ExpensePayload }, ctx?: OptimisticContext) =>
       rollback(ctx),
-    onSettled: invalidateAll,
+    onSuccess: async (updated: Expense) => {
+      queryClient.setQueryData<ExpensesResponse | undefined>(queryKey, (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          data: old.data.map((expense) => (expense.id === updated.id ? updated : expense)),
+        };
+      });
+      await invalidateAndRefetch();
+    },
   });
 
   const deleteMutation = useMutation({
@@ -208,7 +265,7 @@ export function useExpenses(month: string, options: Options = {}) {
       return { previous };
     },
     onError: (_err: unknown, _vars: string, ctx?: OptimisticContext) => rollback(ctx),
-    onSettled: invalidateAll,
+    onSuccess: invalidateAndRefetch,
   });
 
   const duplicateMutation = useMutation({
@@ -219,7 +276,7 @@ export function useExpenses(month: string, options: Options = {}) {
       id: string;
       options?: { incrementMonth?: boolean; customDate?: string };
     }) => duplicateExpense(id, duplicateOptions),
-    onSuccess: invalidateAll,
+    onSuccess: invalidateAndRefetch,
   });
 
   const createBatchMutation = useMutation({
@@ -229,9 +286,9 @@ export function useExpenses(month: string, options: Options = {}) {
       const previous = queryClient.getQueryData<ExpensesResponse | undefined>(queryKey);
 
       if (page === 1 && payloads.length) {
-        const optimisticItems = payloads.map((payload: ExpensePayload) =>
-          buildOptimisticExpense(payload, mode, month)
-        );
+        const optimisticItems = payloads
+          .filter((payload) => matchesCurrentView({ date: payload.date, billingMonth: (payload as any)?.billingMonth ?? null }))
+          .map((payload: ExpensePayload) => buildOptimisticExpense(payload, mode, month));
         queryClient.setQueryData<ExpensesResponse | undefined>(queryKey, (old: ExpensesResponse | undefined) => {
           const base: ExpensesResponse =
             old ?? {
@@ -239,7 +296,7 @@ export function useExpenses(month: string, options: Options = {}) {
               pagination: { page: 1, limit, total: 0, pages: 1 },
             };
           const limitCap = base.pagination.limit ?? limit;
-          const nextTotal = base.pagination.total + payloads.length;
+          const nextTotal = base.pagination.total + optimisticItems.length;
           const nextPages = Math.max(1, Math.ceil(nextTotal / limitCap));
           return {
             data: [...optimisticItems, ...base.data].slice(0, limitCap),
@@ -255,22 +312,49 @@ export function useExpenses(month: string, options: Options = {}) {
       return { previous };
     },
     onError: (_err: unknown, _vars: CreateExpenseBatchVariables, ctx?: OptimisticContext) => rollback(ctx),
-    onSettled: invalidateAll,
+    onSuccess: async (createdExpenses: Expense[]) => {
+      if (page === 1 && createdExpenses.length) {
+        const visible = createdExpenses.filter((expense) => matchesCurrentView(expense));
+        if (visible.length) {
+          queryClient.setQueryData<ExpensesResponse | undefined>(queryKey, (old) => {
+            const base: ExpensesResponse =
+              old ?? {
+                data: [],
+                pagination: { page: 1, limit, total: 0, pages: 1 },
+              };
+            const limitCap = base.pagination.limit ?? limit;
+            const filtered = base.data.filter((expense) => !expense.id.startsWith("temp-"));
+            const nextData = [...visible, ...filtered].slice(0, limitCap);
+            const nextTotal = Math.max(base.pagination.total, filtered.length + visible.length);
+            const nextPages = Math.max(1, Math.ceil(nextTotal / limitCap));
+            return {
+              data: nextData,
+              pagination: {
+                ...base.pagination,
+                total: nextTotal,
+                pages: nextPages,
+              },
+            };
+          });
+        }
+      }
+      await invalidateAndRefetch();
+    },
   });
 
   const createRecurringMutation = useMutation({
     mutationFn: (payload: ExpensePayload) => createRecurringExpense(payload),
-    onSuccess: invalidateAll,
+    onSuccess: invalidateAndRefetch,
   });
 
   const bulkUpdateMutation = useMutation({
     mutationFn: bulkUpdateExpenses,
-    onSuccess: invalidateAll,
+    onSuccess: invalidateAndRefetch,
   });
 
   const bulkActionMutation = useMutation({
     mutationFn: bulkExpensesAction,
-    onSuccess: invalidateAll,
+    onSuccess: invalidateAndRefetch,
   });
 
   const pagination: Pagination =
@@ -292,7 +376,7 @@ export function useExpenses(month: string, options: Options = {}) {
       createBatchMutation.mutateAsync({ payloads }),
     updateExpense: (id: string, payload: ExpensePayload) =>
       updateMutation.mutateAsync({ id, payload }),
-  deleteExpense: deleteMutation.mutateAsync,
+    deleteExpense: deleteMutation.mutateAsync,
     duplicateExpense: (id: string, duplicateOptions?: { incrementMonth?: boolean; customDate?: string }) =>
       duplicateMutation.mutateAsync({ id, options: duplicateOptions }),
     createRecurringExpense: createRecurringMutation.mutateAsync,
