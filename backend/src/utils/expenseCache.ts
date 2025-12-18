@@ -85,6 +85,11 @@ export async function deleteByPattern(pattern: string) {
 
       iterations += 1;
 
+      // Infinite loop guard:
+      // - If SCAN keeps returning the same non-zero cursor (e.g. '1' -> '1' -> '1'...),
+      //   we detect this on the second observation of the same value and break here.
+      // - This ensures we don't loop forever on a misbehaving cursor implementation,
+      //   while still allowing the normal SCAN behavior to continue when the cursor advances.
       // Guard against stuck cursors to avoid infinite loops
       if (normalizedCursor === cursor || iterations >= MAX_SCAN_ITERATIONS) {
         cursor = '0';
