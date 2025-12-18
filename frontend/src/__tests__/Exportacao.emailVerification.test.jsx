@@ -1,12 +1,12 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { vi } from "vitest";
+import { vi, describe, beforeEach, afterAll, it, expect } from "vitest";
 import Exportacao from "../components/Exportacao";
 
 let mockUser = { emailVerified: false };
 const navigate = vi.fn();
 const info = vi.fn();
-const originalCreateObjectURL = global.URL.createObjectURL;
-const originalRevokeObjectURL = global.URL.revokeObjectURL;
+const originalCreateObjectURL = globalThis.URL.createObjectURL;
+const originalRevokeObjectURL = globalThis.URL.revokeObjectURL;
 const createObjectURL = vi.fn(() => "blob:url");
 const revokeObjectURL = vi.fn();
 
@@ -55,13 +55,13 @@ describe("Exportacao - bloqueio para e-mail não verificado", () => {
     info.mockClear();
     createObjectURL.mockClear();
     revokeObjectURL.mockClear();
-    global.URL.createObjectURL = createObjectURL;
-    global.URL.revokeObjectURL = revokeObjectURL;
+    globalThis.URL.createObjectURL = createObjectURL;
+    globalThis.URL.revokeObjectURL = revokeObjectURL;
   });
 
   afterAll(() => {
-    global.URL.createObjectURL = originalCreateObjectURL;
-    global.URL.revokeObjectURL = originalRevokeObjectURL;
+    globalThis.URL.createObjectURL = originalCreateObjectURL;
+    globalThis.URL.revokeObjectURL = originalRevokeObjectURL;
   });
 
   it("exibe alerta e evita exportação quando o e-mail não está verificado", () => {
