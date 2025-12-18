@@ -228,7 +228,6 @@ export function useExpenses(month: string, options: Options = {}) {
     await queryClient.invalidateQueries({ queryKey: monthKey, refetchType: "all" });
     await queryClient.invalidateQueries({ queryKey: recurringKey, refetchType: "all" });
     await queryClient.invalidateQueries({ queryKey: sharedKey, refetchType: "all" });
-    await queryClient.refetchQueries({ predicate: expenseQueryPredicate });
   };
 
   const createMutation = useMutation({
