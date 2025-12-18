@@ -161,6 +161,32 @@ export function useExpenses(month: string, options: Options = {}) {
     return entries.map(({ queryKey, data }) => ({ queryKey, data }));
   };
 
+  const upsertVisibleExpenses = (items: Expense[]) => {
+    if (!items.length) return;
+    applyToListQueries((old, meta) => {
+      const base: ExpensesResponse =
+        old ?? {
+          data: [],
+          pagination: { page: meta.page, limit: meta.limit, total: 0, pages: 1 },
+        };
+      const limitCap = base.pagination.limit ?? meta.limit;
+      const filtered = base.data.filter(
+        (expense) => !items.some((incoming) => incoming.id === expense.id) && !expense.id.startsWith("temp-")
+      );
+      const nextData = [...items, ...filtered].slice(0, limitCap);
+      const nextTotal = Math.max(base.pagination.total, filtered.length + items.length);
+      const nextPages = Math.max(1, Math.ceil(nextTotal / limitCap));
+      return {
+        data: nextData,
+        pagination: {
+          ...base.pagination,
+          total: nextTotal,
+          pages: nextPages,
+        },
+      };
+    });
+  };
+
   const toMonth = (value?: string | null) => (value ? value.slice(0, 7) : "");
 
   const matchesCurrentView = (expense: { date?: string; billingMonth?: string | null }) => {
@@ -198,10 +224,11 @@ export function useExpenses(month: string, options: Options = {}) {
   });
 
   const invalidateExpensesForMonth = async () => {
-    await queryClient.invalidateQueries({ predicate: expenseQueryPredicate, refetchType: "inactive" });
-    await queryClient.invalidateQueries({ queryKey: monthKey, refetchType: "inactive" });
-    await queryClient.invalidateQueries({ queryKey: recurringKey, refetchType: "inactive" });
-    await queryClient.invalidateQueries({ queryKey: sharedKey, refetchType: "inactive" });
+    await queryClient.invalidateQueries({ predicate: expenseQueryPredicate, refetchType: "all" });
+    await queryClient.invalidateQueries({ queryKey: monthKey, refetchType: "all" });
+    await queryClient.invalidateQueries({ queryKey: recurringKey, refetchType: "all" });
+    await queryClient.invalidateQueries({ queryKey: sharedKey, refetchType: "all" });
+    await queryClient.refetchQueries({ predicate: expenseQueryPredicate });
   };
 
   const createMutation = useMutation({
@@ -235,31 +262,10 @@ export function useExpenses(month: string, options: Options = {}) {
     },
     onError: (_err: unknown, _vars: CreateExpenseVariables, ctx?: OptimisticContext) => rollback(ctx),
     onSuccess: async (created: Expense) => {
-      if (matchesCurrentView(created)) {
-        applyToListQueries((old, meta) => {
-          const base: ExpensesResponse =
-            old ?? {
-              data: [],
-              pagination: { page: meta.page, limit: meta.limit, total: 0, pages: 1 },
-            };
-          const limitCap = base.pagination.limit ?? meta.limit;
-          const filtered = base.data.filter(
-            (expense) => expense.id !== created.id && !expense.id.startsWith("temp-")
-          );
-          const nextData = [created, ...filtered].slice(0, limitCap);
-          const nextTotal = Math.max(base.pagination.total, filtered.length + 1);
-          const nextPages = Math.max(1, Math.ceil(nextTotal / limitCap));
-          return {
-            data: nextData,
-            pagination: {
-              ...base.pagination,
-              total: nextTotal,
-              pages: nextPages,
-            },
-          };
-        });
-      }
+      const visible = matchesCurrentView(created) ? [created] : [];
+      upsertVisibleExpenses(visible);
       await invalidateExpensesForMonth();
+      upsertVisibleExpenses(visible);
     },
   });
 
@@ -385,7 +391,16 @@ export function useExpenses(month: string, options: Options = {}) {
     onError: (_err: unknown, _vars: CreateExpenseBatchVariables, ctx?: OptimisticContext) => rollback(ctx),
     onSuccess: async (createdExpenses: Expense[]) => {
       const visible = createdExpenses.filter((expense) => matchesCurrentView(expense));
-      if (visible.length) {
+      upsertVisibleExpenses(visible);
+      await invalidateExpensesForMonth();
+      upsertVisibleExpenses(visible);
+    },
+  });
+
+  const createRecurringMutation = useMutation({
+    mutationFn: (payload: ExpensePayload) => createRecurringExpense(payload),
+    onSuccess: async (created: Expense) => {
+      if (matchesCurrentView(created)) {
         applyToListQueries((old, meta) => {
           const base: ExpensesResponse =
             old ?? {
@@ -393,9 +408,9 @@ export function useExpenses(month: string, options: Options = {}) {
               pagination: { page: meta.page, limit: meta.limit, total: 0, pages: 1 },
             };
           const limitCap = base.pagination.limit ?? meta.limit;
-          const filtered = base.data.filter((expense) => !expense.id.startsWith("temp-"));
-          const nextData = [...visible, ...filtered].slice(0, limitCap);
-          const nextTotal = Math.max(base.pagination.total, filtered.length + visible.length);
+          const filtered = base.data.filter((expense) => expense.id !== created.id);
+          const nextData = [created, ...filtered].slice(0, limitCap);
+          const nextTotal = Math.max(base.pagination.total, filtered.length + 1);
           const nextPages = Math.max(1, Math.ceil(nextTotal / limitCap));
           return {
             data: nextData,
@@ -407,13 +422,9 @@ export function useExpenses(month: string, options: Options = {}) {
           };
         });
       }
+
       await invalidateExpensesForMonth();
     },
-  });
-
-  const createRecurringMutation = useMutation({
-    mutationFn: (payload: ExpensePayload) => createRecurringExpense(payload),
-    onSuccess: invalidateExpensesForMonth,
   });
 
   const bulkUpdateMutation = useMutation({

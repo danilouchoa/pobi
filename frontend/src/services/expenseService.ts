@@ -143,9 +143,10 @@ export async function duplicateExpense(
   await api.post(`/api/expenses/${id}/duplicate`, options);
 }
 
-export async function createRecurringExpense(payload: ExpensePayload) {
+export async function createRecurringExpense(payload: ExpensePayload): Promise<Expense> {
   const body = normalizeExpensePayload(payload);
-  await api.post("/api/expenses/recurring", body);
+  const { data } = await api.post<Expense>("/api/expenses/recurring", body);
+  return ExpenseSchema.parse(data);
 }
 
 export async function bulkUpdateExpenses(payload: BulkUpdatePayload) {
