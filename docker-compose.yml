@@ -33,7 +33,6 @@ services:
   worker:
     build: ./backend
     command: ["node", "dist/workers/recurringWorker.js"]
-    profiles: ["workers"]
     network_mode: host
     dns:
       - 8.8.8.8
@@ -44,7 +43,6 @@ services:
   email-worker:
     build: ./backend
     command: ["node", "dist/workers/emailWorker.js"]
-    profiles: ["workers"]
     network_mode: host
     dns:
       - 8.8.8.8
@@ -55,7 +53,6 @@ services:
   bulk-worker:
     build: ./backend
     command: ["node", "dist/workers/bulkWorker.js"]
-    profiles: ["workers"]
     network_mode: host
     dns:
       - 8.8.8.8
