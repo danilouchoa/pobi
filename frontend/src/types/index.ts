@@ -137,3 +137,39 @@ export type SalaryPayload = {
   taxRate: number;
   cnae?: string | null;
 };
+
+export type OnboardingPreferences = {
+  countryCode: string | null;
+  currencyCode: string | null;
+  timezone: string | null;
+  display: Record<string, unknown> | null | undefined;
+  goals: string[];
+};
+
+export type OnboardingProgress = {
+  status: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'DISMISSED';
+  needsOnboarding: boolean;
+  firstPromptedAt: string | null;
+  dismissedAt: string | null;
+  completedAt: string | null;
+  step1CompletedAt: string | null;
+  step2CompletedAt: string | null;
+  step3CompletedAt: string | null;
+};
+
+export type OnboardingDTO = {
+  profile: { name: string | null; avatar: string | null };
+  preferences: OnboardingPreferences;
+  onboarding: OnboardingProgress;
+};
+
+export type OnboardingPatch = {
+  name?: string;
+  avatar?: string;
+  countryCode?: string;
+  currencyCode?: string;
+  timezone?: string;
+  display?: Record<string, unknown> | null;
+  goals?: string[];
+  markStepCompleted?: 1 | 2 | 3;
+};
