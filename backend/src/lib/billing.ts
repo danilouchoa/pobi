@@ -19,7 +19,9 @@
  * - backend/scripts/backfill-billing-month.ts: Preenchimento retroativo de despesas antigas
  */
 
-import { addDays, isSaturday, isSunday } from "date-fns";
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+const addUtcDays = (date: Date, days: number) => new Date(date.getTime() + days * MS_PER_DAY);
 
 /**
  * Políticas de virada de fatura quando o fechamento cai em fim de semana
@@ -68,13 +70,15 @@ export function adjustToBusinessDay(
   date: Date,
   policy: BillingRolloverPolicy = "PREVIOUS"
 ): Date {
-  if (isSaturday(date)) {
+  const dayOfWeek = date.getUTCDay();
+
+  if (dayOfWeek === 6) {
     // Sábado: NEXT → segunda (+2 dias) | PREVIOUS → sexta (-1 dia)
-    return policy === "NEXT" ? addDays(date, 2) : addDays(date, -1);
+    return policy === "NEXT" ? addUtcDays(date, 2) : addUtcDays(date, -1);
   }
-  if (isSunday(date)) {
+  if (dayOfWeek === 0) {
     // Domingo: NEXT → segunda (+1 dia) | PREVIOUS → sexta (-2 dias)
-    return policy === "NEXT" ? addDays(date, 1) : addDays(date, -2);
+    return policy === "NEXT" ? addUtcDays(date, 1) : addUtcDays(date, -2);
   }
   // Já é dia útil (segunda a sexta), retorna data original
   return date;

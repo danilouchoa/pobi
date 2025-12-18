@@ -64,16 +64,30 @@ const nameSchema = z.string()
   .max(100, 'Nome muito longo (máximo 100 caracteres)')
   .trim(); // Remove espaços nas pontas
 
+/**
+ * Validador de versão de termos/privacidade
+ */
+const termsVersionSchema = z.string()
+  .trim()
+  .min(1, 'Versão dos termos é obrigatória')
+  .max(64, 'Versão dos termos muito longa');
+
 // ============================================================================
 // Schema de Registro (POST /api/auth/register)
 // ============================================================================
 
 export const registerSchema = z.object({
   email: emailSchema,
-  
+
   password: passwordSchema,
-  
+
   name: nameSchema.optional(),
+
+  acceptedTerms: z.literal(true, {
+    errorMap: () => ({ message: 'Aceitação dos termos é obrigatória' }),
+  }),
+
+  termsVersion: termsVersionSchema,
 })
 .strict(); // Rejeita campos extras (ex: isAdmin, role, permissions)
 
@@ -108,6 +122,10 @@ export const linkGoogleSchema = z.object({
   credential: z.string().min(1, 'Credential é obrigatória'),
 }).strict();
 
+export const verifyEmailSchema = z.object({
+  token: z.string().min(10, 'Token de verificação é obrigatório'),
+}).strict();
+
 // ============================================================================
 // Tipos TypeScript Inferidos
 // ============================================================================
@@ -117,3 +135,4 @@ export type LoginInput = z.infer<typeof loginSchema>;
 export type GoogleLoginInput = z.infer<typeof googleLoginSchema>;
 export type GoogleResolveConflictInput = z.infer<typeof googleResolveConflictSchema>;
 export type LinkGoogleInput = z.infer<typeof linkGoogleSchema>;
+export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;

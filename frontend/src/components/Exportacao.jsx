@@ -1,13 +1,38 @@
-import { Stack, Button, Typography } from "@mui/material";
+import { Stack, Button as MuiButton, Typography } from "@mui/material";
+import { useNavigate } from "react-router-dom";
 import Section from "./ui/Section";
 import { parseNum } from "../utils/helpers";
 import { DEFAULT_SALARY_TEMPLATE } from "../hooks/useFinanceApp";
+import { useAuth } from "../context/useAuth";
+import { Alert } from "../ui/Alert";
+import { Button } from "../ui/Button";
+import { tokens } from "../ui/tokens";
+import { useToast } from "../hooks/useToast";
 
 export default function Exportacao({ state, month }) {
+  const navigate = useNavigate();
+  const { info } = useToast();
+  const { user } = useAuth();
+
+  const isEmailVerified = Boolean(user?.emailVerifiedAt ?? user?.emailVerified);
+
   const originById = Object.fromEntries(state.origins.map((origin) => [origin.id, origin]));
   const debtorById = Object.fromEntries(state.debtors.map((debtor) => [debtor.id, debtor.name]));
   const expensesMonth = state.expenses.filter((expense) => (expense.date ?? "").slice(0, 7) === month);
   const salary = state.salaryHistory[month] ?? DEFAULT_SALARY_TEMPLATE;
+
+  const handleBlockedExport = () => {
+    info("Para exportar seus dados, confirme seu e-mail. Redirecionando para as opções de verificação.");
+    navigate("/auth/check-email");
+  };
+
+  const withVerificationGate = (action) => () => {
+    if (!isEmailVerified) {
+      handleBlockedExport();
+      return;
+    }
+    action();
+  };
 
   const toCSV = (rows, header) => {
     const escapeCell = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
@@ -100,13 +125,31 @@ export default function Exportacao({ state, month }) {
 
   return (
     <Section title="Exportação CSV" subtitle="Arquivos com separador ';' e codificação UTF-8 (BOM).">
+      {!isEmailVerified && (
+        <div style={{ display: "flex", flexDirection: "column", gap: tokens.spacing.xs, marginBottom: tokens.spacing.md }}>
+          <Alert
+            variant="warning"
+            title="Confirme seu e-mail para liberar a exportação."
+            message="Exportações ficam bloqueadas até que você confirme seu e-mail."
+          />
+          <div style={{ display: "flex", flexWrap: "wrap", gap: tokens.spacing.sm }}>
+            <Button
+              label="Ver opções de verificação"
+              size="md"
+              variant="secondary"
+              onClick={() => navigate("/auth/check-email")}
+            />
+          </div>
+        </div>
+      )}
+
       <Stack direction={{ xs: "column", md: "row" }} spacing={2} flexWrap="wrap">
-        <Button onClick={exportExpenses}>Exportar Lançamentos (Geral)</Button>
-        <Button onClick={exportSalary}>Exportar Salário (do Mês)</Button>
-        <Button onClick={exportSummary}>Exportar Resumo (do Mês)</Button>
-        <Button variant="outlined" color="secondary" onClick={exportAll}>
+        <MuiButton onClick={withVerificationGate(exportExpenses)}>Exportar Lançamentos (Geral)</MuiButton>
+        <MuiButton onClick={withVerificationGate(exportSalary)}>Exportar Salário (do Mês)</MuiButton>
+        <MuiButton onClick={withVerificationGate(exportSummary)}>Exportar Resumo (do Mês)</MuiButton>
+        <MuiButton variant="outlined" color="secondary" onClick={withVerificationGate(exportAll)}>
           Exportar tudo (do Mês)
-        </Button>
+        </MuiButton>
       </Stack>
       <Typography variant="body2" color="text.secondary" sx={{ mt: 3 }}>
         Os botões exportam os dados referentes ao mês selecionado: <strong>{month}</strong>.

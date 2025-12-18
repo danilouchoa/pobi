@@ -1,6 +1,7 @@
 import { createContext, useEffect, useMemo, useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import api, { registerUnauthorizedHandler, setAuthToken } from "../services/api";
+import { initialLoginErrorState, LOGIN_ERROR_MESSAGES, mapLoginError } from "./loginError";
 
 /**
  * AuthProvider - Milestone #13: httpOnly Cookies Authentication
@@ -22,6 +23,15 @@ import api, { registerUnauthorizedHandler, setAuthToken } from "../services/api"
 // User data pode ser cacheado para UX, mas não é crítico
 const USER_KEY = "finance_user";
 
+const enhanceUserShape = (userData) => {
+  if (!userData) return null;
+
+  const emailVerifiedAt = userData.emailVerifiedAt ?? null;
+  const emailVerified = Boolean(emailVerifiedAt ?? userData.emailVerified);
+
+  return { ...userData, emailVerifiedAt, emailVerified };
+};
+
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
@@ -31,19 +41,21 @@ export function AuthProvider({ children }) {
   // User data (pode ser cacheado para evitar re-fetch)
   const [user, setUser] = useState(() => {
     const cached = localStorage.getItem(USER_KEY);
-    return cached ? JSON.parse(cached) : null;
+    return cached ? enhanceUserShape(JSON.parse(cached)) : null;
   });
   
   const [authError, setAuthError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [loginError, setLoginError] = useState(initialLoginErrorState);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const queryClient = useQueryClient();
 
   const resetSession = useCallback(
-    async (message = null) => {
+    async (message = null, nextLoginError = initialLoginErrorState) => {
       setToken(null);
       setUser(null);
       setAuthError(message);
+      setLoginError(nextLoginError);
       try {
         await queryClient.clear();
       } catch (err) {
@@ -53,17 +65,25 @@ export function AuthProvider({ children }) {
     [queryClient]
   );
 
+  const clearLoginError = useCallback(() => setLoginError(initialLoginErrorState), []);
+
+  const enhanceUser = useCallback(enhanceUserShape, []);
+
   const fetchCurrentUser = useCallback(async () => {
     try {
       const { data } = await api.get("/api/auth/me");
-      setUser(data.user);
-      return data.user;
+      const nextUser = enhanceUser(data.user);
+      setUser(nextUser);
+      return nextUser;
     } catch (error) {
-      const message = error.response?.data?.message ?? "Sessão expirada. Faça login novamente.";
-      await resetSession(message);
+      const message = error.response?.data?.message ?? LOGIN_ERROR_MESSAGES.SESSION_EXPIRED;
+      await resetSession(message, {
+        kind: "SESSION_EXPIRED",
+        message: LOGIN_ERROR_MESSAGES.SESSION_EXPIRED,
+      });
       throw error;
     }
-  }, [resetSession]);
+  }, [enhanceUser, resetSession]);
 
   // Definir token no axios quando mudar
   useEffect(() => {
@@ -92,20 +112,23 @@ export function AuthProvider({ children }) {
         setAuthToken(data.accessToken);
         setToken(data.accessToken);
         if (data.user) {
-          setUser(data.user);
+          setUser(enhanceUser(data.user));
         } else {
           await fetchCurrentUser();
         }
         return data.accessToken;
       } catch (e) {
         console.warn("[Auth] Refresh token expired or invalid, redirecting to login", e);
-        await resetSession("Sessão expirada. Faça login novamente.");
+        await resetSession(LOGIN_ERROR_MESSAGES.SESSION_EXPIRED, {
+          kind: "SESSION_EXPIRED",
+          message: LOGIN_ERROR_MESSAGES.SESSION_EXPIRED,
+        });
         return null;
       } finally {
         setIsRefreshing(false);
       }
       },
-      [isRefreshing, fetchCurrentUser, resetSession]
+      [enhanceUser, fetchCurrentUser, isRefreshing, resetSession]
     );
 
   // Registrar handler para 401 (access token expirado)
@@ -116,7 +139,10 @@ export function AuthProvider({ children }) {
 
         if (!newToken) {
           // Refresh falhou → redirecionar para login
-          await resetSession("Sessão expirada. Faça login novamente.");
+          await resetSession(LOGIN_ERROR_MESSAGES.SESSION_EXPIRED, {
+            kind: "SESSION_EXPIRED",
+            message: LOGIN_ERROR_MESSAGES.SESSION_EXPIRED,
+          });
         }
       });
     }, [refreshAccessToken, resetSession]);
@@ -148,8 +174,9 @@ export function AuthProvider({ children }) {
   const login = useCallback(async ({ email, password }) => {
     setLoading(true);
     setAuthError(null);
-    try {
-      const { data } = await api.post("/api/auth/login", { email, password });
+    clearLoginError();
+      try {
+        const { data } = await api.post("/api/auth/login", { email, password });
 
       // Limpar cache do QueryClient antes de configurar nova sessão
       try {
@@ -161,36 +188,29 @@ export function AuthProvider({ children }) {
       // Backend retorna { user, accessToken }
       // refreshToken vem como cookie httpOnly (não acessível aqui)
       setToken(data.accessToken);
-      setUser(data.user);
+      setUser(enhanceUser(data.user));
 
+      clearLoginError();
       return data;
     } catch (error) {
-      const status = error?.response?.status;
-      let message = "Erro inesperado ao efetuar login. Tente novamente.";
-
-      if (!error?.response) {
-        message = "Falha de conexão com o servidor. Verifique se o backend está em execução.";
-      } else if (status === 401) {
-        message = "Credenciais inválidas.";
-      } else if (error.response?.data?.message) {
-        message = error.response.data.message;
-      }
-
-      setAuthError(message);
+      const mappedError = mapLoginError(error);
+      setLoginError(mappedError);
+      setAuthError(mappedError.message);
       throw error;
     } finally {
       setLoading(false);
     }
-  }, [queryClient]);
+  }, [queryClient, clearLoginError, enhanceUser]);
 
   /**
    * Cadastro com email/senha
    */
-  const registerLocal = useCallback(async ({ name, email, password }) => {
+  const registerLocal = useCallback(async ({ name, email, password, acceptedTerms, termsVersion }) => {
     setLoading(true);
     setAuthError(null);
+    clearLoginError();
     try {
-      const { data } = await api.post("/api/auth/register", { name, email, password });
+      const { data } = await api.post("/api/auth/register", { name, email, password, acceptedTerms, termsVersion });
 
       try {
         await queryClient.clear();
@@ -199,7 +219,7 @@ export function AuthProvider({ children }) {
       }
 
       setToken(data.accessToken);
-      setUser(data.user);
+      setUser(enhanceUser(data.user));
       return data;
     } catch (error) {
       const message = error.response?.data?.message ?? "Não foi possível criar sua conta.";
@@ -208,7 +228,7 @@ export function AuthProvider({ children }) {
     } finally {
       setLoading(false);
     }
-  }, [queryClient]);
+  }, [queryClient, clearLoginError, enhanceUser]);
 
   /**
    * Login via Google credential (ID token)
@@ -217,6 +237,7 @@ export function AuthProvider({ children }) {
   const loginWithGoogle = useCallback(async ({ credential }) => {
     setLoading(true);
     setAuthError(null);
+    clearLoginError();
     try {
       const { data } = await api.post('/api/auth/google', { credential });
 
@@ -227,7 +248,7 @@ export function AuthProvider({ children }) {
       }
 
       setToken(data.accessToken);
-      setUser(data.user);
+      setUser(enhanceUser(data.user));
       return data;
     } catch (error) {
       const message = error.response?.data?.message ?? 'Não foi possível autenticar com Google.';
@@ -236,7 +257,7 @@ export function AuthProvider({ children }) {
     } finally {
       setLoading(false);
     }
-  }, [queryClient]);
+  }, [queryClient, clearLoginError, enhanceUser]);
 
   /**
    * Resolve conflito de conta LOCAL x GOOGLE com Google como canônico
@@ -244,6 +265,7 @@ export function AuthProvider({ children }) {
   const resolveGoogleConflict = useCallback(async ({ credential }) => {
     setLoading(true);
     setAuthError(null);
+    clearLoginError();
     try {
       const { data } = await api.post('/api/auth/google/resolve-conflict', {
         credential,
@@ -257,7 +279,7 @@ export function AuthProvider({ children }) {
       }
 
       setToken(data.accessToken);
-      setUser(data.user);
+      setUser(enhanceUser(data.user));
       return data;
     } catch (error) {
       const message = error.response?.data?.message ?? 'Não foi possível unificar as contas.';
@@ -266,7 +288,7 @@ export function AuthProvider({ children }) {
     } finally {
       setLoading(false);
     }
-  }, [queryClient]);
+  }, [queryClient, clearLoginError, enhanceUser]);
 
   /**
    * Vincula uma conta Google a um usuário autenticado
@@ -274,6 +296,7 @@ export function AuthProvider({ children }) {
   const linkGoogleAccount = useCallback(async ({ credential }) => {
     setLoading(true);
     setAuthError(null);
+    clearLoginError();
     try {
       const { data } = await api.post('/api/auth/link/google', { credential });
 
@@ -284,7 +307,7 @@ export function AuthProvider({ children }) {
       }
 
       setToken(data.accessToken);
-      setUser(data.user);
+      setUser(enhanceUser(data.user));
       return data;
     } catch (error) {
       const message = error.response?.data?.message ?? 'Não foi possível vincular sua conta Google.';
@@ -293,7 +316,7 @@ export function AuthProvider({ children }) {
     } finally {
       setLoading(false);
     }
-  }, [queryClient]);
+  }, [queryClient, clearLoginError, enhanceUser]);
 
   /**
    * Logout seguro
@@ -312,6 +335,26 @@ export function AuthProvider({ children }) {
     }
   }, [resetSession]);
 
+  const updateUser = useCallback(
+    (partialUser) => {
+      setUser((prev) => {
+        if (!prev) return prev;
+        return enhanceUser({ ...prev, ...partialUser });
+      });
+    },
+    [enhanceUser]
+  );
+
+  const markEmailVerified = useCallback(
+    (emailVerifiedAt = new Date().toISOString()) => {
+      setUser((prev) => {
+        if (!prev) return prev;
+        return enhanceUser({ ...prev, emailVerified: true, emailVerifiedAt });
+      });
+    },
+    [enhanceUser]
+  );
+
   const value = useMemo(
     () => ({
       token,
@@ -322,12 +365,32 @@ export function AuthProvider({ children }) {
       resolveGoogleConflict,
       linkGoogleAccount,
       logout,
+      updateUser,
+      markEmailVerified,
       authError,
+      loginError,
+      clearLoginError,
       loading,
       isAuthenticated: Boolean(token),
       refreshAccessToken,
     }),
-    [token, user, authError, loading, refreshAccessToken, login, registerLocal, loginWithGoogle, resolveGoogleConflict, linkGoogleAccount, logout]
+    [
+      token,
+      user,
+      authError,
+      loginError,
+      loading,
+      refreshAccessToken,
+      login,
+      registerLocal,
+      loginWithGoogle,
+      resolveGoogleConflict,
+      linkGoogleAccount,
+      logout,
+      updateUser,
+      markEmailVerified,
+      clearLoginError,
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

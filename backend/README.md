@@ -37,6 +37,7 @@ API financeira em Node.js 20 + Express que controla despesas, agrupamento de par
 | `npm run billing:migrate-enum` | Migrações do enum de `billingRolloverPolicy` (NEXT/PREVIOUS). |
 | `npm run fingerprints:backfill` / `npm run fingerprints:regenerate` | Scripts auxiliares de idempotência para lançamentos recorrentes. |
 | `npm run test:billing` | Teste de unidade focado em lógica de billing. |
+| `npm run worker:email` | Sobe o worker de e-mail (após `npm run build`) para consumir `EMAIL_VERIFICATION_QUEUE`. |
 | `npm run health:db` | Check rápido de conectividade com MongoDB. |
 | `npm run seed` | Semeia dados de desenvolvimento no banco. |
 | `npm run clean` | Remove a pasta `dist/` gerada pelo build. |
@@ -65,6 +66,10 @@ Responsabilidade por camada: `route` valida entrada e chama `service`; `service`
 - Variáveis essenciais: `DATABASE_URL` (MongoDB com `replicaSet=rs0`), `REDIS_URL` (ou `UPSTASH_REDIS_*` em produção), `RABBIT_URL`, `JWT_SECRET`, `REFRESH_TOKEN_SECRET`, `ALLOWED_ORIGINS`, `COOKIE_DOMAIN`, `COOKIE_SECURE`, `COOKIE_SAMESITE`. A validação Zod bloqueia o boot se algo obrigatório faltar.
 - Execução via Docker Compose: o backend espera MongoDB, Redis e RabbitMQ saudáveis (ver `docker-compose.yaml` na raiz). Healthchecks dos serviços são requeridos antes do start.
 - Para detalhes gerais de infraestrutura e orquestração, consulte o README raiz (`../README.md`).
+- Verificação de e-mail (Resend):
+  - Produção/cloud: `AUTH_EMAIL_PROVIDER=resend`, `RESEND_API_KEY`, `AUTH_EMAIL_FROM` (ou `RESEND_FROM`) e opcional `AUTH_VERIFY_URL_BASE` para sobrescrever o frontend ao montar o link.
+  - Dev/testes: `AUTH_EMAIL_PROVIDER=noop` mantém o worker silencioso; mantenha `AUTH_EMAIL_VERIFICATION_ENQUEUE_ENABLED=true` para validar a fila.
+  - Smoke manual: `npm run smoke:email-worker` (envs `SMOKE_EMAIL`/`SMOKE_TOKEN` opcionais) publica em `email-jobs`; suba `npm run build && npm run worker:email` ou `docker compose -f ../docker-compose.cloud.yml --profile workers up -d email-worker`.
 
 ## 6. Fluxos Importantes
 ### BillingMonth e política NEXT/PREVIOUS
@@ -79,6 +84,16 @@ Responsabilidade por camada: `route` valida entrada e chama `service`; `service`
 - **Unitária**: `DELETE /expenses/:id` remove apenas a parcela alvo e invalida o cache do `billingMonth` afetado.
 - **Em lote**: `DELETE /expenses/group/:installment_group_id` remove todas as parcelas do grupo quando a intenção é eliminar o lançamento completo.
 
+### Acesso a recursos sensíveis (UX-06E)
+- Rotas que conversam com integrações externas ou que expõem dados sensíveis (ex.: `/api/jobs/*`, `/api/dlq/*` e `/api/salaryHistory/*`) agora utilizam o middleware `requireEmailVerified`.
+- Usuários com e-mail não verificado recebem `403` com payload `{ error: "EMAIL_NOT_VERIFIED", message: "Seu e-mail ainda não foi confirmado..." }`.
+- Usuários verificados mantêm o comportamento atual, sem regressão de permissões. Exports no frontend também exibem alerta e redirecionam para `/auth/check-email` quando o e-mail não está confirmado.
+
+### Configuração de verificação de e-mail (UX-06F)
+- Toggles via env: `AUTH_EMAIL_VERIFICATION_REQUIRED`, `AUTH_EMAIL_VERIFICATION_ENQUEUE_ENABLED`, `AUTH_EMAIL_VERIFICATION_TOKEN_TTL_MINUTES`, `AUTH_EMAIL_VERIFICATION_RESEND_WINDOW_SECONDS`, `AUTH_EMAIL_PROVIDER` (`noop` para dev/test, `resend` para prod).
+- Logs estruturados para todo o ciclo (`auth.verify-email.*`, `email.verify-email.*`, `email.worker.*`) incluem `event`, `ts`, `requestId` e metadados como `userId` e `tokenHint` (últimos 4 caracteres).
+- Se o enqueue estiver desabilitado, a API ainda cria o token e registra `auth.verify-email.enqueue.skipped`; o worker pode ser desligado sem quebrar o fluxo de registro/login.
+
 ### Dead Letter Queue e reprocessamento
 - Mensagens com falha após tentativas de retry são encaminhadas à DLQ. O fluxo padrão é: fila principal → retries com backoff → DLQ → reprocessamento manual via `/admin/dlq` ou purge.
 
@@ -86,6 +101,9 @@ Responsabilidade por camada: `route` valida entrada e chama `service`; `service`
 - **recurringWorker**: cria lançamentos recorrentes e reaplica cálculo de `billingMonth` com idempotência via fingerprints.
 - **bulkWorker**: executa operações em lote (ex.: criação massiva de parcelas) usando ConfirmChannel e `prefetch` configurado.
 - Ambos se reconectam ao RabbitMQ com backoff e respeitam a DLQ. Métricas básicas registram `[CACHE HIT/MISS]` e tentativas de consumo.
+- **emailWorker**: consome a fila `EMAIL_VERIFICATION_QUEUE` (`email-jobs`) processando jobs `VERIFY_EMAIL` com payload `{ email, userId, verificationUrl, expiresAt }`.
+  - Envia o e-mail de verificação via provider (`AUTH_EMAIL_PROVIDER=resend|noop`), exigindo `RESEND_API_KEY` + `AUTH_EMAIL_FROM/RESEND_FROM` e logando `email.verify-email.sent/requeue/dlq`.
+  - Execução local/cloud-first: `npm run build && npm run worker:email` ou `docker compose -f ../docker-compose.cloud.yml --profile workers up -d email-worker` (RabbitMQ/CloudAMQP obrigatórios).
 
 ## 8. Testes
 - Suíte principal com **Vitest** + **Supertest** para rotas e serviços. Rodar localmente: `npm ci && npm run coverage` (ou `npm run coverage -- --watch` para iteração).

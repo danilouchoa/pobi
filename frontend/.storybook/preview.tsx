@@ -5,10 +5,11 @@
  * Inclui ThemeProvider do MUI para garantir consistência visual.
  */
 
-import type { Preview } from '@storybook/react';
-import { ThemeProvider } from '@mui/material/styles';
-import CssBaseline from '@mui/material/CssBaseline';
-import theme from '../src/theme';
+import type { Preview } from "@storybook/react";
+import { ThemeProvider } from "@mui/material/styles";
+import CssBaseline from "@mui/material/CssBaseline";
+import { TokenProvider } from "../src/ui/ThemeProvider";
+import theme from "../src/theme";
 
 const preview: Preview = {
   parameters: {
@@ -19,15 +20,15 @@ const preview: Preview = {
       },
     },
     backgrounds: {
-      default: 'light',
+      default: "light",
       values: [
         {
-          name: 'light',
-          value: '#ffffff',
+          name: "light",
+          value: "#f4f6fb",
         },
         {
-          name: 'dark',
-          value: '#1a1a1a',
+          name: "dark",
+          value: "#0f172a",
         },
       ],
     },
@@ -35,10 +36,12 @@ const preview: Preview = {
   decorators: [
     (Story) => (
       <ThemeProvider theme={theme}>
-        <CssBaseline />
-        <div style={{ padding: '2rem' }}>
-          <Story />
-        </div>
+        <TokenProvider>
+          <CssBaseline />
+          <div style={{ padding: "2rem", minHeight: "100vh", background: "var(--finfy-colors-background)" }}>
+            <Story />
+          </div>
+        </TokenProvider>
       </ThemeProvider>
     ),
   ],
