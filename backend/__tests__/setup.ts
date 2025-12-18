@@ -7,13 +7,18 @@ process.env.JWT_REFRESH_SECRET = 'test-refresh-secret-key';
 process.env.DATABASE_URL = 'mongodb://localhost:27017/test_db';
 process.env.REDIS_HOST = 'localhost';
 process.env.REDIS_PORT = '6379';
-process.env.RABBITMQ_URL = 'amqp://localhost';
+process.env.RABBIT_URL = 'amqp://localhost';
 process.env.FRONTEND_ORIGIN = 'http://localhost:5173';
 process.env.COOKIE_DOMAIN = 'localhost';
 process.env.GOOGLE_CLIENT_ID = 'test-google-client-id';
 process.env.GOOGLE_CLIENT_SECRET = 'test-google-client-secret';
 process.env.AUTH_GOOGLE_ENABLED = 'true';
 process.env.AUTH_ACCOUNT_LINK_ENABLED = 'true';
+process.env.AUTH_EMAIL_VERIFICATION_REQUIRED = 'true';
+process.env.AUTH_EMAIL_VERIFICATION_ENQUEUE_ENABLED = 'true';
+process.env.AUTH_EMAIL_PROVIDER = 'noop';
+process.env.AUTH_EMAIL_VERIFICATION_TOKEN_TTL_MINUTES = `${24 * 60}`;
+process.env.AUTH_EMAIL_VERIFICATION_RESEND_WINDOW_SECONDS = `${10 * 60}`;
 
 // Mock do Prisma Client como classe
 const mockPrismaInstance = {
@@ -23,6 +28,10 @@ const mockPrismaInstance = {
     create: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
+  },
+  userConsent: {
+    create: vi.fn(),
+    findMany: vi.fn(),
   },
   expense: {
     findMany: vi.fn(),
@@ -117,6 +126,7 @@ vi.mock('../src/lib/redisClient', () => {
 vi.mock('../src/lib/rabbit', () => ({
   publishToQueue: vi.fn().mockResolvedValue(undefined),
   publishRecurringJob: vi.fn().mockResolvedValue(undefined),
+  publishEmailJob: vi.fn().mockResolvedValue(undefined),
   consumeQueue: vi.fn(),
   createRabbit: vi.fn().mockResolvedValue({
     channel: {

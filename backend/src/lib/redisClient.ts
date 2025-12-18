@@ -121,6 +121,17 @@ function buildUpstashRedis(): RedisLike {
 }
 
 const nodeEnv = process.env.NODE_ENV ?? "development";
-const useLocalRedis = Boolean(process.env.REDIS_URL || process.env.REDIS_HOST || nodeEnv !== "production");
+const hasUpstash = Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
+const hasNodeRedis = Boolean(process.env.REDIS_URL || process.env.REDIS_HOST || process.env.REDIS_PORT);
 
-export const redis: RedisLike = useLocalRedis ? buildNodeRedis() : buildUpstashRedis();
+if (nodeEnv === "production" && !hasUpstash && !hasNodeRedis) {
+  throw new Error("Redis configuration is missing: set REDIS_URL (or REDIS_HOST/REDIS_PORT) or UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN");
+}
+
+const redisSource: "node" | "upstash" = (() => {
+  if (hasNodeRedis) return "node";
+  if (hasUpstash) return "upstash";
+  return nodeEnv !== "production" ? "node" : "upstash";
+})();
+
+export const redis: RedisLike = redisSource === "upstash" ? buildUpstashRedis() : buildNodeRedis();
