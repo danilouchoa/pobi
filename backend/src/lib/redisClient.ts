@@ -1,5 +1,6 @@
 import { Redis } from "@upstash/redis";
 import { createClient } from "redis";
+import { sanitizeUrlForLog } from "./logger";
 
 type NodeRedisClient = ReturnType<typeof createClient>;
 type RedisDelArgs = Parameters<NodeRedisClient["del"]>;
@@ -17,7 +18,7 @@ class NodeRedisAdapter implements RedisLike {
   constructor(private client: NodeRedisClient) {
     this.ready = client.connect().then(() => {
       const url = client.options?.url ?? 'redis://localhost:6379';
-      console.log(`[REDIS] Connected to ${url}`);
+      console.log(`[REDIS] Connected to ${sanitizeUrlForLog(url)}`);
     }).catch((error: Error) => {
       console.error('[REDIS] Failed to connect on first attempt:', error.message);
       throw error;
@@ -93,7 +94,7 @@ function buildNodeRedis(): RedisLike {
       connectTimeout,
       reconnectStrategy(retries: number) {
         const delay = Math.min(500 * 2 ** retries, 10_000);
-        console.warn(`[REDIS] Reconnecting (attempt ${retries + 1}) in ${delay}ms`);
+        console.warn(`[REDIS] Reconnecting (attempt ${retries + 1}) in ${delay}ms to ${sanitizeUrlForLog(url)}`);
         return delay;
       },
     },
@@ -116,6 +117,8 @@ function buildUpstashRedis(): RedisLike {
     url: process.env.UPSTASH_REDIS_REST_URL!,
     token: process.env.UPSTASH_REDIS_REST_TOKEN!,
   });
+
+  console.log(`[REDIS] Using Upstash REST at ${sanitizeUrlForLog(process.env.UPSTASH_REDIS_REST_URL)}`);
 
   return new UpstashRedisAdapter(client);
 }

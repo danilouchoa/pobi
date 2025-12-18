@@ -2,6 +2,7 @@ import { connect, type ConfirmChannel } from 'amqplib';
 import crypto from 'crypto';
 import { config } from '../config';
 import { EMAIL_VERIFICATION_QUEUE } from './queues';
+import { sanitizeUrlForLog } from './logger';
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 type RabbitConnection = Awaited<ReturnType<typeof connect>>;
@@ -18,8 +19,11 @@ const consumerContexts = new Map<string, RabbitContext>();
 const formatError = (error: unknown) =>
   error instanceof Error ? `${error.name}: ${error.message}` : String(error);
 
-const logConnected = () => {
-  console.log('[Rabbit] Connected and queue ready');
+const rabbitTarget = sanitizeUrlForLog(config.rabbitUrl);
+
+const logConnected = (context?: string) => {
+  const suffix = context ? ` (${context})` : '';
+  console.log(`[Rabbit] Connected${suffix} target=${rabbitTarget}`);
 };
 
 const attachConnectionHandlers = (connection: RabbitConnection, onClose: () => void) => {
@@ -52,7 +56,7 @@ async function connectWithRetry(context: string): Promise<RabbitConnection> {
   while (true) {
     try {
       const connection = await connect(config.rabbitUrl, { timeout: 5000 });
-      console.log(`[Rabbit] Connected (${context})`);
+      console.log(`[Rabbit] Connected (${context}) target=${rabbitTarget}`);
       return connection;
     } catch (error) {
       attempt += 1;
@@ -109,7 +113,7 @@ const ensureSharedChannel = async (): Promise<ConfirmChannel> => {
     }
   });
   
-  logConnected();
+  logConnected('shared-channel');
   return channel;
 };
 
@@ -142,7 +146,7 @@ async function openContext(options: {
     }
   });
   
-  logConnected();
+  logConnected(options.queue);
   return { connection, channel };
 }
 
