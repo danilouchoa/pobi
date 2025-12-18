@@ -4,6 +4,7 @@ import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { getOrSetCache } from '../lib/redisCache';
 import { redis } from '../lib/redisClient';
 import { validate } from '../middlewares/validation';
+import { requireEmailVerified } from '../middlewares/emailVerified';
 import {
   createSalarySchema,
   updateSalarySchema,
@@ -73,6 +74,8 @@ const invalidateSalaryCache = async (userId: string, ...months: Array<string | n
 
 export default function salaryHistoryRoutes(prisma: PrismaClient) {
   const router = Router();
+
+  router.use(requireEmailVerified(prisma));
 
   router.get('/', validate({ query: querySalarySchema }), async (req: AuthenticatedRequest, res) => {
     try {

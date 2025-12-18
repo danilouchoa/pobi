@@ -16,6 +16,8 @@ import {
   Skeleton,
   Divider,
 } from "@mui/material";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { useSnackbar } from "notistack";
 import { useFinanceApp } from "./hooks/useFinanceApp";
 import Dashboard from "./pages/Dashboard";
 import Lancamentos from "./pages/Lancamentos";
@@ -23,7 +25,12 @@ import Salario from "./components/Salario";
 import Cadastros from "./components/Cadastros";
 import Exportacao from "./components/Exportacao";
 import Login from "./components/Login";
+import Signup from "./components/Signup";
+import CheckEmail from "./components/auth/CheckEmail";
+import VerifyEmail from "./components/auth/VerifyEmail";
 import { useAuth } from "./context/useAuth";
+import { UnverifiedEmailBanner } from "./components/auth/UnverifiedEmailBanner";
+import { registerEmailNotVerifiedHandler } from "./services/api";
 
 const TABS = [
   { id: "dashboard", label: "Resumo Mensal" },
@@ -42,9 +49,11 @@ const getInitials = (value = "") => {
     .join("");
 };
 
-function App() {
+function AuthenticatedApp() {
   const [tab, setTab] = useState("dashboard");
-  const { isAuthenticated, user, logout } = useAuth();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const { enqueueSnackbar, closeSnackbar } = useSnackbar();
   const {
     state,
     month,
@@ -79,6 +88,33 @@ function App() {
     return () => debouncedRefresh.cancel();
   }, [debouncedRefresh]);
 
+  useEffect(() => {
+    const handler = ({ message, redirectPath }) => {
+      const snackbarKey = enqueueSnackbar(message, {
+        variant: "warning",
+        action: (key) => (
+          <Button
+            color="inherit"
+            size="small"
+            onClick={() => {
+              closeSnackbar(key);
+              navigate(redirectPath);
+            }}
+          >
+            Ver opções de verificação
+          </Button>
+        ),
+      });
+
+      if (!snackbarKey) {
+        navigate(redirectPath);
+      }
+    };
+
+    registerEmailNotVerifiedHandler(handler);
+    return () => registerEmailNotVerifiedHandler(null);
+  }, [closeSnackbar, enqueueSnackbar, navigate]);
+
   const handleTabChange = useCallback(
     (_, value) => {
       if (value === tab) return;
@@ -87,10 +123,6 @@ function App() {
     },
     [tab, debouncedRefresh]
   );
-
-  if (!isAuthenticated) {
-    return <Login />;
-  }
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: "background.default" }}>
@@ -142,6 +174,7 @@ function App() {
       </AppBar>
 
       <Container maxWidth="lg" sx={{ py: 5 }}>
+        <UnverifiedEmailBanner />
         <Paper sx={{ p: { xs: 3, md: 4 }, mb: 4 }}>
           <Stack spacing={2} divider={<Divider flexItem />}>
             <Box>
@@ -264,6 +297,42 @@ function App() {
       </Container>
     </Box>
   );
+}
+
+function AuthRoutes() {
+  return (
+    <Routes>
+      <Route path="/auth/login" element={<Login />} />
+      <Route path="/auth/signup" element={<Signup />} />
+      <Route path="/auth/check-email" element={<CheckEmail />} />
+      <Route path="/auth/verify-email" element={<VerifyEmail />} />
+      <Route path="*" element={<Navigate to="/auth/login" replace />} />
+    </Routes>
+  );
+}
+
+function App() {
+  const { isAuthenticated } = useAuth();
+  const location = useLocation();
+
+  const isAuthPath = location.pathname.startsWith("/auth/");
+  const isVerificationFlow =
+    location.pathname.startsWith("/auth/check-email") ||
+    location.pathname.startsWith("/auth/verify-email");
+
+  if (!isAuthenticated) {
+    return <AuthRoutes />;
+  }
+
+  if (isAuthPath && !isVerificationFlow) {
+    return <Navigate to="/" replace />;
+  }
+
+  if (isAuthPath && isVerificationFlow) {
+    return <AuthRoutes />;
+  }
+
+  return <AuthenticatedApp />;
 }
 
 function GridSkeleton() {

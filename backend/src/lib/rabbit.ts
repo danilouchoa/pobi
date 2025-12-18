@@ -1,7 +1,7 @@
 import { connect, type ConfirmChannel } from 'amqplib';
 import crypto from 'crypto';
-
-const RABBIT_URL = process.env.RABBIT_URL || 'amqp://rabbitmq:5672';
+import { config } from '../config';
+import { EMAIL_VERIFICATION_QUEUE } from './queues';
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 type RabbitConnection = Awaited<ReturnType<typeof connect>>;
@@ -47,9 +47,11 @@ const attachChannelHandlers = (
 
 async function connectWithRetry(context: string): Promise<RabbitConnection> {
   let attempt = 0;
+  // Retry loop is intentional to maintain connectivity with backoff
+  // eslint-disable-next-line no-constant-condition
   while (true) {
     try {
-      const connection = await connect(RABBIT_URL, { timeout: 5000 });
+      const connection = await connect(config.rabbitUrl, { timeout: 5000 });
       console.log(`[Rabbit] Connected (${context})`);
       return connection;
     } catch (error) {
@@ -88,13 +90,19 @@ const ensureSharedChannel = async (): Promise<ConfirmChannel> => {
   await channel.bindQueue('dead-letter-queue', 'dlx-exchange', '');
   
   // Filas principais com DLX configurado
-  await channel.assertQueue('recurring-jobs', { 
+  await channel.assertQueue('recurring-jobs', {
     durable: true,
     arguments: {
       'x-dead-letter-exchange': 'dlx-exchange'
     }
   });
-  await channel.assertQueue('bulkUpdateQueue', { 
+  await channel.assertQueue('bulkUpdateQueue', {
+    durable: true,
+    arguments: {
+      'x-dead-letter-exchange': 'dlx-exchange'
+    }
+  });
+  await channel.assertQueue(EMAIL_VERIFICATION_QUEUE, {
     durable: true,
     arguments: {
       'x-dead-letter-exchange': 'dlx-exchange'
@@ -198,6 +206,10 @@ export async function publishToQueue(
 
 export async function publishRecurringJob(userId?: string) {
   await publishToQueue('recurring-jobs', { type: 'recurring.process', userId, ts: Date.now() });
+}
+
+export async function publishEmailJob(payload: unknown, jobId?: string) {
+  await publishToQueue(EMAIL_VERIFICATION_QUEUE, payload, jobId);
 }
 
 type BulkUpdateMessage = {

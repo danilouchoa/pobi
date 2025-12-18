@@ -101,7 +101,7 @@ app.use('/api/origins', authenticate, originsRoutes(prisma));
 app.use('/api/debtors', authenticate, debtorsRoutes(prisma));
 app.use('/api/salaryHistory', authenticate, salaryHistoryRoutes(prisma));
 app.use('/api/jobs', authenticate, jobsRoutes(prisma));
-app.use('/api/dlq', authenticate, dlqRoutes); // Dead Letter Queue admin
+app.use('/api/dlq', authenticate, dlqRoutes(prisma)); // Dead Letter Queue admin
 
 // Rota de Teste "Hello World"
 app.get('/api/status', (req, res) => {
