@@ -11,6 +11,7 @@ import { registerSchema, loginSchema, googleLoginSchema, googleResolveConflictSc
 import { rateLimit } from 'express-rate-limit';
 import { authenticate, type AuthenticatedRequest } from '../middlewares/auth';
 import { mergeUsersUsingGoogleAsCanonical } from '../services/userMerge';
+import { ensureFirstPrompted, getOnboardingState } from '../services/onboarding';
 import {
   EMAIL_VERIFICATION_QUEUE,
   canIssueNewToken,
@@ -130,13 +131,19 @@ const generateRefreshToken = (user: PrismaUser): string => {
   return jwt.sign({ ...buildBaseClaims(user), tokenType: 'refresh' }, getJwtSecret(), { expiresIn: '7d' });
 };
 
-const issueSession = (res: Response, user: PrismaUser, status = 200) => {
+const issueSession = async (
+  res: Response,
+  user: PrismaUser,
+  buildUserPayload: (user: PrismaUser) => Promise<Record<string, unknown>>,
+  status = 200,
+) => {
   const accessToken = generateAccessToken(user);
   const refreshToken = generateRefreshToken(user);
+  const payload = await buildUserPayload(user);
 
   res.cookie('refreshToken', refreshToken, buildRefreshTokenCookieOptions());
   return res.status(status).json({
-    user: sanitizeUser(user),
+    user: payload,
     accessToken,
   });
 };
@@ -168,6 +175,21 @@ export default function authRoutes(prisma: PrismaClient) {
 
   // Google OAuth2 client (used to validate ID tokens sent by frontend)
   const googleClient = new OAuth2Client(config.googleClientId);
+
+  const buildUserPayload = async (user: PrismaUser) => {
+    const onboardingState = await getOnboardingState(user.id, prisma);
+    const base = sanitizeUser(user);
+    const needsOnboarding = onboardingState.onboarding.needsOnboarding && Boolean(base.emailVerifiedAt);
+
+    return {
+      ...base,
+      preferences: onboardingState.preferences,
+      onboarding: {
+        ...onboardingState.onboarding,
+        needsOnboarding,
+      },
+    };
+  };
 
   const verifyGoogleCredential = async (credential: string) => {
     let ticket;
@@ -311,7 +333,7 @@ export default function authRoutes(prisma: PrismaClient) {
 
       logAuthEvent('auth.register.local', { userId: user.id, email: maskEmail(user.email) }, { req, userId: user.id, ip: clientIp });
 
-      return issueSession(res, user, 201);
+      return await issueSession(res, user, buildUserPayload, 201);
     } catch (error) {
       console.error('[AUTH] Erro no registro:', error);
       return res.status(500).json({
@@ -377,7 +399,11 @@ export default function authRoutes(prisma: PrismaClient) {
 
       logAuthEvent('auth.login.local', { userId: user.id, email: user.email, provider: user.provider });
 
-      return issueSession(res, user);
+      if (user.emailVerifiedAt) {
+        await ensureFirstPrompted(user.id, prisma);
+      }
+
+      return await issueSession(res, user, buildUserPayload);
     } catch (error) {
       console.error('[AUTH] Erro no login:', error);
       return res.status(500).json({
@@ -457,7 +483,7 @@ export default function authRoutes(prisma: PrismaClient) {
         });
       }
 
-      return issueSession(res, user);
+      return await issueSession(res, user, buildUserPayload);
     } catch (error) {
       console.error('[AUTH] Erro ao renovar token:', error);
       return res.status(500).json({
@@ -491,7 +517,12 @@ export default function authRoutes(prisma: PrismaClient) {
         });
       }
 
-      return res.json({ user: sanitizeUser(user) });
+      if (user.emailVerifiedAt) {
+        await ensureFirstPrompted(user.id, prisma);
+      }
+
+      const payload = await buildUserPayload(user);
+      return res.json({ user: payload });
     } catch (error) {
       console.error('[AUTH] Erro ao consultar perfil do usuário:', error);
       return res.status(500).json({
@@ -778,7 +809,11 @@ export default function authRoutes(prisma: PrismaClient) {
 
       logAuthEvent('auth.login.google', { userId: user.id, email: user.email });
 
-      return issueSession(res, user);
+      if (user.emailVerifiedAt) {
+        await ensureFirstPrompted(user.id, prisma);
+      }
+
+      return await issueSession(res, user, buildUserPayload);
     } catch (error) {
       console.error('[AUTH] Erro no login Google:', error);
       return res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Erro interno no servidor.' });
@@ -871,7 +906,11 @@ export default function authRoutes(prisma: PrismaClient) {
         stats,
       });
 
-      return issueSession(res, canonicalUser);
+      if (canonicalUser.emailVerifiedAt) {
+        await ensureFirstPrompted(canonicalUser.id, prisma);
+      }
+
+      return await issueSession(res, canonicalUser as PrismaUser, buildUserPayload);
     } catch (error) {
       console.error('[AUTH] Erro ao resolver conflito Google:', error);
       return res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Erro interno no servidor.' });
@@ -977,7 +1016,11 @@ export default function authRoutes(prisma: PrismaClient) {
         });
       }
 
-      return issueSession(res, resultUser);
+      if (resultUser.emailVerifiedAt) {
+        await ensureFirstPrompted(resultUser.id, prisma);
+      }
+
+      return await issueSession(res, resultUser, buildUserPayload);
     } catch (error) {
       console.error('[AUTH] Erro ao vincular conta Google:', error);
       return res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Erro interno no servidor.' });

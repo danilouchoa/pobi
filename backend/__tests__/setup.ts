@@ -29,6 +29,11 @@ const mockPrismaInstance = {
     update: vi.fn(),
     delete: vi.fn(),
   },
+  userPreferences: {
+    findUnique: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+  },
   userConsent: {
     create: vi.fn(),
     findMany: vi.fn(),
@@ -86,6 +91,86 @@ mockPrismaInstance.$transaction = vi.fn(async (callback: any) => {
   return callback;
 });
 
+type PreferencesState = {
+  id: string;
+  userId: string;
+  countryCode: string | null;
+  currencyCode: string | null;
+  timezone: string | null;
+  display: any;
+  goals: string[];
+  onboardingStatus: string;
+  onboardingFirstPromptedAt: Date | null;
+  onboardingDismissedAt: Date | null;
+  onboardingCompletedAt: Date | null;
+  step1CompletedAt: Date | null;
+  step2CompletedAt: Date | null;
+  step3CompletedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+let userPreferencesState: PreferencesState = {
+  id: 'pref-default',
+  userId: 'user-123',
+  countryCode: null,
+  currencyCode: null,
+  timezone: null,
+  display: null,
+  goals: [],
+  onboardingStatus: 'NOT_STARTED',
+  onboardingFirstPromptedAt: null,
+  onboardingDismissedAt: null,
+  onboardingCompletedAt: null,
+  step1CompletedAt: null,
+  step2CompletedAt: null,
+  step3CompletedAt: null,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+};
+
+const resetUserPreferencesMock = () => {
+  userPreferencesState = {
+    ...userPreferencesState,
+    id: 'pref-default',
+    userId: 'user-123',
+    countryCode: null,
+    currencyCode: null,
+    timezone: null,
+    display: null,
+    goals: [],
+    onboardingStatus: 'NOT_STARTED',
+    onboardingFirstPromptedAt: null,
+    onboardingDismissedAt: null,
+    onboardingCompletedAt: null,
+    step1CompletedAt: null,
+    step2CompletedAt: null,
+    step3CompletedAt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  mockPrismaInstance.userPreferences.findUnique.mockImplementation(async ({ where }: any = {}) => {
+    if (!where?.userId) return null;
+    return { ...userPreferencesState, userId: where.userId };
+  });
+
+  mockPrismaInstance.userPreferences.create.mockImplementation(async ({ data }: any = {}) => {
+    userPreferencesState = {
+      ...userPreferencesState,
+      ...data,
+      goals: data?.goals ?? userPreferencesState.goals,
+      userId: data?.userId ?? userPreferencesState.userId,
+    } as PreferencesState;
+    return { ...userPreferencesState };
+  });
+
+  mockPrismaInstance.userPreferences.update.mockImplementation(async ({ data }: any = {}) => {
+    userPreferencesState = { ...userPreferencesState, ...data } as PreferencesState;
+    return { ...userPreferencesState };
+  });
+};
+
 vi.mock('@prisma/client', () => ({
   PrismaClient: class {
     constructor() {
@@ -98,6 +183,8 @@ vi.mock('@prisma/client', () => ({
     GOOGLE: 'GOOGLE',
   },
 }));
+
+resetUserPreferencesMock();
 
 // Mock do Redis Client (nome da exportação é 'redis')
 vi.mock('../src/lib/redisClient', () => {
@@ -162,6 +249,7 @@ process.env.TEST_SEED = '42';
 // Resetar mocks após cada teste
 afterEach(() => {
   vi.clearAllMocks();
+  resetUserPreferencesMock();
 });
 
 // Limpar timers após todos os testes

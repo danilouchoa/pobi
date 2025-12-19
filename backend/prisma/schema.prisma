@@ -50,6 +50,7 @@ model User {
   jobs          Job[]
   consents      UserConsent[]
   verificationTokens EmailVerificationToken[]
+  preferences   UserPreferences?
 
   @@index([provider])
 }
@@ -231,4 +232,24 @@ model EmailVerificationToken {
 
   @@index([userId])
   @@index([expiresAt])
+}
+
+model UserPreferences {
+  id                      String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId                  String   @unique @db.ObjectId
+  user                    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  countryCode             String?
+  currencyCode            String?
+  timezone                String?
+  display                 Json?
+  goals                   String[] @default([])
+  onboardingStatus        String   @default("NOT_STARTED")
+  onboardingFirstPromptedAt DateTime?
+  onboardingDismissedAt   DateTime?
+  onboardingCompletedAt   DateTime?
+  step1CompletedAt        DateTime?
+  step2CompletedAt        DateTime?
+  step3CompletedAt        DateTime?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 }

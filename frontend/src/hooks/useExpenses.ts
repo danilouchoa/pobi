@@ -223,8 +223,10 @@ export function useExpenses(month: string, options: Options = {}) {
     enabled: false,
   });
 
-  const invalidateExpensesForMonth = async () => {
-    await queryClient.invalidateQueries({ predicate: expenseQueryPredicate, refetchType: "all" });
+  const invalidateExpensesForMonth = async (options?: { refetchActiveLists?: boolean }) => {
+    const refetchLists = options?.refetchActiveLists ?? false;
+
+    await queryClient.invalidateQueries({ predicate: expenseQueryPredicate, refetchType: refetchLists ? "all" : "inactive" });
     await queryClient.invalidateQueries({ queryKey: monthKey, refetchType: "all" });
     await queryClient.invalidateQueries({ queryKey: recurringKey, refetchType: "all" });
     await queryClient.invalidateQueries({ queryKey: sharedKey, refetchType: "all" });
@@ -263,7 +265,7 @@ export function useExpenses(month: string, options: Options = {}) {
     onSuccess: async (created: Expense) => {
       const visible = matchesCurrentView(created) ? [created] : [];
       upsertVisibleExpenses(visible);
-      await invalidateExpensesForMonth();
+      await invalidateExpensesForMonth({ refetchActiveLists: false });
     },
   });
 
@@ -294,7 +296,7 @@ export function useExpenses(month: string, options: Options = {}) {
           data: old.data.map((expense) => (expense.id === updated.id ? updated : expense)),
         };
       });
-      await invalidateExpensesForMonth();
+      await invalidateExpensesForMonth({ refetchActiveLists: false });
     },
   });
 

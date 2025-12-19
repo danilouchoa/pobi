@@ -248,3 +248,8 @@ g
 - `useDeleteInstallments` ajustado para os novos query keys; AuthProvider segue limpando o cache em login/logout.
 - Testes de `useExpenses` atualizados para cobrir invalidação + refetch imediato e filtragem de batch cross-month; rodar `npm run test:unit -- src/__tests__/useExpenses.test.tsx` após instalar dependências.
 - Ao adicionar novas mutações, sempre derive a queryKey pelo factory, restrinja otimismos ao mês visível e finalize com `invalidate + refetch` da lista ativa e das listas relacionadas.
+
+## UX-07 – Onboarding pós-cadastro (perfil e preferências)
+- Endpoints novos em `/api/onboarding` (GET/PATCH/skip/complete) retornam DTO `{ profile, preferences, onboarding }` com `needsOnboarding` para gating.
+- `/api/auth/me` agora inclui resumo de onboarding + preferências, mantendo o contrato sanitizado.
+- Frontend redireciona usuários verificados para `/onboarding` de forma não bloqueante; wizard em `frontend/src/pages/Onboarding.tsx` usa AuthShell e design system.

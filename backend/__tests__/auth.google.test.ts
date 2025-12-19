@@ -71,7 +71,7 @@ describe('POST /api/auth/google', () => {
       }),
     });
     expect(res.body).toEqual({
-      user: {
+      user: expect.objectContaining({
         id: createdUser.id,
         email: createdUser.email,
         name: createdUser.name,
@@ -79,7 +79,7 @@ describe('POST /api/auth/google', () => {
         provider: 'GOOGLE',
         googleLinked: true,
         emailVerifiedAt: null,
-      },
+      }),
       accessToken: expect.any(String),
     });
 
@@ -142,15 +142,17 @@ describe('POST /api/auth/google', () => {
         name: updatedUser.name,
       }),
     });
-    expect(res.body.user).toEqual({
-      id: updatedUser.id,
-      email: updatedUser.email,
-      name: updatedUser.name,
-      avatar: updatedUser.avatar,
-      provider: 'GOOGLE',
-      googleLinked: true,
-      emailVerifiedAt: null,
-    });
+    expect(res.body.user).toEqual(
+      expect.objectContaining({
+        id: updatedUser.id,
+        email: updatedUser.email,
+        name: updatedUser.name,
+        avatar: updatedUser.avatar,
+        provider: 'GOOGLE',
+        googleLinked: true,
+        emailVerifiedAt: null,
+      })
+    );
   });
 
   it('atualiza usuário LOCAL existente ao logar com Google com mesmo email', async () => {
