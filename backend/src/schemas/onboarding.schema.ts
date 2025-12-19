@@ -9,7 +9,10 @@ const displaySchema = z
   .catchall(z.unknown());
 
 export const onboardingPatchSchema = z.object({
-  name: z.string().trim().min(1).max(120).optional(),
+  name: z.preprocess(
+    (val) => (typeof val === 'string' && val.trim().length === 0 ? undefined : val),
+    z.string().trim().min(1).max(120).optional(),
+  ),
   avatar: z.string().trim().url().optional(),
   countryCode: z.string().trim().max(3).optional(),
   currencyCode: z.string().trim().max(5).optional(),

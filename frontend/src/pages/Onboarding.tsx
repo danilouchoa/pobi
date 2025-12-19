@@ -39,7 +39,7 @@ const TIMEZONE_OPTIONS = [
 
 const deriveStep = (dto: OnboardingDTO) => {
   if (dto.onboarding.step3CompletedAt) return 3;
-  if (dto.onboarding.step2CompletedAt) return 3;
+  if (dto.onboarding.step2CompletedAt) return 2;
   if (dto.onboarding.step1CompletedAt) return 2;
   return 1;
 };
@@ -83,54 +83,82 @@ export default function Onboarding() {
     queryKey: ["onboarding"],
     queryFn: getOnboarding,
     refetchOnWindowFocus: false,
-    onSuccess: (dto) => {
-      syncAuthFromDto(dto);
-      if (!dto.onboarding.needsOnboarding) {
-        navigate("/", { replace: true });
-        return;
-      }
-      setStep(deriveStep(dto));
-      setForm((prev) => ({
-        ...prev,
-        name: dto.profile.name ?? "",
-        avatar: dto.profile.avatar ?? "",
-        countryCode: dto.preferences.countryCode ?? "",
-        currencyCode: dto.preferences.currencyCode ?? "",
-        timezone: dto.preferences.timezone ?? initialTimezone,
-        compactMode: Boolean((dto.preferences.display as any)?.compactMode),
-        goals: dto.preferences.goals ?? [],
-      }));
-    },
   });
+
+  // Sync auth when onboarding query succeeds
+  useEffect(() => {
+    if (!onboardingQuery.isSuccess || !onboardingQuery.data) {
+      return;
+    }
+
+    const dto = onboardingQuery.data;
+    syncAuthFromDto(dto);
+    if (!dto.onboarding.needsOnboarding) {
+      navigate("/", { replace: true });
+      return;
+    }
+    setStep(deriveStep(dto));
+    setForm((prev) => ({
+      ...prev,
+      name: dto.profile.name ?? "",
+      avatar: dto.profile.avatar ?? "",
+      countryCode: dto.preferences.countryCode ?? "",
+      currencyCode: dto.preferences.currencyCode ?? "",
+      timezone: dto.preferences.timezone ?? initialTimezone,
+      compactMode: Boolean(dto.preferences.display?.compactMode),
+      goals: dto.preferences.goals ?? [],
+    }));
+  }, [onboardingQuery.isSuccess, onboardingQuery.data, navigate, initialTimezone]);
 
   const patchMutation = useMutation({
     mutationFn: patchOnboarding,
-    onSuccess: (dto) => {
-      queryClient.setQueryData(["onboarding"], dto);
-      syncAuthFromDto(dto);
-    },
   });
+
+  // Sync auth when patch mutation succeeds
+  useEffect(() => {
+    if (!patchMutation.isSuccess || !patchMutation.data) {
+      return;
+    }
+
+    const dto = patchMutation.data;
+    queryClient.setQueryData(["onboarding"], dto);
+    syncAuthFromDto(dto);
+  }, [patchMutation.isSuccess, patchMutation.data, queryClient]);
 
   const skipMutation = useMutation({
     mutationFn: skipOnboarding,
-    onSuccess: (dto) => {
-      queryClient.setQueryData(["onboarding"], dto);
-      syncAuthFromDto(dto);
-      navigate("/", { replace: true });
-    },
   });
+
+  // Sync auth and navigate when skip mutation succeeds
+  useEffect(() => {
+    if (!skipMutation.isSuccess || !skipMutation.data) {
+      return;
+    }
+
+    const dto = skipMutation.data;
+    queryClient.setQueryData(["onboarding"], dto);
+    syncAuthFromDto(dto);
+    navigate("/", { replace: true });
+  }, [skipMutation.isSuccess, skipMutation.data, queryClient, navigate]);
 
   const completeMutation = useMutation({
     mutationFn: completeOnboarding,
-    onSuccess: (dto) => {
-      queryClient.setQueryData(["onboarding"], dto);
-      syncAuthFromDto(dto);
-      navigate("/", { replace: true });
-    },
   });
 
-  const loading = onboardingQuery.isLoading;
-  const saving = patchMutation.isLoading || completeMutation.isLoading || skipMutation.isLoading;
+  // Sync auth and navigate when complete mutation succeeds
+  useEffect(() => {
+    if (!completeMutation.isSuccess || !completeMutation.data) {
+      return;
+    }
+
+    const dto = completeMutation.data;
+    queryClient.setQueryData(["onboarding"], dto);
+    syncAuthFromDto(dto);
+    navigate("/", { replace: true });
+  }, [completeMutation.isSuccess, completeMutation.data, queryClient, navigate]);
+
+  const loading = onboardingQuery.isPending;
+  const saving = patchMutation.isPending || completeMutation.isPending || skipMutation.isPending;
 
   useEffect(() => {
     if (!loading && onboardingQuery.data && !onboardingQuery.data.onboarding.needsOnboarding) {
@@ -151,9 +179,15 @@ export default function Onboarding() {
   const nextStep = () => setStep((prev) => Math.min(prev + 1, 3));
 
   const handleSkipStep = async () => {
-    const updated = await patchMutation.mutateAsync({ markStepCompleted: step as 1 | 2 | 3 });
-    queryClient.setQueryData(["onboarding"], updated);
-    nextStep();
+    try {
+      await patchMutation.mutateAsync({ markStepCompleted: step as 1 | 2 | 3 });
+      nextStep();
+    } catch (error) {
+      /* eslint-disable no-console */
+      console.error("Failed to skip onboarding step:", error);
+      /* eslint-enable no-console */
+      window.alert("Não foi possível pular este passo. Tente novamente.");
+    }
   };
 
   const handleContinue = async () => {
@@ -180,20 +214,40 @@ export default function Onboarding() {
       };
     })();
 
-    const updated = await patchMutation.mutateAsync(payload);
-    queryClient.setQueryData(["onboarding"], updated);
-    if (step < 3) {
-      nextStep();
+    try {
+      await patchMutation.mutateAsync(payload);
+      if (step < 3) {
+        nextStep();
+      }
+    } catch (error) {
+      /* eslint-disable no-console */
+      console.error("Failed to update onboarding data in handleContinue:", error);
+      /* eslint-enable no-console */
+      window.alert("Não foi possível atualizar suas informações. Tente novamente.");
     }
   };
 
   const handleFinish = async () => {
-    await patchMutation.mutateAsync({ goals: form.goals, markStepCompleted: 3 });
-    await completeMutation.mutateAsync();
+    try {
+      await patchMutation.mutateAsync({ goals: form.goals, markStepCompleted: 3 });
+      await completeMutation.mutateAsync();
+    } catch (error) {
+      /* eslint-disable no-console */
+      console.error("Failed to finish onboarding", error);
+      /* eslint-enable no-console */
+      window.alert("Não foi possível finalizar o onboarding. Tente novamente.");
+    }
   };
 
   const handleSkipAll = async () => {
-    await skipMutation.mutateAsync();
+    try {
+      await skipMutation.mutateAsync();
+    } catch (error) {
+      /* eslint-disable no-console */
+      console.error("Failed to skip onboarding:", error);
+      /* eslint-enable no-console */
+      window.alert("Não foi possível pular o onboarding. Tente novamente.");
+    }
   };
 
   const renderStep = () => {
@@ -262,21 +316,22 @@ export default function Onboarding() {
               onChange={(e) => setForm((prev) => ({ ...prev, timezone: e.target.value }))}
               style={compactSelectStyle}
             >
-              {[form.timezone, ...TIMEZONE_OPTIONS].filter(Boolean).reduce<string[]>((unique, value) => {
-                if (!unique.includes(value)) unique.push(value);
-                return unique;
-              }, []).map((value) => (
+              {Array.from(
+                new Set([form.timezone, ...TIMEZONE_OPTIONS].filter(Boolean))
+              ).map((value) => (
                 <option key={value} value={value}>
                   {value}
                 </option>
               ))}
             </select>
           </FormField>
-          <label style={{ display: "flex", alignItems: "center", gap: tokens.spacing.xs }}>
+          <label htmlFor="compactMode" style={{ display: "flex", alignItems: "center", gap: tokens.spacing.xs }}>
             <input
+              id="compactMode"
               type="checkbox"
               checked={form.compactMode}
               onChange={(e) => setForm((prev) => ({ ...prev, compactMode: e.target.checked }))}
+              aria-label="Modo compacto para tabelas e listas"
             />
             <span style={{ color: tokens.colors.neutralText }}>Modo compacto para tabelas e listas</span>
           </label>
@@ -288,12 +343,15 @@ export default function Onboarding() {
       <div style={{ display: "flex", flexDirection: "column", gap: tokens.spacing.sm }}>
         {GOAL_OPTIONS.map((goal) => {
           const checked = form.goals.includes(goal.id);
+          const inputId = `goal-${goal.id}`;
           return (
-            <label key={goal.id} style={{ display: "flex", alignItems: "center", gap: tokens.spacing.xs }}>
+            <label key={goal.id} htmlFor={inputId} style={{ display: "flex", alignItems: "center", gap: tokens.spacing.xs }}>
               <input
+                id={inputId}
                 type="checkbox"
                 checked={checked}
                 onChange={() => toggleGoal(goal.id)}
+                aria-label={goal.label}
               />
               <span style={{ color: tokens.colors.neutralText }}>{goal.label}</span>
             </label>
@@ -318,7 +376,7 @@ export default function Onboarding() {
       <div style={{ display: "flex", flexDirection: "column", gap: tokens.spacing.lg }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <p style={{ margin: 0, color: tokens.colors.mutedText }}>Passo {step} de 3</p>
-          <Button label="Pular por agora" variant="ghost" onClick={handleSkipAll} isLoading={skipMutation.isLoading} />
+          <Button label="Pular por agora" variant="ghost" onClick={handleSkipAll} isLoading={skipMutation.isPending} />
         </div>
 
         <Card>
@@ -336,14 +394,14 @@ export default function Onboarding() {
                   label="Continuar"
                   variant="primary"
                   onClick={handleContinue}
-                  isLoading={patchMutation.isLoading}
+                  isLoading={patchMutation.isPending}
                 />
               ) : (
                 <Button
                   label="Concluir"
                   variant="primary"
                   onClick={handleFinish}
-                  isLoading={completeMutation.isLoading || patchMutation.isLoading}
+                  isLoading={completeMutation.isPending || patchMutation.isPending}
                 />
               )}
             </div>

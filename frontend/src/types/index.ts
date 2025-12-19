@@ -149,6 +149,8 @@ export type OnboardingPreferences = {
 export type OnboardingProgress = {
   status: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'DISMISSED';
   needsOnboarding: boolean;
+  // Note: Date fields are serialized as ISO strings when sent over HTTP.
+  // Backend defines these as Date | null, but they arrive as string | null.
   firstPromptedAt: string | null;
   dismissedAt: string | null;
   completedAt: string | null;

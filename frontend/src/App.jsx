@@ -326,11 +326,12 @@ function App() {
     if (!isAuthenticated) return;
 
     const needsOnboarding = Boolean(user?.onboarding?.needsOnboarding);
-    if (needsOnboarding && location.pathname !== "/onboarding") {
+    const isOnOnboardingPage = location.pathname === "/onboarding";
+    
+    // Only redirect if we're not already on the target page to prevent loops
+    if (needsOnboarding && !isOnOnboardingPage) {
       navigate("/onboarding", { replace: true });
-    }
-
-    if (!needsOnboarding && location.pathname === "/onboarding") {
+    } else if (!needsOnboarding && isOnOnboardingPage) {
       navigate("/", { replace: true });
     }
   }, [isAuthenticated, user?.onboarding?.needsOnboarding, location.pathname, navigate]);

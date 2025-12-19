@@ -208,10 +208,14 @@ export const patchOnboarding = async (userId: string, patch: PatchOnboardingDTO,
 
 export const dismissOnboarding = async (userId: string, prisma: PrismaClient) => {
   const now = new Date();
-  await getOrCreateUserPreferences(userId, prisma);
-  const prefs = await prisma.userPreferences.update({
+  const prefs = await prisma.userPreferences.upsert({
     where: { userId },
-    data: {
+    create: {
+      userId,
+      onboardingDismissedAt: now,
+      onboardingStatus: 'DISMISSED',
+    },
+    update: {
       onboardingDismissedAt: now,
       onboardingStatus: 'DISMISSED',
     },
