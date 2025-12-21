@@ -217,10 +217,15 @@ export async function deleteExpenseCascade(
   const groupFilter = buildGroupFilter(userId, expense);
 
   if (!groupFilter) {
-    const deleted = await prisma.expense.deleteMany({
-      where: { id: expense.id, userId },
-    });
-    return { deleted: deleted.count ? [expense] : [] };
+    try {
+      await prisma.expense.delete({ where: { id: expense.id } });
+      return { deleted: [expense] };
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+        return { deleted: [] };
+      }
+      throw error;
+    }
   }
 
   const candidates = await prisma.expense.findMany({
@@ -299,10 +304,15 @@ export async function deleteExpenseCascade(
   }
 
   if (!related.length) {
-    const deleted = await prisma.expense.deleteMany({
-      where: { id: expense.id, userId },
-    });
-    return { deleted: deleted.count ? [expense] : [] };
+    try {
+      await prisma.expense.delete({ where: { id: expense.id } });
+      return { deleted: [expense] };
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+        return { deleted: [] };
+      }
+      throw error;
+    }
   }
 
   const hasGroup =
@@ -310,10 +320,15 @@ export async function deleteExpenseCascade(
     (related.length === 1 && related[0].id === expense.id);
 
   if (!hasGroup) {
-    const deleted = await prisma.expense.deleteMany({
-      where: { id: expense.id, userId },
-    });
-    return { deleted: deleted.count ? [expense] : [] };
+    try {
+      await prisma.expense.delete({ where: { id: expense.id } });
+      return { deleted: [expense] };
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+        return { deleted: [] };
+      }
+      throw error;
+    }
   }
 
   const idsToDelete = related.map((record) => record.id);

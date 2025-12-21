@@ -10,11 +10,15 @@ const signAccessToken = (userId: string) =>
 
 const userA = { id: 'user-a', emailVerifiedAt: new Date() };
 const userB = { id: 'user-b', emailVerifiedAt: new Date() };
+const originId = '507f1f77bcf86cd799439011';
+const debtorId = '507f1f77bcf86cd799439012';
+const expenseId = '507f1f77bcf86cd799439013';
+const jobId = '507f1f77bcf86cd799439014';
 
 const setupPrismaMocks = () => {
   let origins = [
     {
-      id: 'origin-a',
+      id: originId,
       userId: userA.id,
       name: 'Origin A',
       type: 'Conta',
@@ -26,7 +30,7 @@ const setupPrismaMocks = () => {
   ];
   let debtors = [
     {
-      id: 'debtor-a',
+      id: debtorId,
       userId: userA.id,
       name: 'Debtor A',
       status: null,
@@ -35,7 +39,7 @@ const setupPrismaMocks = () => {
   ];
   let expenses = [
     {
-      id: 'expense-a',
+      id: expenseId,
       userId: userA.id,
       description: 'Expense A',
       amount: '10.00',
@@ -48,8 +52,8 @@ const setupPrismaMocks = () => {
       installments: null,
       sharedWith: null,
       sharedAmount: null,
-      originId: 'origin-a',
-      debtorId: 'debtor-a',
+      originId,
+      debtorId,
       billingMonth: '2025-11',
       installmentGroupId: null,
       fingerprint: 'fp-a',
@@ -70,7 +74,7 @@ const setupPrismaMocks = () => {
   ];
   let jobs = [
     {
-      id: 'job-a',
+      id: jobId,
       userId: userA.id,
       status: 'pending',
     },
@@ -155,7 +159,12 @@ const setupPrismaMocks = () => {
       update: vi.fn(),
       upsert: vi.fn(),
     },
-    $transaction: async (callback: (tx: PrismaClientLike) => Promise<any>) => callback(prisma),
+    $transaction: async (arg: any) => {
+      if (Array.isArray(arg)) {
+        return Promise.all(arg.map((op) => op));
+      }
+      return arg(prisma);
+    },
   };
 
   prisma.user.findUnique.mockImplementation(async ({ where }: any) => {
@@ -310,23 +319,23 @@ describe('tenant isolation', () => {
     expect(salary.body).toEqual([]);
 
     const job = await request(app)
-      .get('/api/jobs/job-a/status')
+      .get(`/api/jobs/${jobId}/status`)
       .set('Authorization', `Bearer ${tokenB}`);
     expect(job.status).toBe(404);
 
     const updateOrigin = await request(app)
-      .put('/api/origins/origin-a')
+      .put(`/api/origins/${originId}`)
       .set('Authorization', `Bearer ${tokenB}`)
       .send({ name: 'Injected', type: 'Conta' });
     expect(updateOrigin.status).toBe(404);
 
     const deleteDebtor = await request(app)
-      .delete('/api/debtors/debtor-a')
+      .delete(`/api/debtors/${debtorId}`)
       .set('Authorization', `Bearer ${tokenB}`);
     expect(deleteDebtor.status).toBe(404);
 
     const deleteExpense = await request(app)
-      .delete('/api/expenses/expense-a')
+      .delete(`/api/expenses/${expenseId}`)
       .set('Authorization', `Bearer ${tokenB}`);
     expect(deleteExpense.status).toBe(404);
   });

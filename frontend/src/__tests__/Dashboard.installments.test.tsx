@@ -5,6 +5,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import Dashboard from "../pages/Dashboard";
 import type { Expense, Debtor, Origin } from "../types";
 
+vi.mock("../context/useAuth", () => ({
+  useAuth: () => ({ user: { id: "test-user" } }),
+}));
+
 const deleteInstallmentsRequest = vi.fn();
 const toast = {
   success: vi.fn(),

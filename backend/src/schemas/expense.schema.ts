@@ -116,6 +116,9 @@ export const createExpenseSchema = z.object({
     .max(100, 'Nome de compartilhamento muito longo (máximo 100 caracteres)')
     .optional(),
   sharedAmount: monetaryValueSchema.optional(),
+
+  // Ignorado pelo backend (sempre derivado do token)
+  userId: z.string().optional(),
   
   // billingMonth é calculado automaticamente pelo backend
   // não deve ser enviado pelo cliente

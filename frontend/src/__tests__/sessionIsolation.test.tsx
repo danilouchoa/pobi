@@ -7,6 +7,27 @@ import { AuthProvider } from "../context/AuthProvider";
 import { useAuth } from "../context/useAuth";
 import { expensesKeys } from "../lib/queryKeys";
 
+const createLocalStorageMock = () => {
+  let store = new Map<string, string>();
+
+  return {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      store.set(key, String(value));
+    },
+    removeItem: (key: string) => {
+      store.delete(key);
+    },
+    clear: () => {
+      store.clear();
+    },
+    key: (index: number) => Array.from(store.keys())[index] ?? null,
+    get length() {
+      return store.size;
+    },
+  } as Storage;
+};
+
 vi.mock("../services/api", () => ({
   __esModule: true,
   default: {
@@ -76,6 +97,7 @@ const SessionProbe = () => {
 describe("session/cache isolation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubGlobal("localStorage", createLocalStorageMock());
   });
 
   it("clears cached data between sessions", async () => {

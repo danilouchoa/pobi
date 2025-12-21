@@ -3,6 +3,10 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useDeleteInstallments } from "../hooks/useDeleteInstallments";
 
+vi.mock("../context/useAuth", () => ({
+  useAuth: () => ({ user: { id: "test-user" } }),
+}));
+
 const deleteInstallmentsRequest = vi.fn();
 const success = vi.fn();
 const error = vi.fn();
