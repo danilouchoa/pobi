@@ -29,6 +29,7 @@ export function AuthRoutes() {
       <Routes>
         <Route path="login" element={<LoginPage />} />
         <Route path="register" element={<RegisterPage />} />
+        <Route path="signup" element={<Navigate to="register" replace />} />
         <Route path="verify-email" element={<VerifyEmailPage />} />
         <Route path="check-email" element={<CheckEmailPage />} />
         <Route path="*" element={<Navigate to="login" replace />} />

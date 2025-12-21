@@ -1,7 +1,7 @@
 import { createContext, useEffect, useMemo, useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { registerUnauthorizedHandler, setAuthToken } from "../services/api";
-import { authBff } from "../features/auth/bff/client";
+import { authBff } from "../services/authBffClient";
 import { initialLoginErrorState, LOGIN_ERROR_MESSAGES, mapLoginError } from "./loginError";
 
 /**
