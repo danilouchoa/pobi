@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { vi } from "vitest";
-import { UnverifiedEmailBanner } from "../UnverifiedEmailBanner";
+import { UnverifiedEmailBanner } from "./UnverifiedEmailBanner";
 
 let mockUser: any = { emailVerified: false };
 const markEmailVerified = vi.fn(() => {
@@ -25,8 +25,11 @@ vi.mock("../../../hooks/useToast", () => ({
 
 const resendVerification = vi.fn();
 
-vi.mock("../../../services/authApi", () => ({
-  resendVerification: (...args: unknown[]) => resendVerification(...args),
+vi.mock("../bff/client", () => ({
+  authBff: {
+    resendVerification: (...args: unknown[]) => resendVerification(...args),
+  },
+  toAuthBffError: (error: unknown) => error,
 }));
 
 describe("UnverifiedEmailBanner", () => {
@@ -78,9 +81,7 @@ describe("UnverifiedEmailBanner", () => {
   });
 
   it("exibe mensagem de throttling quando recebe RATE_LIMITED", async () => {
-    const throttledError = new Error("Rate limited");
-    (throttledError as any).response = { data: { error: "RATE_LIMITED" } };
-    resendVerification.mockRejectedValue(throttledError);
+    resendVerification.mockRejectedValue({ code: "RATE_LIMITED" });
 
     render(<UnverifiedEmailBanner />);
 

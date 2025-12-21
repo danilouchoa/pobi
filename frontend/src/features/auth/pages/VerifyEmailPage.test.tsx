@@ -2,13 +2,9 @@ import { render, screen } from "@testing-library/react";
 import type React from "react";
 import { MemoryRouter } from "react-router-dom";
 import { vi } from "vitest";
-import VerifyEmail from "../VerifyEmail";
+import VerifyEmailPage from "./VerifyEmailPage";
 import { AuthContext } from "../../../context/AuthProvider";
-import { verifyEmail } from "../../../services/authApi";
-
-vi.mock("../../../services/authApi", () => ({
-  verifyEmail: vi.fn(),
-}));
+import { authBff } from "../bff/client";
 
 const mockNavigate = vi.fn();
 vi.mock("react-router-dom", async () => {
@@ -20,6 +16,8 @@ vi.mock("react-router-dom", async () => {
 });
 
 describe("VerifyEmail", () => {
+  let verifyEmailSpy: ReturnType<typeof vi.spyOn>;
+
   const renderComponent = (options?: {
     isAuthenticated?: boolean;
     initialPath?: string;
@@ -36,7 +34,7 @@ describe("VerifyEmail", () => {
     return render(
       <MemoryRouter initialEntries={[options?.initialPath ?? "/auth/verify-email"]}>
         <AuthContext.Provider value={value}>
-          <VerifyEmail />
+          <VerifyEmailPage />
         </AuthContext.Provider>
       </MemoryRouter>
     );
@@ -44,6 +42,7 @@ describe("VerifyEmail", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    verifyEmailSpy = vi.spyOn(authBff, "verifyEmail");
   });
 
   it("shows error when token is missing", () => {
@@ -53,11 +52,11 @@ describe("VerifyEmail", () => {
     const alerts = screen.getAllByRole("alert");
     expect(alerts[0]).toHaveTextContent(/link de verificação é inválido ou incompleto/i);
     expect(screen.getByRole("button", { name: /ir para login/i })).toBeInTheDocument();
-    expect(verifyEmail).not.toHaveBeenCalled();
+    expect(authBff.verifyEmail).not.toHaveBeenCalled();
   });
 
   it("verifies token and shows success for guests", async () => {
-    (verifyEmail as unknown as vi.Mock).mockResolvedValueOnce({
+    verifyEmailSpy.mockResolvedValueOnce({
       status: "VERIFIED",
       emailVerified: true,
       emailVerifiedAt: "2025-01-01T00:00:00.000Z",
@@ -71,7 +70,7 @@ describe("VerifyEmail", () => {
 
   it("updates authenticated user when verification succeeds", async () => {
     const updateUser = vi.fn();
-    (verifyEmail as unknown as vi.Mock).mockResolvedValueOnce({
+    verifyEmailSpy.mockResolvedValueOnce({
       status: "VERIFIED",
       emailVerified: true,
       emailVerifiedAt: "2025-01-02T00:00:00.000Z",
@@ -88,7 +87,7 @@ describe("VerifyEmail", () => {
   it("handles invalid token errors", async () => {
     const error = new Error("invalid");
     (error as any).response = { data: { error: "INVALID_TOKEN" } };
-    (verifyEmail as unknown as vi.Mock).mockRejectedValueOnce(error);
+    verifyEmailSpy.mockRejectedValueOnce(error);
 
     renderComponent({ initialPath: "/auth/verify-email?token=bad" });
 
@@ -99,7 +98,7 @@ describe("VerifyEmail", () => {
   it("offers resend path for expired tokens when authenticated", async () => {
     const error = new Error("expired");
     (error as any).response = { data: { error: "TOKEN_EXPIRED" } };
-    (verifyEmail as unknown as vi.Mock).mockRejectedValueOnce(error);
+    verifyEmailSpy.mockRejectedValueOnce(error);
 
     renderComponent({ initialPath: "/auth/verify-email?token=expired", isAuthenticated: true });
 
@@ -110,7 +109,7 @@ describe("VerifyEmail", () => {
   it("shows already used message for authenticated users", async () => {
     const error = new Error("used");
     (error as any).response = { data: { error: "TOKEN_ALREADY_USED" } };
-    (verifyEmail as unknown as vi.Mock).mockRejectedValueOnce(error);
+    verifyEmailSpy.mockRejectedValueOnce(error);
 
     renderComponent({ initialPath: "/auth/verify-email?token=used", isAuthenticated: true });
 

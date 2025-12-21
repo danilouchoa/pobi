@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { useAuth } from "../../context/useAuth";
-import { resendVerification } from "../../services/authApi";
-import { Alert } from "../../ui/Alert";
-import { Button } from "../../ui/Button";
-import { tokens } from "../../ui/tokens";
-import { useToast } from "../../hooks/useToast";
+import { useAuth } from "../../../context/useAuth";
+import { authBff, toAuthBffError } from "../bff/client";
+import { Alert } from "../../../ui/Alert";
+import { Button } from "../../../ui/Button";
+import { tokens } from "../../../ui/tokens";
+import { useToast } from "../../../hooks/useToast";
 
 export function UnverifiedEmailBanner() {
   const { user, isAuthenticated, markEmailVerified } = useAuth();
@@ -20,7 +20,7 @@ export function UnverifiedEmailBanner() {
     setIsLoading(true);
     setFeedback(null);
     try {
-      const response = await resendVerification();
+      const response = await authBff.resendVerification();
       if (response.status === "ALREADY_VERIFIED") {
         markEmailVerified();
         success("Obrigado! Seu e-mail já estava confirmado.");
@@ -29,7 +29,8 @@ export function UnverifiedEmailBanner() {
       success("Enviamos um novo e-mail de verificação.");
       setFeedback("Enviamos um novo e-mail para sua caixa de entrada.");
     } catch (err: unknown) {
-      const errorCode = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+      const normalizedError = toAuthBffError(err);
+      const errorCode = normalizedError.code;
       if (errorCode === "RATE_LIMITED") {
         warning("Aguarde alguns minutos antes de solicitar um novo e-mail.");
         setFeedback("Aguarde alguns minutos antes de solicitar um novo e-mail.");

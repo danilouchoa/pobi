@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { useAuth } from "../../context/useAuth";
-import type { VerifyEmailErrorCode } from "../../services/authApi";
-import { resendVerification } from "../../services/authApi";
-import { Alert } from "../../ui/Alert";
-import { Button } from "../../ui/Button";
-import { tokens } from "../../ui/tokens";
-import { AuthShell } from "./AuthShell";
+import { useAuth } from "../../../context/useAuth";
+import { authBff, toAuthBffError } from "../bff/client";
+import type { VerifyEmailErrorCode } from "../bff/types";
+import { Alert } from "../../../ui/Alert";
+import { Button } from "../../../ui/Button";
+import { tokens } from "../../../ui/tokens";
+import { AuthShell } from "../components/AuthShell";
 
 type Feedback = {
   variant: "success" | "info" | "warning" | "error";
@@ -14,7 +14,7 @@ type Feedback = {
   message: string;
 };
 
-export default function CheckEmail() {
+export default function CheckEmailPage() {
   const { isAuthenticated, user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
@@ -38,7 +38,7 @@ export default function CheckEmail() {
     setIsSubmitting(true);
 
     try {
-      const result = await resendVerification();
+      const result = await authBff.resendVerification();
 
       if (result.status === "RESENT") {
         setFeedback({
@@ -55,9 +55,9 @@ export default function CheckEmail() {
         });
       }
     } catch (error: unknown) {
-      const typedError = error as { response?: { status?: number; data?: { error?: VerifyEmailErrorCode } } };
-      const errorCode = typedError.response?.data?.error;
-      const status = typedError.response?.status;
+      const normalizedError = toAuthBffError(error);
+      const errorCode = normalizedError.code as VerifyEmailErrorCode | undefined;
+      const status = normalizedError.status;
 
       if (status === 429 || errorCode === "RATE_LIMITED") {
         setFeedback({

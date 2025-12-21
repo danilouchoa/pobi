@@ -1,6 +1,7 @@
 import { createContext, useEffect, useMemo, useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import api, { registerUnauthorizedHandler, setAuthToken } from "../services/api";
+import { registerUnauthorizedHandler, setAuthToken } from "../services/api";
+import { authBff } from "../services/authBffClient";
 import { initialLoginErrorState, LOGIN_ERROR_MESSAGES, mapLoginError } from "./loginError";
 
 /**
@@ -71,8 +72,8 @@ export function AuthProvider({ children }) {
 
   const fetchCurrentUser = useCallback(async () => {
     try {
-      const { data } = await api.get("/api/auth/me");
-      const nextUser = enhanceUser(data.user);
+      const { user: currentUser } = await authBff.me();
+      const nextUser = enhanceUser(currentUser);
       setUser(nextUser);
       return nextUser;
     } catch (error) {
@@ -108,15 +109,15 @@ export function AuthProvider({ children }) {
       if (isRefreshing) return null;
       setIsRefreshing(true);
       try {
-        const { data } = await api.post("/api/auth/refresh");
-        setAuthToken(data.accessToken);
-        setToken(data.accessToken);
-        if (data.user) {
-          setUser(enhanceUser(data.user));
+        const refreshResult = await authBff.refresh();
+        setAuthToken(refreshResult.accessToken);
+        setToken(refreshResult.accessToken);
+        if (refreshResult.user) {
+          setUser(enhanceUser(refreshResult.user));
         } else {
           await fetchCurrentUser();
         }
-        return data.accessToken;
+        return refreshResult.accessToken;
       } catch (e) {
         console.warn("[Auth] Refresh token expired or invalid, redirecting to login", e);
         await resetSession(LOGIN_ERROR_MESSAGES.SESSION_EXPIRED, {
@@ -176,7 +177,7 @@ export function AuthProvider({ children }) {
     setAuthError(null);
     clearLoginError();
       try {
-        const { data } = await api.post("/api/auth/login", { email, password });
+        const data = await authBff.login({ email, password });
 
       // Limpar cache do QueryClient antes de configurar nova sessão
       try {
@@ -210,7 +211,7 @@ export function AuthProvider({ children }) {
     setAuthError(null);
     clearLoginError();
     try {
-      const { data } = await api.post("/api/auth/register", { name, email, password, acceptedTerms, termsVersion });
+      const data = await authBff.register({ name, email, password, acceptedTerms, termsVersion });
 
       try {
         await queryClient.clear();
@@ -239,7 +240,7 @@ export function AuthProvider({ children }) {
     setAuthError(null);
     clearLoginError();
     try {
-      const { data } = await api.post('/api/auth/google', { credential });
+      const data = await authBff.googleLogin({ credential });
 
       try {
         await queryClient.clear();
@@ -267,9 +268,9 @@ export function AuthProvider({ children }) {
     setAuthError(null);
     clearLoginError();
     try {
-      const { data } = await api.post('/api/auth/google/resolve-conflict', {
+      const data = await authBff.googleResolveConflict({
         credential,
-        strategy: 'merge_using_google_as_canonical',
+        strategy: "merge_using_google_as_canonical",
       });
 
       try {
@@ -298,7 +299,7 @@ export function AuthProvider({ children }) {
     setAuthError(null);
     clearLoginError();
     try {
-      const { data } = await api.post('/api/auth/link/google', { credential });
+      const data = await authBff.linkGoogle({ credential });
 
       try {
         await queryClient.clear();
@@ -326,7 +327,7 @@ export function AuthProvider({ children }) {
   const logout = useCallback(async () => {
     try {
       // Chamar backend para limpar cookie
-      await api.post("/api/auth/logout");
+      await authBff.logout();
     } catch (error) {
       console.error("[Auth] Error during logout:", error);
       // Mesmo com erro, limpar state local

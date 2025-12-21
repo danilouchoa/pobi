@@ -95,6 +95,7 @@ app.use(invalidJsonHandler);
 // Rotas públicas (sem autenticação)
 // ============================================================================
 app.use('/api/auth', authRoutes(prisma));
+app.use('/api/bff/auth', authRoutes(prisma));
 app.use('/api/health', healthRoutes); // Health check para Docker e monitoramento
 
 // ============================================================================

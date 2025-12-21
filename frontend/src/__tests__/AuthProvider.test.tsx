@@ -7,25 +7,46 @@ import { AuthProvider } from '../context/AuthProvider';
 import { useAuth } from '../context/useAuth';
 import React from 'react';
 
+const createLocalStorageMock = () => {
+	let store = new Map<string, string>();
+
+	return {
+		getItem: (key: string) => store.get(key) ?? null,
+		setItem: (key: string, value: string) => {
+			store.set(key, String(value));
+		},
+		removeItem: (key: string) => {
+			store.delete(key);
+		},
+		clear: () => {
+			store.clear();
+		},
+		key: (index: number) => Array.from(store.keys())[index] ?? null,
+		get length() {
+			return store.size;
+		},
+	};
+};
+
 // Mock do serviço de API usado no AuthProvider
 vi.mock('../services/api', () => ({
 	__esModule: true,
 	default: {
 				post: vi.fn((url, data) => {
-					if (url === '/api/auth/login') {
+					if (url === '/api/bff/auth/login') {
 						return Promise.resolve({ data: { accessToken: 'token', user: { email: data.email } } });
 					}
-					if (url === '/api/auth/logout') {
+					if (url === '/api/bff/auth/logout') {
 						return Promise.resolve({});
 					}
-					if (url === '/api/auth/refresh') {
+					if (url === '/api/bff/auth/refresh') {
 						return Promise.resolve({ data: { accessToken: 'token' } });
 					}
 					// Valor padrão para qualquer rota não tratada
 					return Promise.resolve({ data: {} });
 				}),
 				get: vi.fn((url) => {
-					if (url === '/api/auth/me') {
+					if (url === '/api/bff/auth/me') {
 						return Promise.resolve({ data: { user: { email: 'a@b.com' } } });
 					}
 					// Valor padrão para qualquer rota não tratada
@@ -58,7 +79,7 @@ function TestComponent() {
 
 describe('AuthProvider', () => {
 	beforeEach(() => {
-		localStorage.clear();
+		vi.stubGlobal('localStorage', createLocalStorageMock());
 	});
 	const renderWithClient = () =>
 		render(
@@ -95,7 +116,7 @@ describe('AuthProvider', () => {
 				// Mocka erro de login
 				const api = (await import('../services/api')).default;
 				vi.mocked(api.post).mockImplementationOnce((url: string) => {
-					if (url === '/api/auth/login') {
+					if (url === '/api/bff/auth/login') {
 						const error = new Error('Credenciais inválidas.');
 						(error as any).response = { data: { message: 'Credenciais inválidas.' } };
 						return Promise.reject(error);
@@ -115,7 +136,7 @@ describe('AuthProvider', () => {
 				// Mocka refresh expirado
 				const api = (await import('../services/api')).default;
 				vi.mocked(api.post).mockImplementationOnce((url: string) => {
-					if (url === '/api/auth/refresh') {
+					if (url === '/api/bff/auth/refresh') {
 						const error = new Error('Sessão expirada.');
 						(error as any).response = { data: { message: 'Sessão expirada.' } };
 						return Promise.reject(error);

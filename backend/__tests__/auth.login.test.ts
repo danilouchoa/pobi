@@ -32,6 +32,28 @@ describe('POST /api/auth/login', () => {
     expect(res.body.user.email).toBe('danilo.uchoa@finance.app');
   });
 
+  it('aceita o alias /api/bff/auth/login sem alterar o contrato', async () => {
+    await createLocalUser({
+      id: 'user-124',
+      email: 'alias.login@finance.app',
+      name: 'Alias Login',
+      password: 'finance123',
+    });
+
+    const { csrfToken, csrfCookie } = await getCsrfToken();
+    const res = await request(app)
+      .post('/api/bff/auth/login')
+      .set('Cookie', csrfCookie)
+      .set('X-CSRF-Token', csrfToken)
+      .send({ email: 'alias.login@finance.app', password: 'finance123' });
+
+    expect(res.status).toBe(200);
+    expect(res.headers['set-cookie']).toBeDefined();
+    expect(res.body).toHaveProperty('user');
+    expect(res.body).toHaveProperty('accessToken');
+    expect(res.body.user.email).toBe('alias.login@finance.app');
+  });
+
   it('deve rejeitar login com credenciais inválidas', async () => {
     const { csrfToken, csrfCookie } = await getCsrfToken();
     const res = await request(app)

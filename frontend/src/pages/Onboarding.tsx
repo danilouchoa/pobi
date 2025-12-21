@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import AuthShell from "../components/auth/AuthShell";
+import AuthShell from "../features/auth/components/AuthShell";
 import { useAuth } from "../context/useAuth";
 import { getOnboarding, patchOnboarding, skipOnboarding, completeOnboarding } from "../services/onboardingService";
 import { Button } from "../ui/Button";
