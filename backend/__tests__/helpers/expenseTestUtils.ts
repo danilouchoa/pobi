@@ -241,6 +241,14 @@ const ensureExpenseModel = () => {
     return clone(currentExpense);
   });
 
+  prisma.expense.updateMany = vi.fn(async (args: any = {}) => {
+    if (deleted || !matchesWhere(args.where)) {
+      return { count: 0 };
+    }
+    currentExpense = createExpenseState({ ...currentExpense, ...args?.data });
+    return { count: 1 };
+  });
+
   prisma.expense.delete = vi.fn(async (args: any = {}) => {
     if (deleted || !matchesWhere(args.where)) {
       throw new Error('Not found');

@@ -1,4 +1,5 @@
 import { createContext, useEffect, useMemo, useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { registerUnauthorizedHandler, setAuthToken } from "../services/api";
 import { authBff } from "../services/authBffClient";
@@ -50,6 +51,7 @@ export function AuthProvider({ children }) {
   const [loginError, setLoginError] = useState(initialLoginErrorState);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const resetSession = useCallback(
     async (message = null, nextLoginError = initialLoginErrorState) => {
@@ -333,8 +335,9 @@ export function AuthProvider({ children }) {
       // Mesmo com erro, limpar state local
     } finally {
       await resetSession(null);
+      navigate("/auth/login", { replace: true });
     }
-  }, [resetSession]);
+  }, [navigate, resetSession]);
 
   const updateUser = useCallback(
     (partialUser) => {

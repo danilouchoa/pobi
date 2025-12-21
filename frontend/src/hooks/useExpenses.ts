@@ -22,6 +22,7 @@ import {
 } from "../services/expenseService";
 import { expensesKeys } from "../lib/queryKeys";
 import { Expense, ExpensePayload, ExpensesResponse, Pagination } from "../types";
+import { useAuth } from "../context/useAuth";
 
 type Options = {
   enabled?: boolean;
@@ -48,6 +49,7 @@ type CreateExpenseBatchVariables = {
 };
 
 type ListKeyMeta = {
+  userId: string;
   month: string;
   mode: "calendar" | "billing";
   page: number;
@@ -56,8 +58,8 @@ type ListKeyMeta = {
 
 const parseListKey = (queryKey: QueryKey): ListKeyMeta | null => {
   if (!Array.isArray(queryKey)) return null;
-  const [root, scope, params] = queryKey;
-  if (root !== "expenses" || scope !== "list") return null;
+  const [root, userId, scope, params] = queryKey;
+  if (root !== "expenses" || scope !== "list" || typeof userId !== "string") return null;
   if (!params || typeof params !== "object") return null;
 
   const { month, mode = "calendar", page = 1, limit = 20 } = params as {
@@ -70,6 +72,7 @@ const parseListKey = (queryKey: QueryKey): ListKeyMeta | null => {
   if (!month) return null;
 
   return {
+    userId,
     month,
     mode,
     page: Number.isFinite(page) && page > 0 ? page : 1,
@@ -125,19 +128,22 @@ const buildOptimisticExpense = (
   );
 
 export function useExpenses(month: string, options: Options = {}) {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
-  const enabled = options.enabled ?? true;
+  const enabled = (options.enabled ?? true) && Boolean(user?.id);
+  const userId = user?.id ?? "anonymous";
   const mode = options.mode ?? "calendar";
   const page = options.page ?? 1;
   const limit = options.limit ?? 20;
-  const queryKey = expensesKeys.list({ month, mode, page, limit });
-  const monthKey = expensesKeys.month({ month, mode });
-  const recurringKey = expensesKeys.recurring();
-  const sharedKey = expensesKeys.shared();
+  const queryKey = expensesKeys.list({ userId, month, mode, page, limit });
+  const monthKey = expensesKeys.month({ userId, month, mode });
+  const recurringKey = expensesKeys.recurring(userId);
+  const sharedKey = expensesKeys.shared(userId);
 
   const expenseQueryPredicate = ({ queryKey: key }: { queryKey: QueryKey }) => {
     const meta = parseListKey(key);
     if (!meta) return false;
+    if (meta.userId !== userId) return false;
     if (meta.month !== month) return false;
     if ((meta.mode ?? "calendar") !== mode) return false;
     return true;
@@ -469,12 +475,14 @@ export function useExpenses(month: string, options: Options = {}) {
 }
 
 export const useDeleteExpenseGroup = () => {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
+  const userId = user?.id ?? "anonymous";
 
   return useMutation({
     mutationFn: (groupId: string) => deleteGroup(groupId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: expensesKeys.all });
+      queryClient.invalidateQueries({ queryKey: expensesKeys.byUser(userId) });
     },
   });
 };

@@ -8,7 +8,7 @@
  * - PROD: bloqueia por padrão (exige flag explícita de override).
  *
  * Uso:
- * TENANT_BACKFILL_DEMO_USER=true NODE_ENV=development npx tsx scripts/tenant-backfill-demo-user.ts
+ * TENANT_BACKFILL_DEMO_USER=true NODE_ENV=development npx tsx backend/scripts/tenant-backfill-demo-user.ts
  */
 
 import 'dotenv/config';
@@ -20,6 +20,7 @@ const prisma = new PrismaClient();
 const DEMO_EMAIL = 'demo@finfy.app';
 const BACKFILL_FLAG = process.env.TENANT_BACKFILL_DEMO_USER === 'true';
 const ALLOW_PROD_FLAG = process.env.TENANT_BACKFILL_ALLOW_PROD === 'true';
+const DRY_RUN_FLAG = process.env.TENANT_BACKFILL_DRY_RUN === 'true';
 const NODE_ENV = process.env.NODE_ENV ?? 'development';
 
 const guardExecution = () => {
@@ -48,7 +49,19 @@ const collections = [
   { name: 'UserPreferences', label: 'userPreferences' },
 ];
 
-const backfillCollection = async (collection: string, demoUserId: ObjectId) => {
+const backfillCollection = async (
+  collection: string,
+  demoUserId: ObjectId,
+  dryRun: boolean
+) => {
+  if (dryRun) {
+    const result = await prisma.$runCommandRaw({
+      count: collection,
+      query: { $or: [{ userId: { $exists: false } }, { userId: null }] },
+    });
+    return result as { n?: number };
+  }
+
   const result = await prisma.$runCommandRaw({
     update: collection,
     updates: [
@@ -65,7 +78,9 @@ const backfillCollection = async (collection: string, demoUserId: ObjectId) => {
 async function main() {
   guardExecution();
 
-  console.log('[tenant-backfill] Iniciando backfill para DEMO user.');
+  console.log(
+    `[tenant-backfill] Iniciando backfill para DEMO user${DRY_RUN_FLAG ? ' (DRY RUN)' : ''}.`
+  );
 
   const demoUser = await prisma.user.upsert({
     where: { email: DEMO_EMAIL },
@@ -82,12 +97,19 @@ async function main() {
   let totalModified = 0;
 
   for (const { name, label } of collections) {
-    const { nModified = 0 } = await backfillCollection(name, demoUserId);
-    totalModified += nModified;
-    console.log(`[tenant-backfill] ${label}: ${nModified} documento(s) atualizado(s).`);
+    const result = await backfillCollection(name, demoUserId, DRY_RUN_FLAG);
+    const modified = DRY_RUN_FLAG ? result.n ?? 0 : result.nModified ?? 0;
+    totalModified += modified;
+    console.log(
+      `[tenant-backfill] ${label}: ${modified} documento(s) ${
+        DRY_RUN_FLAG ? 'pendente(s)' : 'atualizado(s)'
+      }.`
+    );
   }
 
-  console.log(`[tenant-backfill] Concluído. Total atualizado: ${totalModified}.`);
+  console.log(
+    `[tenant-backfill] Concluído. Total ${DRY_RUN_FLAG ? 'pendente' : 'atualizado'}: ${totalModified}.`
+  );
 }
 
 main()

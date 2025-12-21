@@ -3,6 +3,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 vi.mock('../services/expenseService');
+vi.mock('../context/useAuth', () => ({
+	useAuth: () => ({ user: { id: 'user-123' } }),
+}));
 
 import { expensesKeys } from '../lib/queryKeys';
 import * as expenseService from '../services/expenseService';
@@ -164,7 +167,7 @@ describe('useExpenses', () => {
 
 	it('deve criar despesas em lote', async () => {
 		const { wrapper, queryClient } = createWrapper();
-		const listKey = expensesKeys.list({ month: '2025-11', mode: 'calendar', page: 1, limit: 20 });
+		const listKey = expensesKeys.list({ userId: 'user-123', month: '2025-11', mode: 'calendar', page: 1, limit: 20 });
 		const { result } = renderHook(() => useExpenses('2025-11'), { wrapper });
 		await waitFor(() => result.current.expensesQuery.isSuccess);
 		await act(async () => {
@@ -197,7 +200,7 @@ describe('useExpenses', () => {
 
 	it('aplica otimista de batch mesmo em página diferente de 1', async () => {
 		const { wrapper, queryClient } = createWrapper();
-		const listKey = expensesKeys.list({ month: '2025-11', mode: 'calendar', page: 2, limit: 1 });
+		const listKey = expensesKeys.list({ userId: 'user-123', month: '2025-11', mode: 'calendar', page: 2, limit: 1 });
 		const { result } = renderHook(() => useExpenses('2025-11', { page: 2, limit: 1 }), { wrapper });
 		await waitFor(() => result.current.expensesQuery.isSuccess);
 
@@ -245,7 +248,7 @@ describe('useExpenses', () => {
 
 	it('trata delete 404 como sucesso idempotente (sem rollback)', async () => {
 		const { wrapper, queryClient } = createWrapper();
-		const listKey = expensesKeys.list({ month: '2025-11', mode: 'calendar', page: 1, limit: 20 });
+		const listKey = expensesKeys.list({ userId: 'user-123', month: '2025-11', mode: 'calendar', page: 1, limit: 20 });
 
 		(expenseService as any).deleteExpense.mockRejectedValueOnce({
 			isAxiosError: true,
@@ -275,8 +278,8 @@ describe('useExpenses', () => {
 
 	it('aplica updates otimistas em múltiplos caches (create/delete)', async () => {
 		const { wrapper, queryClient } = createWrapper();
-		const listKey = expensesKeys.list({ month: '2025-11', mode: 'calendar', page: 1, limit: 20 });
-		const listKeyAlt = expensesKeys.list({ month: '2025-11', mode: 'calendar', page: 1, limit: 1000 });
+		const listKey = expensesKeys.list({ userId: 'user-123', month: '2025-11', mode: 'calendar', page: 1, limit: 20 });
+		const listKeyAlt = expensesKeys.list({ userId: 'user-123', month: '2025-11', mode: 'calendar', page: 1, limit: 1000 });
 
 		const { result } = renderHook(() => useExpenses('2025-11'), { wrapper });
 		await waitFor(() => result.current.expensesQuery.isSuccess);

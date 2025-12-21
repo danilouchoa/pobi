@@ -5,6 +5,7 @@ import { getOrSetCache } from '../lib/redisCache';
 import { redis } from '../lib/redisClient';
 import { validate } from '../middlewares/validation';
 import { requireEmailVerified } from '../middlewares/emailVerified';
+import { notFound, requireAuthUserId, tenantWhere } from '../utils/tenantScope';
 import {
   createSalarySchema,
   updateSalarySchema,
@@ -79,8 +80,8 @@ export default function salaryHistoryRoutes(prisma: PrismaClient) {
 
   router.get('/', validate({ query: querySalarySchema }), async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.userId;
-      if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
+      const userId = requireAuthUserId(req, res);
+      if (!userId) return;
 
       const monthFilter =
         typeof req.query.month === 'string' && isValidMonthParam(req.query.month)
@@ -88,7 +89,7 @@ export default function salaryHistoryRoutes(prisma: PrismaClient) {
           : undefined;
       const cacheKey = buildSalaryCacheKey(userId, monthFilter ?? 'all');
       const records = await getOrSetCache(cacheKey, async () => {
-        const where = monthFilter ? { userId, month: monthFilter } : { userId };
+        const where = monthFilter ? { ...tenantWhere(userId), month: monthFilter } : tenantWhere(userId);
         const found = await prisma.salaryHistory.findMany({
           where,
           orderBy: { month: 'desc' },
@@ -105,10 +106,17 @@ export default function salaryHistoryRoutes(prisma: PrismaClient) {
 
   router.post('/', validate({ body: createSalarySchema }), async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.userId;
-      if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
+      const userId = requireAuthUserId(req, res);
+      if (!userId) return;
 
-      const { month, hours, hourRate, taxRate, cnae } = req.body;
+      const { month, hours, hourRate, taxRate, cnae } = req.body as {
+        month?: string;
+        hours?: number;
+        hourRate?: number;
+        taxRate?: number;
+        cnae?: string | null;
+        userId?: string;
+      };
       if (!month || hours == null || hourRate == null || taxRate == null) {
         return res.status(400).json({ message: 'Campos obrigatórios ausentes.' });
       }
@@ -134,19 +142,19 @@ export default function salaryHistoryRoutes(prisma: PrismaClient) {
 
   router.put('/:id', validate({ params: idParamSchema, body: updateSalarySchema }), async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.userId;
-      if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
+      const userId = requireAuthUserId(req, res);
+      if (!userId) return;
 
       const { id } = req.params;
-      const existing = await prisma.salaryHistory.findUnique({ where: { id } });
-      if (!existing || existing.userId !== userId) {
-        return res.status(404).json({ message: 'Registro não encontrado.' });
+      const existing = await prisma.salaryHistory.findFirst({ where: { id, userId } });
+      if (!existing) {
+        return notFound(res);
       }
 
       const { month, hours, hourRate, taxRate, cnae } = req.body;
 
-      const record = await prisma.salaryHistory.update({
-        where: { id },
+      const updateResult = await prisma.salaryHistory.updateMany({
+        where: { id, userId },
         data: {
           month,
           hours: hours == null ? undefined : Number(hours),
@@ -155,6 +163,15 @@ export default function salaryHistoryRoutes(prisma: PrismaClient) {
           cnae,
         },
       });
+
+      if (updateResult.count === 0) {
+        return notFound(res);
+      }
+
+      const record = await prisma.salaryHistory.findFirst({ where: { id, userId } });
+      if (!record) {
+        return notFound(res);
+      }
 
       await invalidateSalaryCache(userId, existing.month, record.month);
       res.json(serializeSalaryHistory(record));
@@ -166,16 +183,20 @@ export default function salaryHistoryRoutes(prisma: PrismaClient) {
 
   router.delete('/:id', validate({ params: idParamSchema }), async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.userId;
-      if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
+      const userId = requireAuthUserId(req, res);
+      if (!userId) return;
 
       const { id } = req.params;
-      const existing = await prisma.salaryHistory.findUnique({ where: { id } });
-      if (!existing || existing.userId !== userId) {
-        return res.status(404).json({ message: 'Registro não encontrado.' });
+      const existing = await prisma.salaryHistory.findFirst({ where: { id, userId } });
+      if (!existing) {
+        return notFound(res);
       }
 
-      await prisma.salaryHistory.delete({ where: { id } });
+      const result = await prisma.salaryHistory.deleteMany({ where: { id, userId } });
+      if (result.count === 0) {
+        return notFound(res);
+      }
+
       await invalidateSalaryCache(userId, existing.month);
       res.status(204).send();
     } catch (error: unknown) {

@@ -9,16 +9,14 @@ import {
   getOnboardingState,
   patchOnboarding,
 } from '../services/onboarding';
-
-const resolveUserId = (req: AuthenticatedRequest) => req.auth?.userId || req.userId;
+import { requireAuthUserId } from '../utils/tenantScope';
 
 export default function onboardingRoutes(prisma: PrismaClient) {
   const router = Router();
 
   const requireUser = (req: AuthenticatedRequest, res: Response) => {
-    const userId = resolveUserId(req);
+    const userId = requireAuthUserId(req, res);
     if (!userId) {
-      res.status(401).json({ error: 'UNAUTHORIZED', message: 'Não autorizado.' });
       return null;
     }
     return userId;

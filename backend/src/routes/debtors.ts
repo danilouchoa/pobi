@@ -1,6 +1,7 @@
 import { Router, Request } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { validate } from '../middlewares/validation';
+import { notFound, requireAuthUserId, tenantWhere } from '../utils/tenantScope';
 import {
   createDebtorSchema,
   updateDebtorSchema,
@@ -24,10 +25,13 @@ export default function debtorsRoutes(prisma: PrismaClient) {
 
   router.get('/', validate({ query: queryDebtorSchema }), async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.userId;
-      if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
+      const userId = requireAuthUserId(req, res);
+      if (!userId) return;
 
-      const debtors = await prisma.debtor.findMany({ where: { userId }, orderBy: { name: 'asc' } });
+      const debtors = await prisma.debtor.findMany({
+        where: tenantWhere(userId),
+        orderBy: { name: 'asc' },
+      });
       res.json(debtors.map(serializeDebtor));
     } catch (error) {
       console.error('Erro ao listar devedores:', error);
@@ -37,10 +41,10 @@ export default function debtorsRoutes(prisma: PrismaClient) {
 
   router.post('/', validate({ body: createDebtorSchema }), async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.userId;
-      if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
+      const userId = requireAuthUserId(req, res);
+      if (!userId) return;
 
-      const { name } = req.body;
+      const { name } = req.body as { name?: string; userId?: string };
       if (!name) return res.status(400).json({ message: 'Nome é obrigatório.' });
 
       const debtor = await prisma.debtor.create({ data: { name, userId } });
@@ -53,20 +57,30 @@ export default function debtorsRoutes(prisma: PrismaClient) {
 
   router.put('/:id', validate({ params: idParamSchema, body: updateDebtorSchema }), async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.userId;
-      if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
+      const userId = requireAuthUserId(req, res);
+      if (!userId) return;
 
       const { id } = req.params;
-      const existing = await prisma.debtor.findUnique({ where: { id } });
-      if (!existing || existing.userId !== userId) {
-        return res.status(404).json({ message: 'Devedor não encontrado.' });
-      }
+      const { name, status, active } = req.body as {
+        name?: string;
+        status?: string | null;
+        active?: boolean;
+        userId?: string;
+      };
 
-      const { name, status, active } = req.body;
-      const debtor = await prisma.debtor.update({
-        where: { id },
+      const updateResult = await prisma.debtor.updateMany({
+        where: { id, userId },
         data: { name, status, active },
       });
+
+      if (updateResult.count === 0) {
+        return notFound(res);
+      }
+
+      const debtor = await prisma.debtor.findFirst({ where: { id, userId } });
+      if (!debtor) {
+        return notFound(res);
+      }
       res.json(serializeDebtor(debtor));
     } catch (error) {
       console.error('Erro ao atualizar devedor:', error);
@@ -76,22 +90,28 @@ export default function debtorsRoutes(prisma: PrismaClient) {
 
   router.patch('/:id', async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.userId;
-      if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
+      const userId = requireAuthUserId(req, res);
+      if (!userId) return;
 
       const { id } = req.params;
-      const existing = await prisma.debtor.findUnique({ where: { id } });
-      if (!existing || existing.userId !== userId) {
-        return res.status(404).json({ message: 'Devedor não encontrado.' });
-      }
-
       const { name, status, active } = req.body;
       const data: Record<string, unknown> = {};
       if (name !== undefined) data.name = name;
       if (status !== undefined) data.status = status;
       if (active !== undefined) data.active = Boolean(active);
 
-      const debtor = await prisma.debtor.update({ where: { id }, data });
+      const updateResult = await prisma.debtor.updateMany({
+        where: { id, userId },
+        data,
+      });
+      if (updateResult.count === 0) {
+        return notFound(res);
+      }
+
+      const debtor = await prisma.debtor.findFirst({ where: { id, userId } });
+      if (!debtor) {
+        return notFound(res);
+      }
       res.json(serializeDebtor(debtor));
     } catch (error) {
       console.error('Erro ao atualizar devedor (PATCH):', error);
@@ -101,16 +121,14 @@ export default function debtorsRoutes(prisma: PrismaClient) {
 
   router.delete('/:id', validate({ params: idParamSchema }), async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.userId;
-      if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
+      const userId = requireAuthUserId(req, res);
+      if (!userId) return;
 
       const { id } = req.params;
-      const existing = await prisma.debtor.findUnique({ where: { id } });
-      if (!existing || existing.userId !== userId) {
-        return res.status(404).json({ message: 'Devedor não encontrado.' });
+      const result = await prisma.debtor.deleteMany({ where: { id, userId } });
+      if (result.count === 0) {
+        return notFound(res);
       }
-
-      await prisma.debtor.delete({ where: { id } });
       res.status(204).send();
     } catch (error) {
       console.error('Erro ao excluir devedor:', error);

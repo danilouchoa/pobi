@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 import { Decimal } from 'decimal.js';
 import { toDecimalString } from './formatters';
@@ -178,10 +178,11 @@ export const buildUpdateData = (body: ExpensePayload) => {
   return payload;
 };
 
-export const ensureOwnership = async (prisma: PrismaClient, id: string, userId: string) => {
-  const existing = await prisma.expense.findUnique({ where: { id } });
-  if (!existing || existing.userId !== userId) {
-    return null;
-  }
-  return existing;
+export const ensureOwnership = async (
+  prisma: PrismaClient | Prisma.TransactionClient,
+  id: string,
+  userId: string
+) => {
+  const existing = await prisma.expense.findFirst({ where: { id, userId } });
+  return existing ?? null;
 };

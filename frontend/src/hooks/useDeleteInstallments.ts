@@ -4,6 +4,7 @@ import { flushSync } from "react-dom";
 import { deleteInstallments as deleteInstallmentsRequest } from "../services/expenseService";
 import { expensesKeys } from "../lib/queryKeys";
 import { useToast } from "./useToast";
+import { useAuth } from "../context/useAuth";
 
 type UseDeleteInstallmentsOptions = {
   month: string;
@@ -13,6 +14,8 @@ type UseDeleteInstallmentsOptions = {
 export function useDeleteInstallments({ month, mode }: UseDeleteInstallmentsOptions) {
   const toast = useToast();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const userId = user?.id ?? "anonymous";
   const [isDeletingInstallments, setIsDeletingInstallments] = useState(false);
 
   const deleteInstallments = useCallback(
@@ -28,12 +31,12 @@ export function useDeleteInstallments({ month, mode }: UseDeleteInstallmentsOpti
       } finally {
         flushSync(() => setIsDeletingInstallments(false));
         await Promise.all([
-          queryClient.invalidateQueries({ queryKey: expensesKeys.all }),
-          queryClient.invalidateQueries({ queryKey: expensesKeys.month({ month, mode }) }),
+          queryClient.invalidateQueries({ queryKey: expensesKeys.byUser(userId) }),
+          queryClient.invalidateQueries({ queryKey: expensesKeys.month({ userId, month, mode }) }),
         ]);
       }
     },
-    [mode, month, queryClient, toast]
+    [mode, month, queryClient, toast, userId]
   );
 
   return {

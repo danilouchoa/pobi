@@ -16,17 +16,20 @@ import {
 } from "../services/catalogService";
 import { catalogKeys } from "../lib/queryKeys";
 import { DebtorPayload, OriginPayload } from "../types";
+import { useAuth } from "../context/useAuth";
 
 type Options = {
   enabled?: boolean;
 };
 
 export function useCatalogs(options: Options = {}) {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
-  const enabled = options.enabled ?? true;
+  const enabled = (options.enabled ?? true) && Boolean(user?.id);
+  const userId = user?.id ?? "anonymous";
 
   const originsQuery = useQuery({
-    queryKey: catalogKeys.origins(),
+    queryKey: catalogKeys.origins(userId),
     queryFn: getOrigins,
     enabled,
     staleTime: 1000 * 60 * 5,
@@ -34,7 +37,7 @@ export function useCatalogs(options: Options = {}) {
   });
 
   const debtorsQuery = useQuery({
-    queryKey: catalogKeys.debtors(),
+    queryKey: catalogKeys.debtors(userId),
     queryFn: getDebtors,
     enabled,
     staleTime: 1000 * 60 * 5,
@@ -42,9 +45,9 @@ export function useCatalogs(options: Options = {}) {
   });
 
   const invalidateOrigins = () =>
-    queryClient.invalidateQueries({ queryKey: catalogKeys.origins() });
+    queryClient.invalidateQueries({ queryKey: catalogKeys.origins(userId) });
   const invalidateDebtors = () =>
-    queryClient.invalidateQueries({ queryKey: catalogKeys.debtors() });
+    queryClient.invalidateQueries({ queryKey: catalogKeys.debtors(userId) });
 
   const createOriginMutation = useMutation({
     mutationFn: (payload: OriginPayload) => createOrigin(payload),

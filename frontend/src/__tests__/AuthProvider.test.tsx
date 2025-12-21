@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '../context/AuthProvider';
 import { useAuth } from '../context/useAuth';
 import React from 'react';
+import { MemoryRouter } from 'react-router-dom';
 
 const createLocalStorageMock = () => {
 	let store = new Map<string, string>();
@@ -83,11 +84,13 @@ describe('AuthProvider', () => {
 	});
 	const renderWithClient = () =>
 		render(
-			<QueryClientProvider client={new QueryClient()}>
-				<AuthProvider>
-					<TestComponent />
-				</AuthProvider>
-			</QueryClientProvider>
+			<MemoryRouter>
+				<QueryClientProvider client={new QueryClient()}>
+					<AuthProvider>
+						<TestComponent />
+					</AuthProvider>
+				</QueryClientProvider>
+			</MemoryRouter>
 		);
 	it('deve iniciar deslogado', () => {
 		renderWithClient();

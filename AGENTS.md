@@ -250,6 +250,29 @@ g
 - Testes de `useExpenses` atualizados para cobrir invalidação + refetch imediato e filtragem de batch cross-month; rodar `npm run test:unit -- src/__tests__/useExpenses.test.tsx` após instalar dependências.
 - Ao adicionar novas mutações, sempre derive a queryKey pelo factory, restrinja otimismos ao mês visível e finalize com `invalidate + refetch` da lista ativa e das listas relacionadas.
 
+## 2025-12-19 - Segurança: isolamento multi-tenant (server-derived userId)
+- Status: 🟢 Concluído (Fases 1-7)
+- Key files:
+  - `backend/src/utils/tenantScope.ts`
+  - `backend/src/routes/expenses.ts`
+  - `backend/src/routes/origins.ts`
+  - `backend/src/routes/debtors.ts`
+  - `backend/src/routes/salaryHistory.ts`
+  - `backend/src/routes/jobs.ts`
+  - `backend/prisma/seed.ts`
+  - `frontend/src/lib/queryKeys.ts`
+  - `frontend/src/context/AuthProvider.jsx`
+  - `docs/architecture/tenant-isolation.md`
+  - `backend/__tests__/security/tenant_isolation.test.ts`
+  - `frontend/src/__tests__/sessionIsolation.test.tsx`
+- Acceptance criteria checklist:
+  - [x] Rotas protegidas retornam 401 sem sessão.
+  - [x] Acesso cross-tenant retorna 404 sem vazamento de IDs.
+  - [x] userId nunca é aceito do cliente (sempre derivado do servidor).
+  - [x] Seed/demo isolado ao usuário demo e bloqueado fora de dev/test por padrão.
+  - [x] Query keys do frontend escopadas por userId + cache limpo em logout.
+  - [x] Testes de isolamento backend/frontend adicionados e cobrindo troca de sessão.
+
 ## UX-07 – Onboarding pós-cadastro (perfil e preferências)
 - Endpoints novos em `/api/onboarding` (GET/PATCH/skip/complete) retornam DTO `{ profile, preferences, onboarding }` com `needsOnboarding` para gating.
 - `/api/auth/me` agora inclui resumo de onboarding + preferências, mantendo o contrato sanitizado.

@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import type { $Enums } from '@prisma/client';
 import { parseDecimal, toDecimalString, toDecimalStringOrNull } from '../utils/formatters';
 import { validate } from '../middlewares/validation';
+import { notFound, requireAuthUserId, tenantWhere } from '../utils/tenantScope';
 import {
   createOriginSchema,
   updateOriginSchema,
@@ -85,10 +86,13 @@ export default function originsRoutes(prisma: PrismaClient) {
 
   router.get('/', validate({ query: queryOriginSchema }), async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.userId;
-      if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
+      const userId = requireAuthUserId(req, res);
+      if (!userId) return;
 
-      const origins = await prisma.origin.findMany({ where: { userId }, orderBy: { name: 'asc' } });
+      const origins = await prisma.origin.findMany({
+        where: tenantWhere(userId),
+        orderBy: { name: 'asc' },
+      });
       res.json(origins.map(serializeOrigin));
     } catch (error) {
       console.error('Erro ao listar origens:', error);
@@ -98,10 +102,18 @@ export default function originsRoutes(prisma: PrismaClient) {
 
   router.post('/', validate({ body: createOriginSchema }), async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.userId;
-      if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
+      const userId = requireAuthUserId(req, res);
+      if (!userId) return;
 
-      const { name, type, dueDay, limit, closingDay, billingRolloverPolicy } = req.body;
+      const { name, type, dueDay, limit, closingDay, billingRolloverPolicy } = req.body as {
+        name?: string;
+        type?: string;
+        dueDay?: string | null;
+        limit?: string | number | null;
+        closingDay?: number | null;
+        billingRolloverPolicy?: string | null;
+        userId?: string;
+      };
       if (!name || !type) {
         return res.status(400).json({ message: 'Campos obrigatórios ausentes.' });
       }
@@ -136,22 +148,17 @@ export default function originsRoutes(prisma: PrismaClient) {
 
   router.put('/:id', validate({ params: idParamSchema, body: updateOriginSchema }), async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.userId;
-      if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
+      const userId = requireAuthUserId(req, res);
+      if (!userId) return;
 
       const { id } = req.params;
-      const existing = await prisma.origin.findUnique({ where: { id } });
-      if (!existing || existing.userId !== userId) {
-        return res.status(404).json({ message: 'Origem não encontrada.' });
-      }
-
       const { name, type, dueDay, limit, status, active, closingDay, billingRolloverPolicy } = req.body;
 
       const closingDayValue = parseClosingDayInput(closingDay);
       const policyValue = parseBillingPolicy(billingRolloverPolicy);
 
-      const origin = await prisma.origin.update({
-        where: { id },
+      const updateResult = await prisma.origin.updateMany({
+        where: { id, userId },
         data: {
           name,
           type,
@@ -164,6 +171,14 @@ export default function originsRoutes(prisma: PrismaClient) {
         },
       });
 
+      if (updateResult.count === 0) {
+        return notFound(res);
+      }
+
+      const origin = await prisma.origin.findFirst({ where: { id, userId } });
+      if (!origin) {
+        return notFound(res);
+      }
       res.json(serializeOrigin(origin));
     } catch (error) {
       console.error('Erro ao atualizar origem:', error);
@@ -179,15 +194,10 @@ export default function originsRoutes(prisma: PrismaClient) {
 
   router.patch('/:id', async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.userId;
-      if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
+      const userId = requireAuthUserId(req, res);
+      if (!userId) return;
 
       const { id } = req.params;
-      const existing = await prisma.origin.findUnique({ where: { id } });
-      if (!existing || existing.userId !== userId) {
-        return res.status(404).json({ message: 'Origem não encontrada.' });
-      }
-
       const { name, type, dueDay, limit, status, active, closingDay, billingRolloverPolicy } = req.body;
       const data: Record<string, unknown> = {};
       if (name !== undefined) data.name = name;
@@ -205,11 +215,15 @@ export default function originsRoutes(prisma: PrismaClient) {
         data.billingRolloverPolicy = parseBillingPolicy(billingRolloverPolicy) ?? null;
       }
 
-      const origin = await prisma.origin.update({
-        where: { id },
-        data,
-      });
+      const updateResult = await prisma.origin.updateMany({ where: { id, userId }, data });
+      if (updateResult.count === 0) {
+        return notFound(res);
+      }
 
+      const origin = await prisma.origin.findFirst({ where: { id, userId } });
+      if (!origin) {
+        return notFound(res);
+      }
       res.json(serializeOrigin(origin));
     } catch (error) {
       console.error('Erro ao atualizar parcialmente a origem:', error);
@@ -225,16 +239,14 @@ export default function originsRoutes(prisma: PrismaClient) {
 
   router.delete('/:id', validate({ params: idParamSchema }), async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.userId;
-      if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
+      const userId = requireAuthUserId(req, res);
+      if (!userId) return;
 
       const { id } = req.params;
-      const existing = await prisma.origin.findUnique({ where: { id } });
-      if (!existing || existing.userId !== userId) {
-        return res.status(404).json({ message: 'Origem não encontrada.' });
+      const result = await prisma.origin.deleteMany({ where: { id, userId } });
+      if (result.count === 0) {
+        return notFound(res);
       }
-
-      await prisma.origin.delete({ where: { id } });
       res.status(204).send();
     } catch (error) {
       console.error('Erro ao excluir origem:', error);

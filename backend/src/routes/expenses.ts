@@ -29,6 +29,7 @@ import {
 import { bulkJobSchema, bulkUnifiedActionSchema, type BulkUnifiedActionPayload } from '../schemas/bulkUpdate.schema';
 import { ZodError, ZodIssue } from 'zod';
 import { validate } from '../middlewares/validation';
+import { notFound, requireAuthUserId, tenantWhere } from '../utils/tenantScope';
 import {
   createExpenseSchema,
   createExpenseBatchSchema,
@@ -70,6 +71,7 @@ const shouldApplyBillingLogic = (originType?: string | null) =>
 
 const computeBillingMonth = async (
   prisma: PrismaClient | Prisma.TransactionClient,
+  userId: string,
   originId: string | null,
   date: Date,
   originCache?: Map<string, Origin | null>
@@ -79,7 +81,7 @@ const computeBillingMonth = async (
   if (originCache && originCache.has(originId)) {
     origin = originCache.get(originId) ?? null;
   } else {
-    origin = await prisma.origin.findUnique({ where: { id: originId } });
+    origin = await prisma.origin.findFirst({ where: { id: originId, userId } });
     if (originCache) originCache.set(originId, origin);
   }
   if (!origin || !shouldApplyBillingLogic(origin.type)) {
@@ -94,6 +96,23 @@ const computeBillingMonth = async (
   }
   const policy = (origin.billingRolloverPolicy ?? 'PREVIOUS') as BillingRolloverPolicy;
   return deriveBillingMonth(date, normalizedClosingDay, policy);
+};
+
+const ensureLinkedCatalogs = async (
+  prisma: PrismaClient | Prisma.TransactionClient,
+  userId: string,
+  originId?: string | null,
+  debtorId?: string | null
+) => {
+  if (originId) {
+    const origin = await prisma.origin.findFirst({ where: { id: originId, userId } });
+    if (!origin) return false;
+  }
+  if (debtorId) {
+    const debtor = await prisma.debtor.findFirst({ where: { id: debtorId, userId } });
+    if (!debtor) return false;
+  }
+  return true;
 };
 
 const serializeExpense = (expense: any) => ({
@@ -136,11 +155,8 @@ export default function expensesRoutes(prisma: PrismaClient) {
 
   router.get('/', validate({ query: queryExpenseSchema }), async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const userId = req.userId;
-
-      if (!userId) {
-        return res.status(401).json({ message: 'Não autorizado.' });
-      }
+      const userId = requireAuthUserId(req, res);
+      if (!userId) return;
 
       const modeParam = typeof req.query.mode === 'string' ? req.query.mode : 'calendar';
       const mode: ExpenseViewMode = modeParam === 'billing' ? 'billing' : 'calendar';
@@ -160,7 +176,7 @@ export default function expensesRoutes(prisma: PrismaClient) {
 
         const cacheKey = buildExpenseCacheKey(userId, monthQuery, 'billing', page, limit);
         const expenses = await maybeCacheExpenses(cacheKey, async () => {
-          const where = { userId, billingMonth: monthQuery };
+          const where = { ...tenantWhere(userId), billingMonth: monthQuery };
           const [items, total] = await prisma.$transaction([
             prisma.expense.findMany({
               where,
@@ -215,7 +231,7 @@ export default function expensesRoutes(prisma: PrismaClient) {
       const end = startOfMonth(addMonths(start, 1));
 
       const where = {
-        userId,
+        ...tenantWhere(userId),
         date: {
           gte: start,
           lt: end,
@@ -249,8 +265,8 @@ export default function expensesRoutes(prisma: PrismaClient) {
 
   router.post('/bulkUpdate', async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const userId = req.userId;
-      if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
+      const userId = requireAuthUserId(req, res);
+      if (!userId) return;
 
       const parsed = bulkJobSchema.parse(req.body);
       const uniqueFilterIds = parsed.filters.expenseIds ? Array.from(new Set(parsed.filters.expenseIds)) : [];
@@ -307,8 +323,8 @@ export default function expensesRoutes(prisma: PrismaClient) {
   // Endpoint unificado /bulk para update/delete (síncrono)
   router.post('/bulk', async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const userId = req.userId;
-      if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
+      const userId = requireAuthUserId(req, res);
+      if (!userId) return;
 
       const parsed = bulkUnifiedActionSchema.parse(req.body) as BulkUnifiedActionPayload;
 
@@ -335,12 +351,12 @@ export default function expensesRoutes(prisma: PrismaClient) {
   });
   router.get('/recurring', async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const userId = req.userId;
-      if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
+      const userId = requireAuthUserId(req, res);
+      if (!userId) return;
 
       const expenses = await prisma.expense.findMany({
         where: {
-          userId,
+          ...tenantWhere(userId),
           OR: [{ recurring: true }, { fixed: true }],
         },
         orderBy: { date: 'desc' },
@@ -355,11 +371,11 @@ export default function expensesRoutes(prisma: PrismaClient) {
 
   router.get('/shared', async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const userId = req.userId;
-      if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
+      const userId = requireAuthUserId(req, res);
+      if (!userId) return;
 
       const expenses = await prisma.expense.findMany({
-        where: { userId, sharedWith: { not: null } },
+        where: { ...tenantWhere(userId), sharedWith: { not: null } },
         orderBy: { date: 'desc' },
       });
 
@@ -372,16 +388,28 @@ export default function expensesRoutes(prisma: PrismaClient) {
 
   router.post('/recurring', async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const userId = req.userId;
-      if (!userId) return res.status(401).json({ message: 'Não autorizado.' });
+      const userId = requireAuthUserId(req, res);
+      if (!userId) return;
+
+      const { userId: _ignored, ...body } = req.body ?? {};
 
       const payload = buildCreateData(userId, {
-        ...req.body,
-        recurring: req.body.recurring ?? true,
-        fixed: req.body.fixed ?? false,
+        ...body,
+        recurring: body.recurring ?? true,
+        fixed: body.fixed ?? false,
       });
 
-      const billingMonth = await computeBillingMonth(prisma, payload.originId ?? null, payload.date);
+      const hasLinkedCatalogs = await ensureLinkedCatalogs(
+        prisma,
+        userId,
+        payload.originId ?? null,
+        payload.debtorId ?? null
+      );
+      if (!hasLinkedCatalogs) {
+        return notFound(res);
+      }
+
+      const billingMonth = await computeBillingMonth(prisma, userId, payload.originId ?? null, payload.date);
       const expense = await prisma.expense.create({ data: { ...payload, billingMonth } });
       await invalidateExpenseCache(
         userId,
@@ -406,11 +434,8 @@ export default function expensesRoutes(prisma: PrismaClient) {
 
   router.post('/batch', validate({ body: createExpenseBatchSchema }), async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const userId = req.userId;
-
-      if (!userId) {
-        return res.status(401).json({ message: 'Não autorizado.' });
-      }
+      const userId = requireAuthUserId(req, res);
+      if (!userId) return;
 
       const payloads = Array.isArray(req.body) ? (req.body as ExpensePayload[]) : [];
 
@@ -418,7 +443,10 @@ export default function expensesRoutes(prisma: PrismaClient) {
         return res.status(400).json({ message: 'Informe ao menos uma despesa.' });
       }
 
-      const createData = payloads.map((payload) => buildCreateData(userId, payload));
+      const createData = payloads.map((payload) => {
+        const { userId: _ignored, ...payloadSafe } = payload as ExpensePayload & { userId?: string };
+        return buildCreateData(userId, payloadSafe);
+      });
 
       // Detecta se é parcelado: pelo menos uma parcela com installments > 1 em um lote
       const installmentCandidates = createData.filter((payload) => {
@@ -472,7 +500,22 @@ export default function expensesRoutes(prisma: PrismaClient) {
       const expenses: Expense[] = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         const created: Expense[] = [];
         for (const data of createDataWithGroup) {
-          const billingMonth = await computeBillingMonth(tx, data.originId ?? null, data.date, originCache);
+          const hasLinkedCatalogs = await ensureLinkedCatalogs(
+            tx,
+            userId,
+            data.originId ?? null,
+            data.debtorId ?? null
+          );
+          if (!hasLinkedCatalogs) {
+            throw new Error('CATALOG_NOT_FOUND');
+          }
+          const billingMonth = await computeBillingMonth(
+            tx,
+            userId,
+            data.originId ?? null,
+            data.date,
+            originCache
+          );
           const expense = await tx.expense.create({ data: { ...data, billingMonth } });
           created.push(expense);
         }
@@ -504,6 +547,9 @@ export default function expensesRoutes(prisma: PrismaClient) {
       res.status(201).json(expenses.map(serializeExpense));
     } catch (error) {
       console.error('Erro ao criar despesas em lote:', error);
+      if (error instanceof Error && error.message.includes('CATALOG_NOT_FOUND')) {
+        return notFound(res);
+      }
       if (error instanceof BillingConfigurationError) {
         return res.status(error.statusCode).json({ message: error.message });
       }
@@ -522,10 +568,8 @@ export default function expensesRoutes(prisma: PrismaClient) {
 
   router.delete('/group/:groupId', async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const userId = req.userId;
-      if (!userId) {
-        return res.status(401).json({ message: 'Não autorizado.' });
-      }
+      const userId = requireAuthUserId(req, res);
+      if (!userId) return;
 
       const { groupId } = req.params;
       if (!groupId) {
@@ -534,7 +578,7 @@ export default function expensesRoutes(prisma: PrismaClient) {
 
       const pivotExpense = await prisma.expense.findFirst({
         where: {
-          userId,
+          ...tenantWhere(userId),
           installmentGroupId: groupId,
         },
         select: {
@@ -553,7 +597,7 @@ export default function expensesRoutes(prisma: PrismaClient) {
       });
 
       if (!pivotExpense) {
-        return res.status(404).json({ message: 'Nenhuma parcela encontrada para o grupo informado.' });
+        return notFound(res);
       }
 
       const cascadeResult = await prisma.$transaction((tx) =>
@@ -561,7 +605,7 @@ export default function expensesRoutes(prisma: PrismaClient) {
       );
 
       if (!cascadeResult.deleted.length) {
-        return res.status(404).json({ message: 'Nenhuma parcela encontrada para o grupo informado.' });
+        return notFound(res);
       }
 
       const invalidations = collectInvalidationTargets(
@@ -584,13 +628,11 @@ export default function expensesRoutes(prisma: PrismaClient) {
 
   router.post('/', validate({ body: createExpenseSchema }), async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const userId = req.userId;
+      const userId = requireAuthUserId(req, res);
+      if (!userId) return;
 
-      if (!userId) {
-        return res.status(401).json({ message: 'Não autorizado.' });
-      }
-
-      const payload = buildCreateData(userId, req.body);
+      const { userId: _ignored, ...payloadBody } = req.body ?? {};
+      const payload = buildCreateData(userId, payloadBody);
       // Se for parcela única, installmentGroupId = null
       // Se for parcela (ex: "1/12"), gera um groupId se não vier do batch
       let dataToCreate = { ...payload };
@@ -604,7 +646,17 @@ export default function expensesRoutes(prisma: PrismaClient) {
           };
         }
       }
-      const billingMonth = await computeBillingMonth(prisma, payload.originId ?? null, payload.date);
+      const hasLinkedCatalogs = await ensureLinkedCatalogs(
+        prisma,
+        userId,
+        payload.originId ?? null,
+        payload.debtorId ?? null
+      );
+      if (!hasLinkedCatalogs) {
+        return notFound(res);
+      }
+
+      const billingMonth = await computeBillingMonth(prisma, userId, payload.originId ?? null, payload.date);
       const expense = await prisma.expense.create({ data: { ...dataToCreate, billingMonth } });
       await invalidateExpenseCache(
         userId,
@@ -617,6 +669,9 @@ export default function expensesRoutes(prisma: PrismaClient) {
       res.status(201).json(serializeExpense(expense));
     } catch (error) {
       console.error('Erro ao criar despesa:', error);
+      if (error instanceof Error && error.message.includes('CATALOG_NOT_FOUND')) {
+        return notFound(res);
+      }
       if (error instanceof BillingConfigurationError) {
         return res.status(error.statusCode).json({ message: error.message });
       }
@@ -635,20 +690,18 @@ export default function expensesRoutes(prisma: PrismaClient) {
 
   router.put('/:id', validate({ params: idParamSchema, body: updateExpenseSchema }), async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const userId = req.userId;
-
-      if (!userId) {
-        return res.status(401).json({ message: 'Não autorizado.' });
-      }
+      const userId = requireAuthUserId(req, res);
+      if (!userId) return;
 
       const { id } = req.params;
       const existing = await ensureOwnership(prisma, id, userId);
 
       if (!existing) {
-        return res.status(404).json({ message: 'Despesa não encontrada.' });
+        return notFound(res);
       }
 
-      const updateData = buildUpdateData(req.body);
+      const { userId: _ignored, ...body } = req.body ?? {};
+      const updateData = buildUpdateData(body);
       if (updateData.sharedAmount !== undefined && updateData.sharedAmount !== null) {
         const newAmountSource = (updateData.amount ?? existing.amount) as string | number | null;
         const sharedSource = updateData.sharedAmount as string | number | null;
@@ -660,13 +713,28 @@ export default function expensesRoutes(prisma: PrismaClient) {
       const nextDate = (updateData.date as Date | undefined) ?? new Date(existing.date);
       const nextOriginId =
         (updateData.originId as string | null | undefined) ?? existing.originId ?? null;
-      const billingMonth = await computeBillingMonth(prisma, nextOriginId, nextDate);
+      const nextDebtorId =
+        (updateData.debtorId as string | null | undefined) ?? existing.debtorId ?? null;
+
+      const hasLinkedCatalogs = await ensureLinkedCatalogs(prisma, userId, nextOriginId, nextDebtorId);
+      if (!hasLinkedCatalogs) {
+        return notFound(res);
+      }
+      const billingMonth = await computeBillingMonth(prisma, userId, nextOriginId, nextDate);
       updateData.billingMonth = billingMonth;
 
-      const expense = await prisma.expense.update({
-        where: { id },
+      const updateResult = await prisma.expense.updateMany({
+        where: { id, userId },
         data: updateData,
       });
+      if (updateResult.count === 0) {
+        return notFound(res);
+      }
+
+      const expense = await prisma.expense.findFirst({ where: { id, userId } });
+      if (!expense) {
+        return notFound(res);
+      }
       await invalidateExpenseCache(userId, [
         ...buildInvalidationEntries(
           monthKeyFromInput(existing.date),
@@ -696,18 +764,15 @@ export default function expensesRoutes(prisma: PrismaClient) {
 
   router.delete('/:id', validate({ params: idParamSchema }), async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const userId = req.userId;
-
-      if (!userId) {
-        return res.status(401).json({ message: 'Não autorizado.' });
-      }
+      const userId = requireAuthUserId(req, res);
+      if (!userId) return;
 
       const { id } = req.params;
 
       const deletedExpense = await deleteSingleExpense(prisma, userId, id);
 
       if (!deletedExpense) {
-        return res.status(404).json({ message: 'Despesa não encontrada.' });
+        return notFound(res);
       }
 
       const invalidations = collectInvalidationTargets([deletedExpense]);
@@ -725,17 +790,15 @@ export default function expensesRoutes(prisma: PrismaClient) {
 
   router.post('/:id/duplicate', async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const userId = req.userId;
-      if (!userId) {
-        return res.status(401).json({ message: 'Não autorizado.' });
-      }
+      const userId = requireAuthUserId(req, res);
+      if (!userId) return;
 
       const { id } = req.params;
       const { incrementMonth = false, customDate } = req.body;
 
       const existing = await ensureOwnership(prisma, id, userId);
       if (!existing) {
-        return res.status(404).json({ message: 'Despesa não encontrada.' });
+        return notFound(res);
       }
 
       let cloneDate = customDate ? new Date(customDate) : new Date(existing.date);
@@ -779,6 +842,7 @@ export default function expensesRoutes(prisma: PrismaClient) {
       });
       const billingMonth = await computeBillingMonth(
         prisma,
+        userId,
         createPayload.originId ?? null,
         createPayload.date
       );
@@ -802,19 +866,18 @@ export default function expensesRoutes(prisma: PrismaClient) {
 
   router.patch('/:id/adjust', async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const userId = req.userId;
-      if (!userId) {
-        return res.status(401).json({ message: 'Não autorizado.' });
-      }
+      const userId = requireAuthUserId(req, res);
+      if (!userId) return;
 
       const { id } = req.params;
       const existing = await ensureOwnership(prisma, id, userId);
 
       if (!existing) {
-        return res.status(404).json({ message: 'Despesa não encontrada.' });
+        return notFound(res);
       }
 
-      const updateData = buildUpdateData(req.body);
+      const { userId: _ignored, ...body } = req.body ?? {};
+      const updateData = buildUpdateData(body);
       if (updateData.amount !== undefined || updateData.sharedAmount !== undefined) {
         const futureAmountSource = (updateData.amount ?? existing.amount) as string | number | null;
         const sharedSource =
@@ -838,13 +901,34 @@ export default function expensesRoutes(prisma: PrismaClient) {
       const adjustedDate = (updateData.date as Date | undefined) ?? new Date(existing.date);
       const adjustedOriginId =
         (updateData.originId as string | null | undefined) ?? existing.originId ?? null;
-      const billingMonth = await computeBillingMonth(prisma, adjustedOriginId, adjustedDate);
+      const adjustedDebtorId =
+        (updateData.debtorId as string | null | undefined) ?? existing.debtorId ?? null;
+
+      const hasLinkedCatalogs = await ensureLinkedCatalogs(
+        prisma,
+        userId,
+        adjustedOriginId,
+        adjustedDebtorId
+      );
+      if (!hasLinkedCatalogs) {
+        return notFound(res);
+      }
+
+      const billingMonth = await computeBillingMonth(prisma, userId, adjustedOriginId, adjustedDate);
       updateData.billingMonth = billingMonth;
 
-      const updated = await prisma.expense.update({
-        where: { id },
+      const updateResult = await prisma.expense.updateMany({
+        where: { id, userId },
         data: updateData,
       });
+      if (updateResult.count === 0) {
+        return notFound(res);
+      }
+
+      const updated = await prisma.expense.findFirst({ where: { id, userId } });
+      if (!updated) {
+        return notFound(res);
+      }
       await invalidateExpenseCache(userId, [
         ...buildInvalidationEntries(
           monthKeyFromInput(existing.date),
@@ -868,7 +952,8 @@ export default function expensesRoutes(prisma: PrismaClient) {
 
   router.post('/recurring/queue', async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const userId = (req as AuthenticatedRequest).userId;
+      const userId = requireAuthUserId(req, res);
+      if (!userId) return;
       await publishRecurringJob(userId);
       res.json({ ok: true, queued: true });
     } catch (error) {
