@@ -1,5 +1,6 @@
 import { type NextFunction, type RequestHandler, type Response } from 'express';
 import type { PrismaClient } from '@prisma/client';
+import type { PrismaClientLike } from '../types/prisma';
 import { config } from '../config';
 import { logEvent } from '../lib/logger';
 import type { AuthenticatedRequest } from './auth';
@@ -18,22 +19,33 @@ const isEmailVerified = (user?: VerificationLikeUser | null) => {
   return false;
 };
 
-const buildForbiddenResponse = (res: Response, emailVerifiedAt: Date | string | null = null) =>
-  res.status(403).json({
+const buildForbiddenResponse = (res: Response, emailVerifiedAt?: Date | string | null) => {
+  const emailVerifiedAtString: string | undefined = emailVerifiedAt
+    ? typeof emailVerifiedAt === 'string'
+      ? emailVerifiedAt
+      : emailVerifiedAt.toISOString()
+    : undefined;
+
+  const payload: { error: string; message: string; reason: string; emailVerifiedAt?: string } = {
     error: 'EMAIL_NOT_VERIFIED',
     message: 'Seu e-mail ainda não foi confirmado. Confirme seu e-mail para usar esta funcionalidade.',
     reason: 'email_not_verified',
-    emailVerifiedAt,
-  });
+    emailVerifiedAt: emailVerifiedAtString,
+  };
 
-export const requireEmailVerified = (prisma: Pick<PrismaClient, 'user'>): RequestHandler =>
+  return res.status(403).json(payload);
+};
+
+export const requireEmailVerified = (
+  prisma: Pick<PrismaClient, 'user'> | Pick<PrismaClientLike, 'user'>
+): RequestHandler =>
   async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     if (!config.emailVerificationRequired) {
       const userId = getAuthUserId(req);
       logEvent({
         event: 'auth.verify-email.gate.skipped',
         requestId: req.headers['x-request-id'] as string | undefined,
-        userId,
+        userId: userId ?? undefined,
         ip: req.ip,
         meta: { reason: 'verification_disabled' },
       });
@@ -61,15 +73,21 @@ export const requireEmailVerified = (prisma: Pick<PrismaClient, 'user'>): Reques
         return res.status(401).json({ error: 'UNAUTHORIZED', message: 'Não autorizado.' });
       }
 
+      const emailVerifiedAtString = user.emailVerifiedAt
+        ? user.emailVerifiedAt instanceof Date
+          ? user.emailVerifiedAt.toISOString()
+          : user.emailVerifiedAt
+        : undefined;
+
       if (!isEmailVerified(user)) {
         logEvent({
           event: 'auth.verify-email.blocked',
           requestId: req.headers['x-request-id'] as string | undefined,
           userId,
           ip: req.ip,
-          meta: { emailVerifiedAt: user.emailVerifiedAt ?? null },
+          meta: { emailVerifiedAt: emailVerifiedAtString ?? undefined },
         });
-        return buildForbiddenResponse(res, user.emailVerifiedAt ?? null);
+        return buildForbiddenResponse(res, emailVerifiedAtString ?? undefined);
       }
 
       return next();

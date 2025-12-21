@@ -170,17 +170,18 @@ export default function expensesRoutes(prisma: PrismaClientLike) {
         }
 
         const cacheKey = buildExpenseCacheKey(userId, monthQuery, 'billing', page, limit);
-        const expenses = await maybeCacheExpenses(cacheKey, async () => {
+        const expenses = (await maybeCacheExpenses(cacheKey, async () => {
           const where = { ...tenantWhere(userId), billingMonth: monthQuery };
-          const [items, total] = await prisma.$transaction([
-            prisma.expense.findMany({
+          const { items, total } = (await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+            const fetched = await tx.expense.findMany({
               where,
               orderBy: { date: 'desc' },
               skip: (page - 1) * limit,
               take: limit,
-            }),
-            prisma.expense.count({ where }),
-          ]);
+            });
+            const count = await tx.expense.count({ where });
+            return { items: fetched, total: count };
+          })) as { items: Expense[]; total: number };
           return {
             data: items.map(serializeExpense),
             pagination: {
@@ -190,7 +191,10 @@ export default function expensesRoutes(prisma: PrismaClientLike) {
               pages: Math.max(1, Math.ceil(total / limit)),
             },
           };
-        });
+        })) as {
+          data: ReturnType<typeof serializeExpense>[];
+          pagination: { page: number; limit: number; total: number; pages: number };
+        };
         return res.json(expenses);
       }
 
@@ -235,11 +239,17 @@ export default function expensesRoutes(prisma: PrismaClientLike) {
 
       const monthKey = format(start, 'yyyy-MM');
       const cacheKey = buildExpenseCacheKey(userId, monthKey, 'calendar', page, limit);
-      const expenses = await maybeCacheExpenses(cacheKey, async () => {
-        const [items, total] = await prisma.$transaction([
-          prisma.expense.findMany({ where, orderBy: { date: 'desc' }, skip: (page - 1) * limit, take: limit }),
-          prisma.expense.count({ where }),
-        ]);
+      const expenses = (await maybeCacheExpenses(cacheKey, async () => {
+        const { items, total } = (await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+          const fetched = await tx.expense.findMany({
+            where,
+            orderBy: { date: 'desc' },
+            skip: (page - 1) * limit,
+            take: limit,
+          });
+          const count = await tx.expense.count({ where });
+          return { items: fetched, total: count };
+        })) as { items: Expense[]; total: number };
         return {
           data: items.map(serializeExpense),
           pagination: {
@@ -249,7 +259,10 @@ export default function expensesRoutes(prisma: PrismaClientLike) {
             pages: Math.max(1, Math.ceil(total / limit)),
           },
         };
-      });
+      })) as {
+        data: ReturnType<typeof serializeExpense>[];
+        pagination: { page: number; limit: number; total: number; pages: number };
+      };
 
       res.json(expenses);
     } catch (error) {
@@ -595,9 +608,7 @@ export default function expensesRoutes(prisma: PrismaClientLike) {
         return notFound(res);
       }
 
-      const cascadeResult = await prisma.$transaction((tx) =>
-        deleteExpenseCascade(tx, userId, pivotExpense as any)
-      );
+      const cascadeResult = await deleteExpenseCascade(prisma, userId, pivotExpense as any);
 
       if (!cascadeResult.deleted.length) {
         return notFound(res);

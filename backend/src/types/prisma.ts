@@ -79,7 +79,5 @@ export type PrismaClientLike = {
     update: (...args: any[]) => Promise<any>;
     upsert: (...args: any[]) => Promise<any>;
   };
-  $transaction: <T>(
-    callback: (tx: PrismaClientLike | Prisma.TransactionClient) => Promise<T>
-  ) => Promise<T>;
+  $transaction: <T>(fnOrOps: any, options?: any) => Promise<T>;
 };

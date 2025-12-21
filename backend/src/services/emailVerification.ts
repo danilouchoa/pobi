@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { type EmailVerificationToken, type Prisma } from '@prisma/client';
+type PrismaUser = Prisma.UserGetPayload<{ select: { id: true; emailVerifiedAt: true; emailVerifiedIp: true } }>;
 import { config } from '../config';
 import { EMAIL_VERIFICATION_QUEUE } from '../lib/queues';
 export { EMAIL_VERIFICATION_QUEUE };
@@ -103,7 +104,10 @@ export const consumeToken = async (
 
   const { token } = resolution;
 
-  const result = await client.$transaction(async (tx: Prisma.TransactionClient) => {
+  const result = await client.$transaction<{
+    consumedToken: EmailVerificationToken;
+    updatedUser: PrismaUser;
+  } | null>(async (tx: Prisma.TransactionClient) => {
     const consumedToken = await tx.emailVerificationToken.update({
       where: { id: token.id },
       data: { consumedAt: now },

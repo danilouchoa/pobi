@@ -1,4 +1,4 @@
-import { Provider, type User } from '@prisma/client';
+import { Provider, type User, Prisma } from '@prisma/client';
 import type { PrismaClientLike } from '../types/prisma';
 
 type MergeStats = {
@@ -26,7 +26,7 @@ export async function mergeUsersUsingGoogleAsCanonical(
     throw new Error('localUserId and googleUserId must be different');
   }
 
-  return prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const [localUser, googleUser] = await Promise.all([
       tx.user.findUnique({ where: { id: localUserId } }),
       tx.user.findUnique({ where: { id: googleUserId } }),

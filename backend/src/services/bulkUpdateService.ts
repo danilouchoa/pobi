@@ -58,7 +58,7 @@ export async function applyBulkUpdate(prisma: PrismaClientLike, job: BulkUpdateJ
     }
   }
 
-  const affectedRecords = await prisma.expense.findMany({
+  const affectedRecords: Array<{ id: string; date: Date; billingMonth: string | null }> = await prisma.expense.findMany({
     where: { id: { in: job.expenseIds }, userId: job.userId },
     select: { id: true, date: true, billingMonth: true },
   });
@@ -67,7 +67,7 @@ export async function applyBulkUpdate(prisma: PrismaClientLike, job: BulkUpdateJ
     return { count: 0 };
   }
 
-  const targetIds = affectedRecords.map((record) => record.id);
+  const targetIds: string[] = affectedRecords.map((record) => record.id);
   const { data: updateManyData, hasData } = buildUpdateManyData(job.payload);
 
   let updatedCount = 0;
@@ -120,14 +120,14 @@ export async function applyBulkUnifiedUpdate(
   items: BulkUnifiedUpdateItem[]
 ) {
   // Evita N+1: busca todas as despesas alvo de uma vez
-  const targetIds = items.map(i => i.id);
-  const existingExpenses = await prisma.expense.findMany({
+  const targetIds = items.map((i) => i.id);
+  const existingExpenses: Array<{ id: string; date: Date; billingMonth: string | null }> = await prisma.expense.findMany({
     where: { id: { in: targetIds }, userId },
     select: { id: true, date: true, billingMonth: true },
   });
 
   const expenseMap = new Map<string, typeof existingExpenses[0]>();
-  existingExpenses.forEach(e => expenseMap.set(e.id, e));
+  existingExpenses.forEach((e) => expenseMap.set(e.id, e));
 
   // Validar ownership de originId quando informado
   const candidateOriginIds = Array.from(
@@ -139,7 +139,7 @@ export async function applyBulkUnifiedUpdate(
   );
   let allowedOriginIds = new Set<string>();
   if (candidateOriginIds.length) {
-    const rows = await prisma.origin.findMany({
+    const rows: Array<{ id: string }> = await prisma.origin.findMany({
       where: { id: { in: candidateOriginIds }, userId },
       select: { id: true },
     });
@@ -209,7 +209,19 @@ export async function applyBulkDelete(
 ) {
   if (!ids.length) return { deletedCount: 0 };
 
-  const existing = await prisma.expense.findMany({
+  const existing: Array<{
+    id: string;
+    description: string;
+    parcela: string | null;
+    amount: string;
+    originId: string | null;
+    debtorId: string | null;
+    installments: number | null;
+    date: Date;
+    billingMonth: string | null;
+    fingerprint: string | null;
+    installmentGroupId: string | null;
+  }> = await prisma.expense.findMany({
     where: { id: { in: ids }, userId },
     select: {
       id: true,
@@ -244,7 +256,7 @@ export async function applyBulkDelete(
   const groupExpenses = new Map<string, typeof existing>();
 
   if (groupIds.length) {
-    const rows = await prisma.expense.findMany({
+    const rows: typeof existing = await prisma.expense.findMany({
       where: { userId, installmentGroupId: { in: groupIds } },
       select: {
         id: true,

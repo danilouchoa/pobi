@@ -1,4 +1,5 @@
 import { Prisma, PrismaClient } from '@prisma/client';
+import type { PrismaClientLike } from '../types/prisma';
 import crypto from 'crypto';
 import { Decimal } from 'decimal.js';
 import { toDecimalString } from './formatters';
@@ -179,7 +180,7 @@ export const buildUpdateData = (body: ExpensePayload) => {
 };
 
 export const ensureOwnership = async (
-  prisma: PrismaClient | Prisma.TransactionClient,
+  prisma: PrismaClient | Prisma.TransactionClient | PrismaClientLike,
   id: string,
   userId: string
 ) => {

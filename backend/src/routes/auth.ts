@@ -1009,19 +1009,25 @@ export default function authRoutes(prisma: PrismaClientLike) {
           },
         });
         logAuthEvent('auth.account.linked', {
-          userId: resultUser.id,
+          userId: resultUser!.id,
           localUserId: currentUser.id,
-          googleUserId: resultUser.id,
-          email: resultUser.email,
+          googleUserId: resultUser!.id,
+          email: resultUser!.email,
           origin: 'link-google-endpoint',
         });
       }
 
-      if (resultUser.emailVerifiedAt) {
-        await ensureFirstPrompted(resultUser.id, prisma);
+      if (!resultUser) {
+        throw new Error('ACCOUNT_LINK_FAILED');
       }
 
-      return await issueSession(res, resultUser, buildUserPayload);
+      const ensuredUser = resultUser;
+
+      if (ensuredUser.emailVerifiedAt) {
+        await ensureFirstPrompted(ensuredUser.id, prisma);
+      }
+
+      return await issueSession(res, ensuredUser, buildUserPayload);
     } catch (error) {
       console.error('[AUTH] Erro ao vincular conta Google:', error);
       return res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Erro interno no servidor.' });

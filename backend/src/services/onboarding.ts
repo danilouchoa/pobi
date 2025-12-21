@@ -132,7 +132,7 @@ export const getOnboardingState = async (userId: string, prisma: PrismaClientLik
 };
 
 export const patchOnboarding = async (userId: string, patch: PatchOnboardingDTO, prisma: PrismaClientLike) => {
-  return prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const prefs = await getOrCreateUserPreferences(userId, tx);
     const user = await tx.user.findUnique({ where: { id: userId }, select: { name: true, avatar: true } });
 
