@@ -142,6 +142,7 @@ g
 | | | | | | | |Próximos passos: finalizar delete unitário e ruleset do bulk delete.| | | | |
 | | | |27|[Security/DX] Toggle de Segurança Dev vs Prod|🟡 Em progresso|Introduzir flag SECURITY_MODE para alternar entre modo relaxado (dev) e estrito (prod).|Estrutura conceitual definida; Express 5 exige remoção total de rotas wildcard.| | | | |
 | | | |28|[UX-09A] Cache Consistency (Expenses)|🟡 Em progresso|Garantir invalidação de cache de despesas com SCAN/keys e UI atualizando imediatamente em create/delete.|Key files: backend/src/lib/redisClient.ts, backend/src/utils/expenseCache.ts, backend/src/routes/expenses.ts, frontend/src/hooks/useExpenses.ts, frontend/src/lib/queryKeys.ts.|Verificação: criar/deletar despesa reflete na hora; logs mostram CACHE MISS após mutação; logout/login não exibe itens fantasmas.|Session: normalizeScanResult + deleteByPattern reescritos; useExpenses valida page/limit > 0, trata delete 404 como sucesso com refetch, otimiza batch cross-page; lint/test/build frontend e coverage backend ok.| |
+| | | |29|[UX-08] Auth boundary preparado para micro frontends / BFF|🟢 Concluído|Consolidar autenticação em módulo isolado com client BFF e rotas estáveis.|Frontend em `features/auth`, rotas `/auth/*`, alias `/api/bff/auth` no backend e regras de UI/cliente documentadas.| | | | |
 | | | | | | | |Garantir CORS+helmet funcionais em modo relaxado sem quebrar build.| |Necessário aplicar CORS global sem app.options(*).|Implementar SECURITY_MODE="relaxed" (CORS aberto) e "strict" (CORS restrito + rate limiting).| |
 
 ## 2025-11-22 - Mongo replica set para Prisma
@@ -253,3 +254,9 @@ g
 - Endpoints novos em `/api/onboarding` (GET/PATCH/skip/complete) retornam DTO `{ profile, preferences, onboarding }` com `needsOnboarding` para gating.
 - `/api/auth/me` agora inclui resumo de onboarding + preferências, mantendo o contrato sanitizado.
 - Frontend redireciona usuários verificados para `/onboarding` de forma não bloqueante; wizard em `frontend/src/pages/Onboarding.tsx` usa AuthShell e design system.
+
+## UX-08 — Auth boundary preparado para micro frontends / BFF
+- **Onde criar novas telas**: `frontend/src/features/auth/pages/*`.
+- **Roteamento**: montar em `frontend/src/features/auth/routes.tsx` e registrar no app via `/auth/*` (manter redirects legados).
+- **UI**: usar apenas componentes do Design System em `frontend/src/ui/*` (sem `<input>`, `<button>` etc. diretos).
+- **API**: chamadas de Auth devem passar por `frontend/src/features/auth/bff/client.ts`.

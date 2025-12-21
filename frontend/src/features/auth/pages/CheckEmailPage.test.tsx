@@ -3,11 +3,13 @@ import type React from "react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { vi } from "vitest";
-import CheckEmail from "../CheckEmail";
+import CheckEmailPage from "./CheckEmailPage";
 import { AuthContext } from "../../../context/AuthProvider";
-import * as authApi from "../../../services/authApi";
+import { authBff } from "../bff/client";
 
 describe("CheckEmail", () => {
+  let resendVerificationSpy: ReturnType<typeof vi.spyOn>;
+
   const renderComponent = (contextValue?: Partial<React.ContextType<typeof AuthContext>>) => {
     const value = {
       isAuthenticated: true,
@@ -20,14 +22,14 @@ describe("CheckEmail", () => {
     return render(
       <MemoryRouter initialEntries={["/auth/check-email"]}>
         <AuthContext.Provider value={value}>
-          <CheckEmail />
+          <CheckEmailPage />
         </AuthContext.Provider>
       </MemoryRouter>
     );
   };
 
   beforeEach(() => {
-    vi.spyOn(authApi, "resendVerification").mockReset();
+    resendVerificationSpy = vi.spyOn(authBff, "resendVerification");
   });
 
   it("renders heading and tips", () => {
@@ -38,7 +40,7 @@ describe("CheckEmail", () => {
   });
 
   it("shows success message when email is resent", async () => {
-    vi.spyOn(authApi, "resendVerification").mockResolvedValueOnce({ status: "RESENT" });
+    resendVerificationSpy.mockResolvedValueOnce({ status: "RESENT" });
     renderComponent();
 
     await userEvent.click(screen.getByRole("button", { name: /reenviar e-mail de confirmação/i }));
@@ -47,7 +49,7 @@ describe("CheckEmail", () => {
   });
 
   it("shows info when already verified", async () => {
-    vi.spyOn(authApi, "resendVerification").mockResolvedValueOnce({ status: "ALREADY_VERIFIED" });
+    resendVerificationSpy.mockResolvedValueOnce({ status: "ALREADY_VERIFIED" });
     renderComponent();
 
     fireEvent.click(screen.getByRole("button", { name: /reenviar e-mail de confirmação/i }));
@@ -58,7 +60,7 @@ describe("CheckEmail", () => {
   it("handles rate limiting", async () => {
     const error = new Error("rate limited");
     (error as any).response = { status: 429, data: { error: "RATE_LIMITED" } };
-    vi.spyOn(authApi, "resendVerification").mockRejectedValueOnce(error);
+    resendVerificationSpy.mockRejectedValueOnce(error);
     renderComponent();
 
     fireEvent.click(screen.getByRole("button", { name: /reenviar e-mail de confirmação/i }));

@@ -7,12 +7,25 @@ vi.mock("../context/useAuth", () => ({
   useAuth: () => ({ isAuthenticated: false, user: null }),
 }));
 
-vi.mock("../services/authApi", () => ({
-  verifyEmail: vi.fn().mockResolvedValue({ status: "VERIFIED", emailVerified: true, emailVerifiedAt: null }),
-  resendVerification: vi.fn(),
+vi.mock("../features/auth/bff/client", () => ({
+  authBff: {
+    verifyEmail: vi.fn().mockResolvedValue({ status: "VERIFIED", emailVerified: true, emailVerifiedAt: null }),
+    resendVerification: vi.fn(),
+  },
+  toAuthBffError: (error: unknown) => error,
 }));
 
 describe("Auth routes", () => {
+  it("redirects legacy /login to /auth/login", async () => {
+    render(
+      <MemoryRouter initialEntries={["/login"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Acesse com seu e-mail, senha ou Google/i)).toBeInTheDocument();
+  });
+
   it("renders check email screen for its route", async () => {
     render(
       <MemoryRouter initialEntries={["/auth/check-email"]}>

@@ -3,7 +3,7 @@ import { useState, type FormEvent } from "react";
 import { Alert } from "../../ui/Alert";
 import { Button } from "../../ui/Button";
 import { TextField } from "../../ui/TextField";
-import { AuthShell } from "../../components/auth/AuthShell";
+import { AuthShell } from "../../features/auth/components/AuthShell";
 
 function AuthShellPreview() {
   const [email, setEmail] = useState("");

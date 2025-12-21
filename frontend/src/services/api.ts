@@ -77,9 +77,8 @@ api.interceptors.response.use(
     const url = error.config?.url ?? "";
 
     const isAuthEndpoint =
-      url.includes("/api/auth/login") ||
-      url.includes("/api/auth/register") ||
-      url.includes("/api/auth/refresh");
+      url.includes("/api/auth/") ||
+      url.includes("/api/bff/auth/");
 
     if (!authToken) {
       return Promise.reject(error);

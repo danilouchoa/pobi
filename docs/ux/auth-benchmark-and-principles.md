@@ -53,3 +53,9 @@ Finfy’s authentication should feel lightweight, trustworthy, and fast: collect
 - Clear UX contracts (field order, error copy, consent wording) allow BFFs to evolve separately without fragmenting the experience.
 - Progressive profiling supports feature teams: onboarding steps can be extended per micro frontend while keeping initial sign-up minimal.
 - Standardized empty/loading states and redirect rules reduce edge-case divergence during independent releases.
+
+## Auth Boundary & BFF (UX-08)
+- All auth UI lives in `frontend/src/features/auth/*` (pages, components, routes, and BFF client).
+- Auth pages must use **only** Design System components (`frontend/src/ui/*`).
+- Auth pages and providers must call the API via `features/auth/bff/client.ts` (no direct usage of `services/authApi.ts`).
+- Auth routes are mounted under `/auth/*`, with legacy redirects handled at the app router.

@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React, { useState } from "react";
 import { vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
-import Login from "../components/Login";
+import LoginPage from "../features/auth/pages/LoginPage";
 import { AuthContext } from "../context/AuthProvider";
 import { initialLoginErrorState, LOGIN_ERROR_MESSAGES, type LoginErrorState } from "../context/loginError";
 
@@ -63,7 +63,7 @@ function renderWithAuth(overrides: AuthOverrides = {}): RenderResult {
 
     return (
       <AuthContext.Provider value={value}>
-        <Login />
+        <LoginPage />
       </AuthContext.Provider>
     );
   };

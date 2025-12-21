@@ -11,17 +11,15 @@ import {
 import { GoogleLogin, type CredentialResponse } from "@react-oauth/google";
 import { AnimatePresence, motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/useAuth";
-import { LOGIN_ERROR_MESSAGES, isGlobalLoginError } from "../context/loginError";
-import { useToast } from "../hooks/useToast";
-import { Alert } from "../ui/Alert";
-import { Button } from "../ui/Button";
-import { Card } from "../ui/Card";
-import { TextField } from "../ui/TextField";
-import { tokens } from "../ui/tokens";
-import { AuthShell } from "./auth/AuthShell";
-
-type Mode = "login" | "register";
+import { useAuth } from "../../../context/useAuth";
+import { LOGIN_ERROR_MESSAGES, isGlobalLoginError } from "../../../context/loginError";
+import { useToast } from "../../../hooks/useToast";
+import { Alert } from "../../../ui/Alert";
+import { Button } from "../../../ui/Button";
+import { Card } from "../../../ui/Card";
+import { TextField } from "../../../ui/TextField";
+import { tokens } from "../../../ui/tokens";
+import { AuthShell } from "../components/AuthShell";
 type FeedbackSource = "local" | "auth";
 
 type Feedback = {
@@ -39,17 +37,15 @@ type GoogleConflict = {
 };
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
 const MotionDiv = motion.div;
 
-export default function Login() {
-  const { login, register, loginWithGoogle, resolveGoogleConflict, authError, loading, loginError, clearLoginError } = useAuth();
+export default function LoginPage() {
+  const { login, loginWithGoogle, resolveGoogleConflict, authError, loading, loginError, clearLoginError } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
-  const [form, setForm] = useState({ email: "", password: "", name: "", passwordConfirm: "" });
+  const [form, setForm] = useState({ email: "", password: "" });
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [mode, setMode] = useState<Mode>("login");
   const [googleConflict, setGoogleConflict] = useState<GoogleConflict | null>(null);
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -91,12 +87,12 @@ export default function Login() {
 
   useEffect(() => {
     if (authError) {
-      if (mode === "login" && loginError.kind !== "NONE") return;
+      if (loginError.kind !== "NONE") return;
       showFeedback("error", authError, { source: "auth" });
     } else {
       setFeedback((prev) => (prev?.source === "auth" ? null : prev));
     }
-  }, [authError, loginError.kind, mode, showFeedback]);
+  }, [authError, loginError.kind, showFeedback]);
 
   useEffect(() => {
     if (!feedback?.autoClose) return undefined;
@@ -117,7 +113,6 @@ export default function Login() {
 
     const emailValue = form.email.trim();
     const passwordValue = form.password;
-    const nameValue = form.name.trim();
 
     if (!EMAIL_REGEX.test(emailValue)) {
       setFieldErrors({ email: "Digite um e-mail válido." });
@@ -125,55 +120,23 @@ export default function Login() {
       return;
     }
 
-    if (mode === "login") {
-      if (!passwordValue.trim()) {
-        setFieldErrors({ password: "Informe e-mail e senha para continuar." });
-        passwordInputRef.current?.focus();
-        return;
-      }
-
-      if (emailValue !== form.email) {
-        setForm((prev) => ({ ...prev, email: emailValue }));
-      }
-
-      setIsSubmitting(true);
-      try {
-        await login({ email: emailValue, password: passwordValue });
-        toast.success({ message: "Login realizado! Bem-vindo de volta." });
-        showFeedback("success", "Login realizado! Redirecionando...");
-      } catch {
-        // O mapeamento de erro é tratado pelo AuthProvider/loginError
-      } finally {
-        setIsSubmitting(false);
-      }
+    if (!passwordValue.trim()) {
+      setFieldErrors({ password: "Informe e-mail e senha para continuar." });
+      passwordInputRef.current?.focus();
       return;
     }
 
-    if (!nameValue) {
-      showFeedback("error", "Informe seu nome para continuar.");
-      return;
-    }
-
-    if (!PASSWORD_REGEX.test(passwordValue)) {
-      showFeedback("error", "Senha deve ter 8+ caracteres com letras e números.");
-      return;
-    }
-
-    if (!form.passwordConfirm || form.passwordConfirm !== passwordValue) {
-      showFeedback("error", "A confirmação de senha não confere.");
-      return;
+    if (emailValue !== form.email) {
+      setForm((prev) => ({ ...prev, email: emailValue }));
     }
 
     setIsSubmitting(true);
     try {
-      await register({ name: nameValue, email: emailValue, password: passwordValue });
-      toast.success({ message: "Cadastro realizado! Bem-vindo." });
-      showFeedback("success", "Cadastro concluído! Redirecionando...");
-    } catch (error: unknown) {
-      const typedError = error as { response?: { data?: { message?: string } } };
-      if (!typedError.response?.data?.message) {
-        showFeedback("error", "Não foi possível concluir seu cadastro.");
-      }
+      await login({ email: emailValue, password: passwordValue });
+      toast.success({ message: "Login realizado! Bem-vindo de volta." });
+      showFeedback("success", "Login realizado! Redirecionando...");
+    } catch {
+      // O mapeamento de erro é tratado pelo AuthProvider/loginError
     } finally {
       setIsSubmitting(false);
     }
@@ -241,18 +204,7 @@ export default function Login() {
     clearLoginError();
     setFeedback(null);
   };
-
-  const switchMode = (nextMode: Mode) => {
-    setMode(nextMode);
-    setFieldErrors({});
-    clearLoginError();
-    setFeedback(null);
-  };
-
-  const formSubtitle = useMemo(
-    () => (mode === "login" ? "Acesse com seu e-mail, senha ou Google." : "Cadastre-se em segundos para começar."),
-    [mode]
-  );
+  const formSubtitle = useMemo(() => "Acesse com seu e-mail, senha ou Google.", []);
 
   const googleOverlayStyle: CSSProperties = {
     position: "absolute",
@@ -275,7 +227,7 @@ export default function Login() {
   }, [loginError.kind]);
 
   return (
-    <AuthShell title="Controle sua vida financeira de forma simples" subtitle={formSubtitle} variant={mode === "login" ? "login" : "signup"}>
+    <AuthShell title="Controle sua vida financeira de forma simples" subtitle={formSubtitle} variant="login">
       <div style={{ display: "flex", flexDirection: "column", gap: tokens.spacing.md }}>
         <div
           style={{
@@ -287,15 +239,15 @@ export default function Login() {
           <Button
             type="button"
             label="Entrar"
-            variant={mode === "login" ? "primary" : "ghost"}
-            onClick={() => switchMode("login")}
+            variant="primary"
+            onClick={() => navigate("/auth/login")}
             fullWidth
           />
           <Button
             type="button"
             label="Criar conta"
             variant="secondary"
-            onClick={() => navigate("/auth/signup")}
+            onClick={() => navigate("/auth/register")}
             fullWidth
           />
         </div>
@@ -320,7 +272,7 @@ export default function Login() {
             )}
           </AnimatePresence>
 
-          {mode === "login" && isGlobalLoginError(loginError.kind) && loginError.message && (
+          {isGlobalLoginError(loginError.kind) && loginError.message && (
             <div ref={globalErrorRef} tabIndex={-1} style={{ outline: "none" }}>
               <Alert
                 variant={loginError.kind === "NETWORK" ? "warning" : "error"}
@@ -329,20 +281,6 @@ export default function Login() {
                 style={{ borderRadius: tokens.radii.lg }}
               />
             </div>
-          )}
-
-          {mode === "register" && (
-            <TextField
-              id="name"
-              name="name"
-              label="Nome"
-              placeholder="Seu nome completo"
-              value={form.name}
-              onChange={handleChange("name")}
-              required
-              fullWidth
-              autoComplete="name"
-            />
           )}
 
           <TextField
@@ -371,32 +309,16 @@ export default function Login() {
             onChange={handleChange("password")}
             required
             fullWidth
-            helperText={mode === "login" ? "Use sua senha cadastrada." : "Mínimo de 8 caracteres com letras e números."}
-            autoComplete={mode === "login" ? "current-password" : "new-password"}
+            helperText="Use sua senha cadastrada."
+            autoComplete="current-password"
             onToggleVisibilityLabel="Mostrar ou ocultar senha"
             error={fieldErrors.password}
             inputRef={passwordInputRef}
           />
 
-          {mode === "register" && (
-            <TextField
-              id="passwordConfirm"
-              name="passwordConfirm"
-              type="password"
-              label="Confirmar senha"
-              placeholder="Repita sua senha"
-              value={form.passwordConfirm}
-              onChange={handleChange("passwordConfirm")}
-              required
-              fullWidth
-              autoComplete="new-password"
-              onToggleVisibilityLabel="Mostrar ou ocultar confirmação de senha"
-            />
-          )}
-
           <Button
             type="submit"
-            label={submitLoading ? (mode === "login" ? "Autenticando..." : "Criando conta...") : mode === "login" ? "Entrar" : "Criar conta"}
+            label={submitLoading ? "Autenticando..." : "Entrar"}
             variant="primary"
             fullWidth
             isLoading={submitLoading}

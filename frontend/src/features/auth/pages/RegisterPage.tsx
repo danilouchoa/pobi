@@ -1,14 +1,14 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useState, type ChangeEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../context/useAuth";
-import { useToast } from "../hooks/useToast";
-import { TERMS_VERSION } from "../constants/auth";
-import { Alert } from "../ui/Alert";
-import { Button } from "../ui/Button";
-import { FormField } from "../ui/FormField";
-import { TextField } from "../ui/TextField";
-import { tokens } from "../ui/tokens";
-import { AuthShell } from "./auth/AuthShell";
+import { useAuth } from "../../../context/useAuth";
+import { useToast } from "../../../hooks/useToast";
+import { TERMS_VERSION } from "../../../constants/auth";
+import { Alert } from "../../../ui/Alert";
+import { Button } from "../../../ui/Button";
+import { Checkbox } from "../../../ui/Checkbox";
+import { TextField } from "../../../ui/TextField";
+import { tokens } from "../../../ui/tokens";
+import { AuthShell } from "../components/AuthShell";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
@@ -33,7 +33,7 @@ type ApiError = {
   };
 };
 
-export default function Signup() {
+export default function RegisterPage() {
   const { register } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
@@ -56,7 +56,7 @@ export default function Signup() {
     []
   );
 
-  const handleChange = (key: keyof SignupForm) => (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (key: keyof SignupForm) => (event: ChangeEvent<HTMLInputElement>) => {
     const value = key === "acceptedTerms" ? event.target.checked : event.target.value;
     setForm((prev) => ({ ...prev, [key]: value }));
   };
@@ -192,45 +192,28 @@ export default function Signup() {
           error={errors.password}
         />
 
-        <FormField
+        <Checkbox
           id="acceptedTerms"
-          label="Termos e privacidade"
+          name="acceptedTerms"
+          label={
+            <span>
+              Eu li e aceito os{" "}
+              <a href="/terms" target="_blank" rel="noreferrer">
+                Termos de Uso
+              </a>{" "}
+              e a{" "}
+              <a href="/privacy" target="_blank" rel="noreferrer">
+                Política de Privacidade
+              </a>
+              .
+            </span>
+          }
           required
           helperText="Consentimento obrigatório para criar sua conta."
           error={errors.terms}
-        >
-          <label
-            htmlFor="acceptedTerms"
-            style={{
-              display: "flex",
-              alignItems: "flex-start",
-              gap: tokens.spacing.xs,
-              color: tokens.colors.neutralText,
-              font: tokens.typography.body,
-              cursor: "pointer",
-            }}
-          >
-            <input
-              id="acceptedTerms"
-              name="acceptedTerms"
-              type="checkbox"
-              checked={form.acceptedTerms}
-              onChange={handleChange("acceptedTerms")}
-              aria-invalid={Boolean(errors.terms)}
-              style={{
-                width: 18,
-                height: 18,
-                marginTop: 2,
-                accentColor: tokens.colors.primary.base,
-                cursor: "pointer",
-              }}
-            />
-            <span>
-              Eu li e aceito os <a href="/terms" target="_blank" rel="noreferrer">Termos de Uso</a> e a
-              <a href="/privacy" target="_blank" rel="noreferrer"> Política de Privacidade</a>.
-            </span>
-          </label>
-        </FormField>
+          checked={form.acceptedTerms}
+          onChange={handleChange("acceptedTerms")}
+        />
 
         <div style={{ display: "flex", flexDirection: "column", gap: tokens.spacing.xs }}>
           {lgpdCopy.map((item) => (

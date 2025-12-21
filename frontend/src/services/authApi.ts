@@ -1,5 +1,7 @@
 import api from "./api";
 
+// NOTE: Auth UI should consume the BFF client in `features/auth/bff/client.ts`.
+
 export type VerificationUserPayload = {
   emailVerified?: boolean;
   emailVerifiedAt?: string | null;

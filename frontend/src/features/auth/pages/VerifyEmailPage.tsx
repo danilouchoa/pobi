@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { useAuth } from "../../context/useAuth";
-import type { VerifyEmailErrorCode } from "../../services/authApi";
-import { verifyEmail } from "../../services/authApi";
-import { Alert } from "../../ui/Alert";
-import { Button } from "../../ui/Button";
-import { tokens } from "../../ui/tokens";
-import { AuthShell } from "./AuthShell";
+import { useAuth } from "../../../context/useAuth";
+import { authBff, toAuthBffError } from "../bff/client";
+import type { VerifyEmailErrorCode } from "../bff/types";
+import { Alert } from "../../../ui/Alert";
+import { Button } from "../../../ui/Button";
+import { tokens } from "../../../ui/tokens";
+import { AuthShell } from "../components/AuthShell";
 
 type Feedback = {
   variant: "success" | "info" | "warning" | "error";
@@ -17,7 +17,7 @@ type Feedback = {
 
 type ViewState = "idle" | "loading" | "resolved";
 
-export default function VerifyEmail() {
+export default function VerifyEmailPage() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token");
   const navigate = useNavigate();
@@ -130,7 +130,7 @@ export default function VerifyEmail() {
       setFeedback(null);
 
       try {
-        const result = await verifyEmail(verificationToken);
+        const result = await authBff.verifyEmail(verificationToken);
 
         if (isAuthenticated) {
           if (result.user) {
@@ -142,8 +142,8 @@ export default function VerifyEmail() {
 
         resolveSuccess("Seu e-mail foi confirmado com sucesso.");
       } catch (error: unknown) {
-        const typedError = error as { response?: { data?: { error?: VerifyEmailErrorCode }; status?: number } };
-        const code = typedError.response?.data?.error;
+        const normalizedError = toAuthBffError(error);
+        const code = normalizedError.code as VerifyEmailErrorCode | "GENERIC_ERROR";
 
         if (!verificationToken) {
           resolveTokenError("INVALID_TOKEN");

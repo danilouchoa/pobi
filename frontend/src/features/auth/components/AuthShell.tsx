@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { Card } from "../../ui/Card";
-import { tokens } from "../../ui/tokens";
+import { Card } from "../../../ui/Card";
+import { tokens } from "../../../ui/tokens";
 import "./AuthShell.css";
 
 type AuthShellVariant = "login" | "signup" | "generic";

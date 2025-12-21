@@ -24,12 +24,9 @@ import Lancamentos from "./pages/Lancamentos";
 import Salario from "./components/Salario";
 import Cadastros from "./components/Cadastros";
 import Exportacao from "./components/Exportacao";
-import Login from "./components/Login";
-import Signup from "./components/Signup";
-import CheckEmail from "./components/auth/CheckEmail";
-import VerifyEmail from "./components/auth/VerifyEmail";
 import { useAuth } from "./context/useAuth";
-import { UnverifiedEmailBanner } from "./components/auth/UnverifiedEmailBanner";
+import { AuthRoutes } from "./features/auth";
+import { UnverifiedEmailBanner } from "./features/auth/components/UnverifiedEmailBanner";
 import { registerEmailNotVerifiedHandler } from "./services/api";
 import Onboarding from "./pages/Onboarding";
 
@@ -300,13 +297,13 @@ function AuthenticatedApp() {
   );
 }
 
-function AuthRoutes() {
+function AuthBoundaryRoutes() {
   return (
     <Routes>
-      <Route path="/auth/login" element={<Login />} />
-      <Route path="/auth/signup" element={<Signup />} />
-      <Route path="/auth/check-email" element={<CheckEmail />} />
-      <Route path="/auth/verify-email" element={<VerifyEmail />} />
+      <Route path="/auth/*" element={<AuthRoutes />} />
+      <Route path="/login" element={<Navigate to="/auth/login" replace />} />
+      <Route path="/signup" element={<Navigate to="/auth/register" replace />} />
+      <Route path="/register" element={<Navigate to="/auth/register" replace />} />
       <Route path="*" element={<Navigate to="/auth/login" replace />} />
     </Routes>
   );
@@ -337,7 +334,7 @@ function App() {
   }, [isAuthenticated, user?.onboarding?.needsOnboarding, location.pathname, navigate]);
 
   if (!isAuthenticated) {
-    return <AuthRoutes />;
+    return <AuthBoundaryRoutes />;
   }
 
   if (isAuthPath && !isVerificationFlow) {
@@ -345,7 +342,7 @@ function App() {
   }
 
   if (isAuthPath && isVerificationFlow) {
-    return <AuthRoutes />;
+    return <AuthBoundaryRoutes />;
   }
 
   if (location.pathname === "/onboarding") {

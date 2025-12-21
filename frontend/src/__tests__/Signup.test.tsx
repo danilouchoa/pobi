@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 import { MemoryRouter } from "react-router-dom";
 import { vi } from "vitest";
-import Signup from "../components/Signup";
+import RegisterPage from "../features/auth/pages/RegisterPage";
 import { TERMS_VERSION } from "../constants/auth";
 import { AuthContext } from "../context/AuthProvider";
 
@@ -20,9 +20,9 @@ function renderWithAuth({ register }: RenderOptions = {}) {
   const registerMock = register ?? vi.fn();
 
   return render(
-    <MemoryRouter initialEntries={["/auth/signup"]}>
+    <MemoryRouter initialEntries={["/auth/register"]}>
       <AuthContext.Provider value={{ register: registerMock }}>
-        <Signup />
+        <RegisterPage />
       </AuthContext.Provider>
     </MemoryRouter>
   );
