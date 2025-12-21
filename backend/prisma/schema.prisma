@@ -214,10 +214,12 @@ model Job {
   resultSummary Json?
   expiresAt     DateTime?
 
-  userId String? @db.ObjectId
-  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String @db.ObjectId
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([status, createdAt])
+  @@index([userId])
+  @@index([userId, createdAt])
 }
 
 model EmailVerificationToken {
