@@ -7,6 +7,27 @@ import { AuthProvider } from '../context/AuthProvider';
 import { useAuth } from '../context/useAuth';
 import React from 'react';
 
+const createLocalStorageMock = () => {
+	let store = new Map<string, string>();
+
+	return {
+		getItem: (key: string) => store.get(key) ?? null,
+		setItem: (key: string, value: string) => {
+			store.set(key, String(value));
+		},
+		removeItem: (key: string) => {
+			store.delete(key);
+		},
+		clear: () => {
+			store.clear();
+		},
+		key: (index: number) => Array.from(store.keys())[index] ?? null,
+		get length() {
+			return store.size;
+		},
+	};
+};
+
 // Mock do serviço de API usado no AuthProvider
 vi.mock('../services/api', () => ({
 	__esModule: true,
@@ -58,7 +79,7 @@ function TestComponent() {
 
 describe('AuthProvider', () => {
 	beforeEach(() => {
-		localStorage.clear();
+		vi.stubGlobal('localStorage', createLocalStorageMock());
 	});
 	const renderWithClient = () =>
 		render(
