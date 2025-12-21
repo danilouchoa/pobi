@@ -1,5 +1,5 @@
-import { Router, Request, Response } from 'express';
-import { PrismaClient, Origin, Expense, Prisma } from '@prisma/client';
+import { Router, Response } from 'express';
+import { Origin, Expense, Prisma } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { addMonths, startOfMonth, format } from 'date-fns';
 import { config } from '../config';
@@ -29,6 +29,7 @@ import {
 import { bulkJobSchema, bulkUnifiedActionSchema, type BulkUnifiedActionPayload } from '../schemas/bulkUpdate.schema';
 import { ZodError, ZodIssue } from 'zod';
 import { validate } from '../middlewares/validation';
+import { type AuthenticatedRequest } from '../middlewares/auth';
 import { notFound, requireAuthUserId, tenantWhere } from '../utils/tenantScope';
 import {
   createExpenseSchema,
@@ -38,6 +39,7 @@ import {
   idParamSchema,
   MAX_BATCH_SIZE,
 } from '../schemas/expense.schema';
+import type { PrismaClientLike } from '../types/prisma';
 
 // Timeout para transações de batch (suporta até MAX_BATCH_SIZE parcelas)
 const BATCH_TRANSACTION_TIMEOUT_MS = 30000; // 30 segundos
@@ -46,15 +48,6 @@ const EXPENSES_CACHE_TTL_SECONDS = config.expensesCacheTtlSeconds;
 const SHOULD_CACHE_EXPENSES = EXPENSES_CACHE_ENABLED && EXPENSES_CACHE_TTL_SECONDS > 0;
 
 const generateInstallmentGroupId = () => randomBytes(12).toString('hex');
-
-type AuthenticatedRequest = Request<
-  Record<string, string>,
-  any,
-  ExpensePayload | ExpensePayload[] | BulkUnifiedActionPayload | any,
-  Record<string, unknown>
-> & {
-  userId?: string;
-};
 
 class BillingConfigurationError extends Error {
   statusCode = 422;
@@ -69,8 +62,10 @@ const normalizeOriginType = (value?: string | null) =>
 const shouldApplyBillingLogic = (originType?: string | null) =>
   normalizeOriginType(originType) === 'cartao';
 
+type PrismaExecutor = PrismaClientLike | Prisma.TransactionClient;
+
 const computeBillingMonth = async (
-  prisma: PrismaClient | Prisma.TransactionClient,
+  prisma: PrismaExecutor,
   userId: string,
   originId: string | null,
   date: Date,
@@ -99,7 +94,7 @@ const computeBillingMonth = async (
 };
 
 const ensureLinkedCatalogs = async (
-  prisma: PrismaClient | Prisma.TransactionClient,
+  prisma: PrismaExecutor,
   userId: string,
   originId?: string | null,
   debtorId?: string | null
@@ -136,7 +131,7 @@ const serializeExpense = (expense: any) => ({
   installmentGroupId: expense.installmentGroupId ?? null,
 });
 
-export default function expensesRoutes(prisma: PrismaClient) {
+export default function expensesRoutes(prisma: PrismaClientLike) {
   const router = Router();
 
   router.use((_req, res, next) => {

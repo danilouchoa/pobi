@@ -12,11 +12,11 @@ export const getAuthUserId = (req: AuthenticatedRequest | Request): string | nul
   return null;
 };
 
-export const requireAuthUserId = (req: AuthenticatedRequest | Request, res: Response): string => {
+export const requireAuthUserId = (req: AuthenticatedRequest | Request, res: Response): string | null => {
   const userId = getAuthUserId(req);
   if (!userId) {
     res.status(401).json({ message: 'Não autorizado.' });
-    return '';
+    return null;
   }
   return userId;
 };

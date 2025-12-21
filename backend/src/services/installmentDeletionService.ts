@@ -1,4 +1,5 @@
-import { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import type { PrismaClientLike } from '../types/prisma';
 
 const INSTALLMENT_SEPARATOR_REGEX = /^(\d+)\s*\/\s*(\d+)$/;
 const DESCRIPTION_INSTALLMENT_REGEX = /^(.*?)(?:\s*\(\s*\d+\s*\/\s*\d+\s*\)\s*)$/;
@@ -23,7 +24,7 @@ type DeleteCascadeResult = {
   deleted: ExpenseRecord[];
 };
 
-type PrismaExecutor = PrismaClient | Prisma.TransactionClient;
+type PrismaExecutor = PrismaClientLike | Prisma.TransactionClient;
 
 const normalizeParcela = (value: string | null | undefined) => {
   if (!value) return null;
@@ -92,7 +93,7 @@ const buildGroupFilter = (userId: string, expense: ExpenseRecord) => {
 };
 
 export async function deleteExpenseById(
-  prisma: PrismaClient,
+  prisma: PrismaClientLike,
   userId: string,
   expenseId: string
 ): Promise<DeleteCascadeResult | null> {
@@ -149,7 +150,10 @@ export async function deleteSingleExpense(
     return null;
   }
 
-  await prisma.expense.delete({ where: { id: expense.id } });
+  const deleted = await prisma.expense.deleteMany({ where: { id: expense.id, userId } });
+  if (!deleted.count) {
+    return null;
+  }
   return expense as ExpenseRecord;
 }
 
@@ -180,8 +184,10 @@ export async function deleteExpenseCascade(
     });
 
     if (!related.length) {
-      await prisma.expense.delete({ where: { id: expense.id } });
-      return { deleted: [expense] };
+      const deleted = await prisma.expense.deleteMany({
+        where: { id: expense.id, userId },
+      });
+      return { deleted: deleted.count ? [expense] : [] };
     }
 
     await prisma.expense.deleteMany({
@@ -211,8 +217,10 @@ export async function deleteExpenseCascade(
   const groupFilter = buildGroupFilter(userId, expense);
 
   if (!groupFilter) {
-    await prisma.expense.delete({ where: { id: expense.id } });
-    return { deleted: [expense] };
+    const deleted = await prisma.expense.deleteMany({
+      where: { id: expense.id, userId },
+    });
+    return { deleted: deleted.count ? [expense] : [] };
   }
 
   const candidates = await prisma.expense.findMany({
@@ -291,8 +299,10 @@ export async function deleteExpenseCascade(
   }
 
   if (!related.length) {
-    await prisma.expense.delete({ where: { id: expense.id } });
-    return { deleted: [expense] };
+    const deleted = await prisma.expense.deleteMany({
+      where: { id: expense.id, userId },
+    });
+    return { deleted: deleted.count ? [expense] : [] };
   }
 
   const hasGroup =
@@ -300,8 +310,10 @@ export async function deleteExpenseCascade(
     (related.length === 1 && related[0].id === expense.id);
 
   if (!hasGroup) {
-    await prisma.expense.delete({ where: { id: expense.id } });
-    return { deleted: [expense] };
+    const deleted = await prisma.expense.deleteMany({
+      where: { id: expense.id, userId },
+    });
+    return { deleted: deleted.count ? [expense] : [] };
   }
 
   const idsToDelete = related.map((record) => record.id);

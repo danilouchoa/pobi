@@ -33,11 +33,12 @@ const mapSalaryRecords = (records: any[]) => {
 export function useSalary(month: string, options: Options = {}) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const enabled = (options.enabled ?? true) && Boolean(user?.id);
-  const userId = user?.id ?? "anonymous";
+  const userId = user?.id;
+  const enabled = (options.enabled ?? true) && Boolean(userId);
+  const salaryKey = userId ? salaryKeys.allForUser(userId) : (["salary", "disabled"] as const);
 
   const salaryQuery = useQuery({
-    queryKey: salaryKeys.allForUser(userId),
+    queryKey: salaryKey,
     queryFn: getSalaryHistory,
     enabled,
     placeholderData: keepPreviousData,
@@ -60,7 +61,8 @@ export function useSalary(month: string, options: Options = {}) {
       }
       return createSalaryRecord({ ...payload, month: targetMonth });
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: salaryKeys.allForUser(userId) }),
+    onSuccess: () =>
+      userId ? queryClient.invalidateQueries({ queryKey: salaryKeys.allForUser(userId) }) : Promise.resolve(),
   });
 
   const currentRecord = useMemo(() => {

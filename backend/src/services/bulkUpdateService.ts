@@ -1,4 +1,4 @@
-import { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { BulkUpdateData, BulkUnifiedUpdateItem } from '../schemas/bulkUpdate.schema';
 import {
   buildInvalidationEntries,
@@ -6,6 +6,7 @@ import {
   monthKeyFromInput,
 } from '../utils/expenseCache';
 import { deleteExpenseCascade, deleteSingleExpense } from './installmentDeletionService';
+import type { PrismaClientLike } from '../types/prisma';
 
 export type BulkUpdateJob = {
   jobId: string;
@@ -42,7 +43,7 @@ const buildUpdateManyData = (
   return { data, hasData };
 };
 
-export async function applyBulkUpdate(prisma: PrismaClient, job: BulkUpdateJob) {
+export async function applyBulkUpdate(prisma: PrismaClientLike, job: BulkUpdateJob) {
   if (!job.expenseIds.length) {
     return { count: 0 };
   }
@@ -114,7 +115,7 @@ export async function applyBulkUpdate(prisma: PrismaClient, job: BulkUpdateJob) 
 // Novo helper: aplica "update" item-a-item (payload.items) do endpoint unificado
 // ------------------------------
 export async function applyBulkUnifiedUpdate(
-  prisma: PrismaClient,
+  prisma: PrismaClientLike,
   userId: string,
   items: BulkUnifiedUpdateItem[]
 ) {
@@ -202,7 +203,7 @@ export async function applyBulkUnifiedUpdate(
 // Novo helper: bulk delete do endpoint unificado
 // ------------------------------
 export async function applyBulkDelete(
-  prisma: PrismaClient,
+  prisma: PrismaClientLike,
   userId: string,
   ids: string[]
 ) {

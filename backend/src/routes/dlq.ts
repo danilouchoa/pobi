@@ -12,12 +12,12 @@
  */
 
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { getDLQStats, peekDLQMessages, reprocessDLQMessage, purgeDLQ } from '../lib/rabbit';
 import { adminLimiter } from '../middlewares/rateLimiter';
 import { requireEmailVerified } from '../middlewares/emailVerified';
+import type { PrismaClientLike } from '../types/prisma';
 
-export default function dlqRoutes(prisma: PrismaClient) {
+export default function dlqRoutes(prisma: PrismaClientLike) {
   const router = Router();
 
   router.use(requireEmailVerified(prisma));

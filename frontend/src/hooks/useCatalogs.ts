@@ -25,11 +25,17 @@ type Options = {
 export function useCatalogs(options: Options = {}) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const enabled = (options.enabled ?? true) && Boolean(user?.id);
-  const userId = user?.id ?? "anonymous";
+  const userId = user?.id;
+  const enabled = (options.enabled ?? true) && Boolean(userId);
+  const originsKey = userId
+    ? catalogKeys.origins(userId)
+    : (["catalogs", "origins", "disabled"] as const);
+  const debtorsKey = userId
+    ? catalogKeys.debtors(userId)
+    : (["catalogs", "debtors", "disabled"] as const);
 
   const originsQuery = useQuery({
-    queryKey: catalogKeys.origins(userId),
+    queryKey: originsKey,
     queryFn: getOrigins,
     enabled,
     staleTime: 1000 * 60 * 5,
@@ -37,7 +43,7 @@ export function useCatalogs(options: Options = {}) {
   });
 
   const debtorsQuery = useQuery({
-    queryKey: catalogKeys.debtors(userId),
+    queryKey: debtorsKey,
     queryFn: getDebtors,
     enabled,
     staleTime: 1000 * 60 * 5,
@@ -45,9 +51,9 @@ export function useCatalogs(options: Options = {}) {
   });
 
   const invalidateOrigins = () =>
-    queryClient.invalidateQueries({ queryKey: catalogKeys.origins(userId) });
+    userId ? queryClient.invalidateQueries({ queryKey: catalogKeys.origins(userId) }) : Promise.resolve();
   const invalidateDebtors = () =>
-    queryClient.invalidateQueries({ queryKey: catalogKeys.debtors(userId) });
+    userId ? queryClient.invalidateQueries({ queryKey: catalogKeys.debtors(userId) }) : Promise.resolve();
 
   const createOriginMutation = useMutation({
     mutationFn: (payload: OriginPayload) => createOrigin(payload),

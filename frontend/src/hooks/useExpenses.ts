@@ -130,17 +130,23 @@ const buildOptimisticExpense = (
 export function useExpenses(month: string, options: Options = {}) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const enabled = (options.enabled ?? true) && Boolean(user?.id);
-  const userId = user?.id ?? "anonymous";
+  const userId = user?.id;
+  const enabled = (options.enabled ?? true) && Boolean(userId);
   const mode = options.mode ?? "calendar";
   const page = options.page ?? 1;
   const limit = options.limit ?? 20;
-  const queryKey = expensesKeys.list({ userId, month, mode, page, limit });
-  const monthKey = expensesKeys.month({ userId, month, mode });
-  const recurringKey = expensesKeys.recurring(userId);
-  const sharedKey = expensesKeys.shared(userId);
+  const disabledKey = ["expenses", "disabled"] as const;
+  const queryKey = userId
+    ? expensesKeys.list({ userId, month, mode, page, limit })
+    : ([...disabledKey, "list"] as const);
+  const monthKey = userId
+    ? expensesKeys.month({ userId, month, mode })
+    : ([...disabledKey, "month"] as const);
+  const recurringKey = userId ? expensesKeys.recurring(userId) : ([...disabledKey, "recurring"] as const);
+  const sharedKey = userId ? expensesKeys.shared(userId) : ([...disabledKey, "shared"] as const);
 
   const expenseQueryPredicate = ({ queryKey: key }: { queryKey: QueryKey }) => {
+    if (!userId) return false;
     const meta = parseListKey(key);
     if (!meta) return false;
     if (meta.userId !== userId) return false;
@@ -150,9 +156,11 @@ export function useExpenses(month: string, options: Options = {}) {
   };
 
   const listQueriesForCurrentView = () =>
-    queryClient
-      .getQueriesData<ExpensesResponse>({ predicate: expenseQueryPredicate })
-      .map(([key, data]) => ({ queryKey: key, data, meta: parseListKey(key)! }));
+    userId
+      ? queryClient
+          .getQueriesData<ExpensesResponse>({ predicate: expenseQueryPredicate })
+          .map(([key, data]) => ({ queryKey: key, data, meta: parseListKey(key)! }))
+      : [];
 
   const captureSnapshots = (): OptimisticSnapshot[] =>
     listQueriesForCurrentView().map(({ queryKey, data }) => ({ queryKey, data }));
@@ -477,12 +485,14 @@ export function useExpenses(month: string, options: Options = {}) {
 export const useDeleteExpenseGroup = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const userId = user?.id ?? "anonymous";
+  const userId = user?.id;
 
   return useMutation({
     mutationFn: (groupId: string) => deleteGroup(groupId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: expensesKeys.byUser(userId) });
+      if (userId) {
+        queryClient.invalidateQueries({ queryKey: expensesKeys.byUser(userId) });
+      }
     },
   });
 };

@@ -1,5 +1,4 @@
 import { Router, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { type AuthenticatedRequest } from '../middlewares/auth';
 import { validate } from '../middlewares/validation';
 import { onboardingPatchSchema } from '../schemas/onboarding.schema';
@@ -10,8 +9,9 @@ import {
   patchOnboarding,
 } from '../services/onboarding';
 import { requireAuthUserId } from '../utils/tenantScope';
+import type { PrismaClientLike } from '../types/prisma';
 
-export default function onboardingRoutes(prisma: PrismaClient) {
+export default function onboardingRoutes(prisma: PrismaClientLike) {
   const router = Router();
 
   const requireUser = (req: AuthenticatedRequest, res: Response) => {

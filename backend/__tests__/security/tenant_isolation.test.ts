@@ -1,11 +1,9 @@
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import app from '../../src/index';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient() as any;
+import { createApp } from '../../src/app';
+import type { PrismaClientLike } from '../../src/types/prisma';
 
 const signAccessToken = (userId: string) =>
   jwt.sign({ sub: userId, tokenType: 'access' }, process.env.JWT_SECRET ?? 'test-secret-key');
@@ -77,6 +75,88 @@ const setupPrismaMocks = () => {
       status: 'pending',
     },
   ];
+
+  const prisma: PrismaClientLike = {
+    user: {
+      findUnique: vi.fn(),
+      findFirst: vi.fn(),
+      findMany: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+      delete: vi.fn(),
+      deleteMany: vi.fn(),
+      upsert: vi.fn(),
+      count: vi.fn(),
+    },
+    origin: {
+      findMany: vi.fn(),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+      delete: vi.fn(),
+      deleteMany: vi.fn(),
+    },
+    debtor: {
+      findMany: vi.fn(),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+      delete: vi.fn(),
+      deleteMany: vi.fn(),
+    },
+    expense: {
+      findMany: vi.fn(),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+      delete: vi.fn(),
+      deleteMany: vi.fn(),
+      count: vi.fn(),
+    },
+    salaryHistory: {
+      findMany: vi.fn(),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+      delete: vi.fn(),
+      deleteMany: vi.fn(),
+    },
+    job: {
+      findMany: vi.fn(),
+      findUnique: vi.fn(),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+      delete: vi.fn(),
+      deleteMany: vi.fn(),
+    },
+    userConsent: {
+      findMany: vi.fn(),
+      create: vi.fn(),
+    },
+    emailVerificationToken: {
+      findUnique: vi.fn(),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+      deleteMany: vi.fn(),
+      upsert: vi.fn(),
+    },
+    userPreferences: {
+      findUnique: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      upsert: vi.fn(),
+    },
+    $transaction: async (callback: (tx: PrismaClientLike) => Promise<any>) => callback(prisma),
+  };
 
   prisma.user.findUnique.mockImplementation(async ({ where }: any) => {
     if (where?.id === userA.id) return userA;
@@ -157,14 +237,6 @@ const setupPrismaMocks = () => {
     expenses = expenses.filter((expense) => !(expense.id === where.id && expense.userId === where.userId));
     return { count: before - expenses.length };
   });
-  prisma.expense.delete.mockImplementation(async ({ where }: any) => {
-    const match = expenses.find((expense) => expense.id === where.id);
-    if (!match) {
-      throw new Error('Not found');
-    }
-    expenses = expenses.filter((expense) => expense.id !== where.id);
-    return match;
-  });
 
   prisma.salaryHistory.findMany.mockImplementation(async ({ where }: any) => {
     if (!where?.userId) return salaryHistory;
@@ -192,11 +264,17 @@ const setupPrismaMocks = () => {
   prisma.job.findFirst.mockImplementation(async ({ where }: any) => {
     return jobs.find((job) => job.id === where?.id && job.userId === where?.userId);
   });
+
+  return prisma;
 };
 
 describe('tenant isolation', () => {
+  let app: ReturnType<typeof createApp>;
+  let prisma: PrismaClientLike;
+
   beforeEach(() => {
-    setupPrismaMocks();
+    prisma = setupPrismaMocks();
+    app = createApp(prisma);
   });
 
   it('blocks unauthenticated access', async () => {
@@ -269,7 +347,7 @@ describe('tenant isolation', () => {
       });
 
     expect(res.status).toBe(201);
-    const createCall = prisma.expense.create.mock.calls[0]?.[0];
+    const createCall = (prisma.expense.create as any).mock.calls[0]?.[0];
     expect(createCall?.data?.userId).toBe(userB.id);
   });
 });

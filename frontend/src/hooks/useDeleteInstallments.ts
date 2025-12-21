@@ -15,7 +15,7 @@ export function useDeleteInstallments({ month, mode }: UseDeleteInstallmentsOpti
   const toast = useToast();
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const userId = user?.id ?? "anonymous";
+  const userId = user?.id;
   const [isDeletingInstallments, setIsDeletingInstallments] = useState(false);
 
   const deleteInstallments = useCallback(
@@ -30,10 +30,12 @@ export function useDeleteInstallments({ month, mode }: UseDeleteInstallmentsOpti
         throw error;
       } finally {
         flushSync(() => setIsDeletingInstallments(false));
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: expensesKeys.byUser(userId) }),
-          queryClient.invalidateQueries({ queryKey: expensesKeys.month({ userId, month, mode }) }),
-        ]);
+        if (userId) {
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: expensesKeys.byUser(userId) }),
+            queryClient.invalidateQueries({ queryKey: expensesKeys.month({ userId, month, mode }) }),
+          ]);
+        }
       }
     },
     [mode, month, queryClient, toast, userId]

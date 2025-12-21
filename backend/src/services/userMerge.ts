@@ -1,4 +1,5 @@
-import { PrismaClient, Provider, type User } from '@prisma/client';
+import { Provider, type User } from '@prisma/client';
+import type { PrismaClientLike } from '../types/prisma';
 
 type MergeStats = {
   movedOrigins: number;
@@ -18,7 +19,7 @@ export type MergeResult = {
  * O usuário local é removido ao final para evitar duplicidade de contas.
  */
 export async function mergeUsersUsingGoogleAsCanonical(
-  prisma: PrismaClient,
+  prisma: PrismaClientLike,
   { localUserId, googleUserId }: { localUserId: string; googleUserId: string },
 ): Promise<MergeResult> {
   if (localUserId === googleUserId) {

@@ -1,5 +1,6 @@
-import { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { logEvent } from '../lib/logger';
+import type { PrismaClientLike } from '../types/prisma';
 
 export type OnboardingStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'DISMISSED';
 
@@ -44,7 +45,7 @@ export type PatchOnboardingDTO = {
   markStepCompleted?: 1 | 2 | 3;
 };
 
-type PrismaOrTx = PrismaClient | Prisma.TransactionClient;
+type PrismaOrTx = PrismaClientLike | Prisma.TransactionClient;
 
 const resolveStatus = (prefs: { onboardingStatus?: string | null; onboardingCompletedAt?: Date | null; onboardingDismissedAt?: Date | null; }): OnboardingStatus => {
   if (prefs.onboardingCompletedAt || prefs.onboardingStatus === 'COMPLETED') return 'COMPLETED';
@@ -70,7 +71,7 @@ export const getOrCreateUserPreferences = async (userId: string, prisma: PrismaO
   return prisma.userPreferences.create({ data: { userId } });
 };
 
-export const ensureFirstPrompted = async (userId: string, prisma: PrismaClient, now = new Date()) => {
+export const ensureFirstPrompted = async (userId: string, prisma: PrismaClientLike, now = new Date()) => {
   const prefs = await getOrCreateUserPreferences(userId, prisma);
   const status = resolveStatus(prefs);
   if (status === 'COMPLETED' || status === 'DISMISSED' || prefs.onboardingFirstPromptedAt) {
@@ -121,7 +122,7 @@ const buildDto = (
   };
 };
 
-export const getOnboardingState = async (userId: string, prisma: PrismaClient) => {
+export const getOnboardingState = async (userId: string, prisma: PrismaClientLike) => {
   const [user, prefs] = await Promise.all([
     prisma.user.findUnique({ where: { id: userId }, select: { name: true, avatar: true } }),
     getOrCreateUserPreferences(userId, prisma),
@@ -130,7 +131,7 @@ export const getOnboardingState = async (userId: string, prisma: PrismaClient) =
   return buildDto(user ?? { name: null, avatar: null }, prefs);
 };
 
-export const patchOnboarding = async (userId: string, patch: PatchOnboardingDTO, prisma: PrismaClient) => {
+export const patchOnboarding = async (userId: string, patch: PatchOnboardingDTO, prisma: PrismaClientLike) => {
   return prisma.$transaction(async (tx) => {
     const prefs = await getOrCreateUserPreferences(userId, tx);
     const user = await tx.user.findUnique({ where: { id: userId }, select: { name: true, avatar: true } });
@@ -206,7 +207,7 @@ export const patchOnboarding = async (userId: string, patch: PatchOnboardingDTO,
   });
 };
 
-export const dismissOnboarding = async (userId: string, prisma: PrismaClient) => {
+export const dismissOnboarding = async (userId: string, prisma: PrismaClientLike) => {
   const now = new Date();
   const prefs = await prisma.userPreferences.upsert({
     where: { userId },
@@ -225,7 +226,7 @@ export const dismissOnboarding = async (userId: string, prisma: PrismaClient) =>
   return buildDto(user ?? { name: null, avatar: null }, prefs);
 };
 
-export const completeOnboarding = async (userId: string, prisma: PrismaClient) => {
+export const completeOnboarding = async (userId: string, prisma: PrismaClientLike) => {
   const now = new Date();
   const prefsBefore = await getOrCreateUserPreferences(userId, prisma);
   const prefs = await prisma.userPreferences.update({

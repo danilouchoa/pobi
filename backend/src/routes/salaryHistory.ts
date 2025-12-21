@@ -1,10 +1,11 @@
-import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { Router, Response } from 'express';
+import type { PrismaClientLike } from '../types/prisma';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { getOrSetCache } from '../lib/redisCache';
 import { redis } from '../lib/redisClient';
 import { validate } from '../middlewares/validation';
 import { requireEmailVerified } from '../middlewares/emailVerified';
+import { type AuthenticatedRequest } from '../middlewares/auth';
 import { notFound, requireAuthUserId, tenantWhere } from '../utils/tenantScope';
 import {
   createSalarySchema,
@@ -12,10 +13,6 @@ import {
   querySalarySchema,
   idParamSchema,
 } from '../schemas/salary.schema';
-
-interface AuthenticatedRequest extends Request {
-  userId?: string;
-}
 
 const serializeSalaryHistory = (record: {
   id: string;
@@ -73,7 +70,7 @@ const invalidateSalaryCache = async (userId: string, ...months: Array<string | n
   await redis.del(...Array.from(keys));
 };
 
-export default function salaryHistoryRoutes(prisma: PrismaClient) {
+export default function salaryHistoryRoutes(prisma: PrismaClientLike) {
   const router = Router();
 
   router.use(requireEmailVerified(prisma));

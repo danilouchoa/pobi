@@ -1,6 +1,6 @@
-import { Router, Request } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { Router } from 'express';
 import { validate } from '../middlewares/validation';
+import { type AuthenticatedRequest } from '../middlewares/auth';
 import { notFound, requireAuthUserId, tenantWhere } from '../utils/tenantScope';
 import {
   createDebtorSchema,
@@ -8,10 +8,7 @@ import {
   queryDebtorSchema,
   idParamSchema,
 } from '../schemas/catalog.schema';
-
-interface AuthenticatedRequest extends Request {
-  userId?: string;
-}
+import type { PrismaClientLike } from '../types/prisma';
 
 const serializeDebtor = (debtor: { id: string; name: string; status: string | null; active: boolean }) => ({
   id: debtor.id,
@@ -20,7 +17,7 @@ const serializeDebtor = (debtor: { id: string; name: string; status: string | nu
   active: debtor.active,
 });
 
-export default function debtorsRoutes(prisma: PrismaClient) {
+export default function debtorsRoutes(prisma: PrismaClientLike) {
   const router = Router();
 
   router.get('/', validate({ query: queryDebtorSchema }), async (req: AuthenticatedRequest, res) => {

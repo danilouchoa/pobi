@@ -1,8 +1,8 @@
-import { Router, Request } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { Router } from 'express';
 import type { $Enums } from '@prisma/client';
 import { parseDecimal, toDecimalString, toDecimalStringOrNull } from '../utils/formatters';
 import { validate } from '../middlewares/validation';
+import { type AuthenticatedRequest } from '../middlewares/auth';
 import { notFound, requireAuthUserId, tenantWhere } from '../utils/tenantScope';
 import {
   createOriginSchema,
@@ -10,10 +10,7 @@ import {
   queryOriginSchema,
   idParamSchema,
 } from '../schemas/origin.schema';
-
-interface AuthenticatedRequest extends Request {
-  userId?: string;
-}
+import type { PrismaClientLike } from '../types/prisma';
 
 const serializeOrigin = (origin: {
   id: string;
@@ -81,7 +78,7 @@ const parseBillingPolicy = (
   throw new Error('billingRolloverPolicy inválida. Use "PREVIOUS" ou "NEXT".');
 };
 
-export default function originsRoutes(prisma: PrismaClient) {
+export default function originsRoutes(prisma: PrismaClientLike) {
   const router = Router();
 
   router.get('/', validate({ query: queryOriginSchema }), async (req: AuthenticatedRequest, res) => {

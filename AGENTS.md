@@ -283,3 +283,14 @@ g
 - **Roteamento**: montar em `frontend/src/features/auth/routes.tsx` e registrar no app via `/auth/*` (manter redirects legados).
 - **UI**: usar apenas componentes do Design System em `frontend/src/ui/*` (sem `<input>`, `<button>` etc. diretos).
 - **API**: chamadas de Auth devem passar por `frontend/src/features/auth/bff/client.ts`.
+
+## 2025-12-20 - Phase 6/7 Hardening (tenant isolation)
+- App factory em `backend/src/app.ts` com `PrismaClientLike` injetável para testes.
+- Testes de isolamento usam mocks in-memory (sem Prisma real) com `createApp(prismaMock)`.
+- Deletes/updates escopados por `{ id, userId }` com `deleteMany/updateMany`.
+- Frontend removeu query keys “anonymous”; queries ficam desabilitadas sem sessão.
+- Docs de tenant isolation atualizadas com regras de hardening.
+
+### Comandos de verificação
+- Backend: `cd backend && npm test`
+- Frontend: `cd frontend && npm test`

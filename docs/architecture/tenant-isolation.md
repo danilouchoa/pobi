@@ -51,6 +51,17 @@ const updated = await prisma.expense.updateMany({
 if (updated.count === 0) return notFound(res);
 ```
 
+## Hardening (Phase 6/7)
+### App factory + Prisma injection
+- `backend/src/app.ts` expõe `createApp(prisma)` para testes e composição.
+- `backend/src/index.ts` cria o `PrismaClient` real e só faz `listen` quando executado diretamente.
+- Testes usam **mock in-memory** (`vi.fn`) com `PrismaClientLike`, sem instanciar Prisma real.
+
+### Deletes/updates sempre escopados
+- Nunca usar `delete({ id })` ou `update({ id })` sem `userId`.
+- Preferir `deleteMany/updateMany` com `{ id, userId }` e validar `count`.
+- Services críticos (ex.: `installmentDeletionService`) seguem o padrão atômico.
+
 ### Catálogos vinculados (origins/debtors)
 Sempre validar ownership ao referenciar `originId`/`debtorId` em expenses.
 Se não pertencer ao usuário, responder **404**.
@@ -66,6 +77,10 @@ Todos os domínios sensíveis devem incluir `userId` nas keys:
 - `expensesKeys.list({ userId, ... })`
 - `catalogKeys.origins(userId)`
 - `salaryKeys.allForUser(userId)`
+
+### Sem chaves anônimas
+- Nunca usar `userId = "anonymous"` em query keys.
+- Se não houver sessão, **queries ficam desabilitadas** e usam keys “disabled” não-tenant.
 
 ### Logout e troca de sessão
 Ao fazer logout:

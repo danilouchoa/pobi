@@ -40,15 +40,18 @@ vi.mock("../services/api", () => ({
 
 const SessionProbe = () => {
   const { user, login, logout } = useAuth();
-  const userId = user?.id ?? "anonymous";
+  const userId = user?.id;
+  const queryKey = userId
+    ? expensesKeys.list({
+        userId,
+        month: "2025-11",
+        mode: "calendar",
+        page: 1,
+        limit: 20,
+      })
+    : (["expenses", "disabled", "list"] as const);
   const { data } = useQuery({
-    queryKey: expensesKeys.list({
-      userId,
-      month: "2025-11",
-      mode: "calendar",
-      page: 1,
-      limit: 20,
-    }),
+    queryKey,
     queryFn: async () => [{ id: userId, description: `Expense-${userId}` }],
     enabled: Boolean(user?.id),
   });

@@ -1,5 +1,5 @@
 import { Router, Request, Response, type CookieOptions } from 'express';
-import { PrismaClient, Provider, type User } from '@prisma/client';
+import { Provider, type User } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
@@ -19,6 +19,7 @@ import {
   consumeToken,
   EmailVerificationTokenStatus,
 } from '../services/emailVerification';
+import type { PrismaClientLike } from '../types/prisma';
 
 const SALT_ROUNDS = 10;
 const ACCESS_TOKEN_EXPIRES_IN = '15m';
@@ -170,7 +171,7 @@ const logAuthEvent = (
   });
 };
 
-export default function authRoutes(prisma: PrismaClient) {
+export default function authRoutes(prisma: PrismaClientLike) {
   const router = Router();
 
   // Google OAuth2 client (used to validate ID tokens sent by frontend)

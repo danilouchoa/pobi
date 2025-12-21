@@ -1,13 +1,10 @@
-import { Router, Request } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { Router } from 'express';
 import { requireEmailVerified } from '../middlewares/emailVerified';
+import { type AuthenticatedRequest } from '../middlewares/auth';
 import { notFound, requireAuthUserId } from '../utils/tenantScope';
+import type { PrismaClientLike } from '../types/prisma';
 
-interface AuthenticatedRequest extends Request {
-  userId?: string;
-}
-
-export default function jobsRoutes(prisma: PrismaClient) {
+export default function jobsRoutes(prisma: PrismaClientLike) {
   const router = Router();
 
   router.use(requireEmailVerified(prisma));
