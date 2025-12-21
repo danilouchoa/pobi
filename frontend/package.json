@@ -10,6 +10,8 @@
     "preview": "vite preview",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
+    "test": "vitest --config vitest.config.mjs run",
+    "test:watch": "vitest --config vitest.config.mjs",
     "test:unit": "vitest --config vitest.config.mjs run",
     "coverage": "vitest --config vitest.config.mjs run --coverage",
     "test:frontend": "vitest --config vitest.config.mjs run --coverage"

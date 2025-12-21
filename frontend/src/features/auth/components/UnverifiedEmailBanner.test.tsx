@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { vi } from "vitest";
-import { UnverifiedEmailBanner } from "../UnverifiedEmailBanner";
+import { UnverifiedEmailBanner } from "./UnverifiedEmailBanner";
 
 let mockUser: any = { emailVerified: false };
 const markEmailVerified = vi.fn(() => {

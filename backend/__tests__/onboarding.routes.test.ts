@@ -59,6 +59,15 @@ const mockUserPreferences = () => {
     prefsState = { ...prefsState, ...data };
     return { ...prefsState };
   });
+  prisma.userPreferences.upsert = vi.fn(async ({ create, update }: any = {}) => {
+    const data = update ?? create ?? {};
+    prefsState = {
+      ...prefsState,
+      ...data,
+      goals: data?.goals ?? prefsState.goals ?? [],
+    };
+    return { ...prefsState };
+  });
 };
 
 const mockUserSelect = () => {
